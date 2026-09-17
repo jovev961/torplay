@@ -1,0 +1,134 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import {
+  commitNextEpisodeContext,
+  findNextEpisode,
+  resolveNextEpisodePlayback,
+} from "../lib/playback/next-episode.js";
+
+function tmdbResponse(value) {
+  return new Response(JSON.stringify(value), { status: 200 });
+}
+
+async function withMetadata(responses, run) {
+  const previousToken = process.env.TMDB_API_TOKEN;
+  const previousFetch = globalThis.fetch;
+  process.env.TMDB_API_TOKEN = "test-token";
+  globalThis.fetch = async (url) => {
+    const pathname = new URL(url).pathname;
+    const value = responses[pathname];
+    if (!value) throw new Error(`Unexpected metadata request: ${pathname}`);
+    return tmdbResponse(value);
+  };
+  try {
+    return await run();
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousToken === undefined) delete process.env.TMDB_API_TOKEN;
+    else process.env.TMDB_API_TOKEN = previousToken;
+  }
+}
+
+const episode = (number, name = `Episode ${number}`) => ({ episode_number: number, name, overview: "" });
+
+test("metadata resolves a normal next episode", async () => {
+  await withMetadata({
+    "/3/tv/100/season/1": { season_number: 1, name: "Season 1", episodes: [episode(1), episode(2)] },
+  }, async () => {
+    const next = await findNextEpisode(100, 1, 1);
+    assert.equal(next.season, 1);
+    assert.equal(next.number, 2);
+  });
+});
+
+test("metadata crosses a season boundary without inventing an episode", async () => {
+  await withMetadata({
+    "/3/tv/101/season/1": { season_number: 1, name: "Season 1", episodes: [episode(8)] },
+    "/3/tv/101": {
+      id: 101,
+      name: "Show",
+      seasons: [
+        { season_number: 1, name: "Season 1", episode_count: 8 },
+        { season_number: 2, name: "Season 2", episode_count: 6 },
+      ],
+      genres: [],
+    },
+    "/3/tv/101/season/2": { season_number: 2, name: "Season 2", episodes: [episode(1)] },
+  }, async () => {
+    const next = await findNextEpisode(101, 1, 8);
+    assert.deepEqual({ season: next.season, number: next.number }, { season: 2, number: 1 });
+  });
+});
+
+test("metadata returns no next episode at the end of a series", async () => {
+  await withMetadata({
+    "/3/tv/102/season/2": { season_number: 2, name: "Season 2", episodes: [episode(6)] },
+    "/3/tv/102": { id: 102, name: "Show", seasons: [{ season_number: 2, name: "Season 2", episode_count: 6 }], genres: [] },
+  }, async () => assert.equal(await findNextEpisode(102, 2, 6), null));
+});
+
+function dependencies(overrides = {}) {
+  return {
+    getMediaContext: () => ({ type: "show", tmdbId: 200, title: "Show", season: 1, episode: 4 }),
+    nextEpisode: async () => ({ season: 1, number: 5, title: "Next" }),
+    findSessionEpisode: () => null,
+    startBestSource: async () => null,
+    ...overrides,
+  };
+}
+
+test("next episode reuses the current season or multi-season torrent before searching", async () => {
+  let searched = false;
+  for (const nextEpisode of [{ season: 1, number: 5 }, { season: 2, number: 1 }]) {
+    const result = await resolveNextEpisodePlayback("session-1", dependencies({
+      nextEpisode: async () => ({ ...nextEpisode, title: "Next" }),
+      findSessionEpisode: (id, season, number) => ({
+        session: { id },
+        file: { id: `${season}-${number}` },
+      }),
+      startBestSource: async () => { searched = true; return null; },
+    }));
+    assert.equal(result.strategy, "reuse");
+    assert.equal(result.fileId, `${nextEpisode.season}-${nextEpisode.number}`);
+  }
+  assert.equal(searched, false);
+});
+
+test("reused torrent context advances only when playback is committed", () => {
+  const current = { type: "show", tmdbId: 200, title: "Show", season: 1, episode: 4 };
+  let updated = null;
+  const result = commitNextEpisodeContext("session-1", { season: 1, episode: 5 }, {
+    getMediaContext: () => current,
+    updateMediaContext: (_id, context) => { updated = context; return true; },
+  });
+  assert.deepEqual([result.season, result.episode], [1, 5]);
+  assert.deepEqual([updated.season, updated.episode], [1, 5]);
+});
+
+test("missing current-torrent episode uses the ranked verified source flow", async () => {
+  let receivedContext = null;
+  const result = await resolveNextEpisodePlayback("session-1", dependencies({
+    startBestSource: async (context) => {
+      receivedContext = context;
+      return { session: { id: "session-2", status: "preparing" } };
+    },
+  }));
+  assert.equal(result.strategy, "new-torrent");
+  assert.equal(result.status, "preparing");
+  assert.deepEqual([receivedContext.season, receivedContext.episode], [1, 5]);
+});
+
+test("source failure becomes a manual choice instead of endless loading", async () => {
+  const missing = await resolveNextEpisodePlayback("session-1", dependencies());
+  assert.equal(missing.status, "manual-required");
+  const failed = await resolveNextEpisodePlayback("session-1", dependencies({
+    startBestSource: async () => { throw new Error("Provider unavailable"); },
+  }));
+  assert.equal(failed.status, "manual-required");
+  assert.match(failed.error, /Provider unavailable/);
+});
+
+test("no metadata-confirmed next episode stops cleanly", async () => {
+  const result = await resolveNextEpisodePlayback("session-1", dependencies({ nextEpisode: async () => null }));
+  assert.deepEqual(result, { status: "end-of-series", nextEpisode: null });
+});

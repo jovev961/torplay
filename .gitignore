@@ -1,0 +1,11 @@
+node_modules/
+.next/
+out/
+.env*
+!.env.local.example
+.data/
+persistent-data/
+.release/
+dist/
+npm-debug.log*
+.DS_Store
