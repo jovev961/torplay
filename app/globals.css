@@ -350,6 +350,10 @@ a {
   justify-self: end;
 }
 
+.pagination > :first-child {
+  justify-self: start;
+}
+
 .pagination > span {
   color: var(--muted);
   font-size: 0.86rem;
