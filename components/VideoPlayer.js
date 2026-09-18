@@ -13,6 +13,11 @@ import {
 import { automaticSubtitleId } from "../lib/subtitles/selection.js";
 import { PROGRESS_SAVE_INTERVAL_MS } from "../lib/history/constants.js";
 import { isPlaybackAtEnd, shouldOfferNextEpisode } from "../lib/playback/autoplay.js";
+import {
+  isFullscreenActive,
+  supportsFullscreen,
+  toggleBrowserFullscreen,
+} from "../lib/video/fullscreen.js";
 
 async function responseJson(response) {
   const contentType = response.headers.get("content-type") || "";
@@ -123,6 +128,7 @@ export default function VideoPlayer({
   });
   const [playbackRate, setPlaybackRate] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [fullscreenSupported, setFullscreenSupported] = useState(false);
   const [pipSupported, setPipSupported] = useState(false);
   const [progressError, setProgressError] = useState("");
   const [writerToken, setWriterToken] = useState(null);
@@ -284,9 +290,30 @@ export default function VideoPlayer({
 
   useEffect(() => {
     setPipSupported(Boolean(document.pictureInPictureEnabled && videoRef.current?.requestPictureInPicture));
-    const onFullscreenChange = () => setIsFullscreen(document.fullscreenElement === playerRef.current);
-    document.addEventListener("fullscreenchange", onFullscreenChange);
-    return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
+    const video = videoRef.current;
+    const updateFullscreenState = () => {
+      setIsFullscreen(isFullscreenActive(document, playerRef.current, video));
+    };
+    const updateFullscreenSupport = () => {
+      setFullscreenSupported(supportsFullscreen(playerRef.current, video));
+    };
+    const onNativeFullscreenBegin = () => setIsFullscreen(true);
+    const onNativeFullscreenEnd = () => setIsFullscreen(false);
+
+    updateFullscreenState();
+    updateFullscreenSupport();
+    document.addEventListener("fullscreenchange", updateFullscreenState);
+    document.addEventListener("webkitfullscreenchange", updateFullscreenState);
+    video?.addEventListener("loadedmetadata", updateFullscreenSupport);
+    video?.addEventListener("webkitbeginfullscreen", onNativeFullscreenBegin);
+    video?.addEventListener("webkitendfullscreen", onNativeFullscreenEnd);
+    return () => {
+      document.removeEventListener("fullscreenchange", updateFullscreenState);
+      document.removeEventListener("webkitfullscreenchange", updateFullscreenState);
+      video?.removeEventListener("loadedmetadata", updateFullscreenSupport);
+      video?.removeEventListener("webkitbeginfullscreen", onNativeFullscreenBegin);
+      video?.removeEventListener("webkitendfullscreen", onNativeFullscreenEnd);
+    };
   }, []);
 
   useEffect(() => {
@@ -503,8 +530,7 @@ export default function VideoPlayer({
 
   async function toggleFullscreen() {
     try {
-      if (document.fullscreenElement) await document.exitFullscreen();
-      else await playerRef.current?.requestFullscreen();
+      await toggleBrowserFullscreen(document, playerRef.current, videoRef.current);
     } catch (error) {
       setPlaybackError(`Fullscreen is unavailable: ${error.message}`);
     }
@@ -935,9 +961,11 @@ export default function VideoPlayer({
                   <Icon name="pip" />
                 </button>
               ) : null}
-              <button type="button" aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"} onClick={() => void toggleFullscreen()}>
-                <Icon name={isFullscreen ? "compress" : "fullscreen"} />
-              </button>
+              {fullscreenSupported ? (
+                <button type="button" aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"} onClick={() => void toggleFullscreen()}>
+                  <Icon name={isFullscreen ? "compress" : "fullscreen"} />
+                </button>
+              ) : null}
             </div>
           </div>
         </div>

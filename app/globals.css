@@ -1266,7 +1266,17 @@ a {
   aspect-ratio: auto;
 }
 
+.videoPlayer:-webkit-full-screen {
+  max-height: none;
+  aspect-ratio: auto;
+}
+
 .videoPlayer:fullscreen video {
+  position: absolute;
+  inset: 0;
+}
+
+.videoPlayer:-webkit-full-screen video {
   position: absolute;
   inset: 0;
 }

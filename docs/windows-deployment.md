@@ -31,6 +31,91 @@ Docker Desktop remains external because Jackett and FlareSolverr continue to use
 
 If Docker Desktop is missing, setup explains the requirement and offers its official download page. After installing Docker later, open it once and then restart Windows or choose **Start or Restart TorPlay**.
 
+## Configure Jackett Indexers
+
+TorPlay uses **Jackett** to search torrent indexers. Jackett may be running correctly while TorPlay still returns no playable sources if no indexers have been configured.
+
+After installing TorPlay and starting Docker, open Jackett in your browser:
+
+`http://localhost:9117`
+
+### 1. Add the required indexers
+
+In Jackett:
+
+1. Click **Add indexer**.
+2. Search for each indexer listed below.
+3. Click the **+** button to add it.
+4. Complete any configuration requested by Jackett.
+5. Use **Test** to verify that the indexer is working.
+
+For the default TorPlay configuration, add these indexers:
+
+**Movies**
+
+* YTS
+* LimeTorrents
+* TorrentDownload
+* TorrentDownloads
+* Knaben
+* The Pirate Bay
+
+**TV Shows**
+
+* EZTV
+* LimeTorrents
+* TorrentDownload
+* Knaben
+* KickAssTorrents.ws
+* The Pirate Bay
+
+Some indexers are used for both movies and TV shows, so they only need to be added to Jackett once.
+
+### 2. Verify the indexers
+
+The configured indexers should show as working in the Jackett dashboard. If an indexer fails its Jackett test, TorPlay may not be able to retrieve results from it.
+
+Indexer availability can change over time. If one of the recommended indexers is unavailable in your region or stops working, TorPlay can continue using the other configured indexers.
+
+### 3. Configure the Jackett API key
+
+Jackett displays its API key in the Jackett dashboard.
+
+TorPlay needs this key in its configuration:
+
+`JACKETT_API_KEY=your_jackett_api_key`
+
+For the Windows installation, the TorPlay configuration is stored at:
+
+`%LOCALAPPDATA%\TorPlay\config\torplay.env`
+
+The default Jackett address is:
+
+`JACKETT_URL=http://localhost:9117`
+
+### 4. TorPlay indexer configuration
+
+TorPlay's default configuration separates movie and TV indexers:
+
+`JACKETT_MOVIE_INDEXERS=yts,limetorrents,torrentdownload,torrentdownloads,knaben,thepiratebay`
+
+`JACKETT_SHOW_INDEXERS=eztv,limetorrents,torrentdownload,knaben,kickasstorrents-ws,thepiratebay`
+
+The names in these lists correspond to the Jackett indexers TorPlay will search. If you change the configured indexers in Jackett, update these values accordingly.
+
+### Troubleshooting
+
+If Jackett shows as **OK** in TorPlay Status but movies or TV shows return no torrent sources:
+
+1. Open `http://localhost:9117`.
+2. Confirm that the required indexers have been added.
+3. Run **Test** for the affected indexers.
+4. Confirm that `JACKETT_API_KEY` is correct.
+5. Confirm that the indexer names configured in `JACKETT_MOVIE_INDEXERS` and `JACKETT_SHOW_INDEXERS` match the indexers you have enabled.
+
+Only use TorPlay and configured indexers to access content you are authorized to access.
+
+
 ## Startup behavior
 
 TorPlay registers a per-user Windows login entry rather than a service because Docker Desktop runs in the interactive user session:
