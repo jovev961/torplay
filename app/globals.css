@@ -1801,27 +1801,46 @@ a {
   grid-column: 1 / -1;
 }
 
-.videoPlayer video::cue {
+.subtitleOverlay {
+  position: absolute;
+  right: 5%;
+  bottom: var(--subtitle-bottom-offset, 10%);
+  left: 5%;
+  z-index: 1;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  pointer-events: none;
+  text-align: center;
+}
+
+.subtitleOverlay span {
+  width: fit-content;
+  max-width: 100%;
+  padding: 2px 6px;
   color: white;
   background: rgba(0, 0, 0, 0.72);
   font-family: Arial, Helvetica, sans-serif;
   font-size: clamp(0.95rem, 2.2vw, 1.8rem);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
   text-shadow: 0 2px 4px black;
 }
 
-.videoPlayer.subtitle-size-small video::cue {
+.videoPlayer.subtitle-size-small .subtitleOverlay span {
   font-size: clamp(0.78rem, 1.8vw, 1.45rem);
 }
 
-.videoPlayer.subtitle-size-medium video::cue {
+.videoPlayer.subtitle-size-medium .subtitleOverlay span {
   font-size: clamp(0.95rem, 2.2vw, 1.8rem);
 }
 
-.videoPlayer.subtitle-size-large video::cue {
+.videoPlayer.subtitle-size-large .subtitleOverlay span {
   font-size: clamp(1.1rem, 2.7vw, 2.2rem);
 }
 
-.videoPlayer.subtitle-size-extra-large video::cue {
+.videoPlayer.subtitle-size-extra-large .subtitleOverlay span {
   font-size: clamp(1.3rem, 3.2vw, 2.7rem);
 }
 
@@ -1830,46 +1849,46 @@ a {
 .subtitle-size-large .subtitlePreview span { font-size: 1.12rem; }
 .subtitle-size-extra-large .subtitlePreview span { font-size: 1.32rem; }
 
-.videoPlayer.subtitle-font-sans video::cue,
+.videoPlayer.subtitle-font-sans .subtitleOverlay span,
 .subtitle-font-sans .subtitlePreview span {
   font-family: Arial, Helvetica, sans-serif;
 }
 
-.videoPlayer.subtitle-font-serif video::cue,
+.videoPlayer.subtitle-font-serif .subtitleOverlay span,
 .subtitle-font-serif .subtitlePreview span {
   font-family: Georgia, "Times New Roman", serif;
 }
 
-.videoPlayer.subtitle-font-monospace video::cue,
+.videoPlayer.subtitle-font-monospace .subtitleOverlay span,
 .subtitle-font-monospace .subtitlePreview span {
   font-family: "Courier New", Courier, monospace;
 }
 
-.videoPlayer.subtitle-color-white video::cue,
+.videoPlayer.subtitle-color-white .subtitleOverlay span,
 .subtitle-color-white .subtitlePreview span { color: white; }
-.videoPlayer.subtitle-color-yellow video::cue,
+.videoPlayer.subtitle-color-yellow .subtitleOverlay span,
 .subtitle-color-yellow .subtitlePreview span { color: #ffe45c; }
-.videoPlayer.subtitle-color-cyan video::cue,
+.videoPlayer.subtitle-color-cyan .subtitleOverlay span,
 .subtitle-color-cyan .subtitlePreview span { color: #7eeeff; }
 
-.videoPlayer.subtitle-edge-none video::cue,
+.videoPlayer.subtitle-edge-none .subtitleOverlay span,
 .subtitle-edge-none .subtitlePreview span { text-shadow: none; }
-.videoPlayer.subtitle-edge-shadow video::cue,
+.videoPlayer.subtitle-edge-shadow .subtitleOverlay span,
 .subtitle-edge-shadow .subtitlePreview span { text-shadow: 0 2px 4px black; }
-.videoPlayer.subtitle-edge-outline video::cue,
+.videoPlayer.subtitle-edge-outline .subtitleOverlay span,
 .subtitle-edge-outline .subtitlePreview span {
   text-shadow: -1px -1px 0 black, 1px -1px 0 black, -1px 1px 0 black, 1px 1px 0 black;
 }
 
-.videoPlayer.subtitle-background-0 video::cue,
+.videoPlayer.subtitle-background-0 .subtitleOverlay span,
 .subtitle-background-0 .subtitlePreview span { background: transparent; }
-.videoPlayer.subtitle-background-25 video::cue,
+.videoPlayer.subtitle-background-25 .subtitleOverlay span,
 .subtitle-background-25 .subtitlePreview span { background: rgba(0, 0, 0, 0.25); }
-.videoPlayer.subtitle-background-50 video::cue,
+.videoPlayer.subtitle-background-50 .subtitleOverlay span,
 .subtitle-background-50 .subtitlePreview span { background: rgba(0, 0, 0, 0.5); }
-.videoPlayer.subtitle-background-75 video::cue,
+.videoPlayer.subtitle-background-75 .subtitleOverlay span,
 .subtitle-background-75 .subtitlePreview span { background: rgba(0, 0, 0, 0.75); }
-.videoPlayer.subtitle-background-100 video::cue,
+.videoPlayer.subtitle-background-100 .subtitleOverlay span,
 .subtitle-background-100 .subtitlePreview span { background: black; }
 
 .bufferStatus {

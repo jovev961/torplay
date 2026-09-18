@@ -38,6 +38,17 @@ test("chooses remux and transcode strategies from probed codecs", () => {
     copyAudio: true,
     name: "transcode",
   });
+  assert.deepEqual(
+    chooseHlsStrategy(
+      { videoCodec: "h264", audioCodec: "aac" },
+      { startTime: 13.3 },
+    ),
+    {
+      copyVideo: false,
+      copyAudio: false,
+      name: "transcode",
+    },
+  );
 });
 
 test("builds HLS stream-copy and H.264/AAC conversion arguments", () => {
@@ -68,6 +79,9 @@ test("builds HLS stream-copy and H.264/AAC conversion arguments", () => {
   assert.ok(randomAccess.indexOf("-ss") < randomAccess.indexOf("-i"));
   assert.equal(randomAccess[randomAccess.indexOf("-i") + 1], "http://127.0.0.1:1234/file");
   assert.equal(randomAccess.includes("pipe:0"), false);
+  assert.ok(randomAccess.includes("libx264"));
+  assert.ok(randomAccess.includes("aac"));
+  assert.equal(randomAccess.includes("copy"), false);
 });
 
 test("parses probe output and rejects media without video", () => {
@@ -208,7 +222,7 @@ test("probe failures log complete stderr and expose the exit code", async () => 
   }
 });
 
-test("probes and remuxes an H.264/AAC MKV into playable HLS", async (context) => {
+test("remuxes H.264/AAC from zero and accurately transcodes nonzero seeks", async (context) => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "torplay-test-"));
   const fixture = path.join(directory, "fixture.mkv");
   const generated = spawnSync(resolveFfmpegPath(), [
@@ -298,12 +312,13 @@ test("probes and remuxes an H.264/AAC MKV into playable HLS", async (context) =>
     context: "test random-access MKV HLS path",
     inputUrl: `http://127.0.0.1:${server.address().port}/fixture.mkv`,
     media,
-    startTime: 12,
+    startTime: 12.3,
     readRate: 100,
     startTimeoutMs: 10_000,
   });
   await seekJob.ready;
-  assert.equal(seekJob.originSeconds, 12);
+  assert.equal(seekJob.originSeconds, 12.3);
+  assert.equal(seekJob.strategy, "transcode");
   assert.ok(requestedRanges.some(({ start }) => start > 0));
   assert.ok((await readdir(seekJob.outputDirectory)).some((name) => /^segment-\d{5}\.ts$/.test(name)));
   await seekJob.completed;

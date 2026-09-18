@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  applySubtitleCuePosition,
   normalizeSubtitleAppearance,
   readSubtitleAppearance,
   SUBTITLE_APPEARANCE_DEFAULTS,
@@ -60,18 +59,4 @@ test("builds only validated subtitle appearance class names", () => {
     }),
     "subtitle-size-small subtitle-font-serif subtitle-color-cyan subtitle-edge-none subtitle-background-100",
   );
-});
-
-test("positions WebVTT cues by percentage with safe feature detection", () => {
-  const completeCue = { line: "auto", lineAlign: "start", snapToLines: true };
-  const basicCue = { line: "auto", snapToLines: true };
-  const ignoredCue = { text: "not a VTTCue" };
-  const count = applySubtitleCuePosition({ cues: [completeCue, basicCue, ignoredCue] }, 25);
-  assert.equal(count, 2);
-  assert.deepEqual(completeCue, { line: 75, lineAlign: "end", snapToLines: false });
-  assert.deepEqual(basicCue, { line: 75, snapToLines: false });
-  assert.deepEqual(ignoredCue, { text: "not a VTTCue" });
-
-  applySubtitleCuePosition({ cues: [completeCue] }, 999);
-  assert.equal(completeCue.line, 90);
 });
