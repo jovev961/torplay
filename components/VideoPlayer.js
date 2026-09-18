@@ -3,7 +3,6 @@
 import Hls from "hls.js";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  applySubtitleCuePosition,
   normalizeSubtitleAppearance,
   readSubtitleAppearance,
   SUBTITLE_APPEARANCE_DEFAULTS,
@@ -11,6 +10,10 @@ import {
   writeSubtitleAppearance,
 } from "../lib/subtitles/appearance.js";
 import { automaticSubtitleId } from "../lib/subtitles/selection.js";
+import {
+  activeSubtitleCues,
+  subscribeToSubtitleTrack,
+} from "../lib/subtitles/timeline.js";
 import { PROGRESS_SAVE_INTERVAL_MS } from "../lib/history/constants.js";
 import { isPlaybackAtEnd, shouldOfferNextEpisode } from "../lib/playback/autoplay.js";
 import {
@@ -51,6 +54,22 @@ function browserStorage() {
   } catch {
     return null;
   }
+}
+
+function SubtitleCue({ cue }) {
+  const cueRef = useRef(null);
+
+  useEffect(() => {
+    const element = cueRef.current;
+    if (!element) return;
+    if (typeof cue?.getCueAsHTML === "function") {
+      element.replaceChildren(cue.getCueAsHTML());
+    } else {
+      element.textContent = String(cue?.text || "");
+    }
+  }, [cue]);
+
+  return <span ref={cueRef} />;
 }
 
 function Icon({ name }) {
@@ -118,6 +137,7 @@ export default function VideoPlayer({
   const [controlsVisible, setControlsVisible] = useState(true);
   const [menu, setMenu] = useState(null);
   const [activeSubtitleId, setActiveSubtitleId] = useState(null);
+  const [subtitleCues, setSubtitleCues] = useState({});
   const [subtitleDelay, setSubtitleDelay] = useState(0);
   const [subtitleAppearance, setSubtitleAppearance] = useState(SUBTITLE_APPEARANCE_DEFAULTS);
   const [subtitleDiscovery, setSubtitleDiscovery] = useState({
@@ -135,8 +155,6 @@ export default function VideoPlayer({
   const baseUrl = `/api/torrents/${encodeURIComponent(sessionId)}/files/${encodeURIComponent(file.id)}`;
   const playbackUrl = `${baseUrl}/playback`;
   const subtitles = subtitleDiscovery.tracks;
-  const hlsOrigin = playbackDetails?.originSeconds || 0;
-  const subtitleOffsetMs = Math.round(subtitleDelay * 1000 - (file.playbackMode === "transcode" ? hlsOrigin * 1000 : 0));
   const subtitleUrl = `${baseUrl}/subtitles`;
   const subtitleStyleClass = subtitleAppearanceClassName(subtitleAppearance);
 
@@ -385,14 +403,28 @@ export default function VideoPlayer({
   }, [subtitleUrl]);
 
   useEffect(() => {
-    const tracks = Array.from(videoRef.current?.textTracks || []);
+    const video = videoRef.current;
+    const elements = Array.from(video?.querySelectorAll("track") || []);
+    const cleanups = [];
+
     subtitles.forEach((subtitle, index) => {
-      if (tracks[index]) {
-        tracks[index].mode = subtitle.id === activeSubtitleId ? "showing" : "disabled";
-        applySubtitleCuePosition(tracks[index], subtitleAppearance.bottomOffsetPercent);
-      }
+      const element = elements[index];
+      if (!element) return;
+
+      cleanups.push(subscribeToSubtitleTrack(element, {
+        mode: subtitle.id === activeSubtitleId ? "hidden" : "disabled",
+        onCues: (cues) => {
+          setSubtitleCues((current) => ({ ...current, [subtitle.id]: cues }));
+          setSubtitleError("");
+        },
+        onError: () => {
+          setSubtitleError(`${subtitle.label} subtitles could not be loaded.`);
+        },
+      }));
     });
-  }, [activeSubtitleId, subtitleAppearance.bottomOffsetPercent, subtitleOffsetMs, subtitles]);
+
+    return () => cleanups.forEach((cleanup) => cleanup());
+  }, [activeSubtitleId, subtitles]);
 
   useEffect(() => () => {
     abortRef.current?.abort();
@@ -582,6 +614,9 @@ export default function VideoPlayer({
   const canSeek = duration > 0;
   const timelineTime = seekPreview ?? currentTime;
   const playedRatio = duration > 0 ? timelineTime / duration : 0;
+  const visibleSubtitleCues = playbackState === "preparing" || activeSubtitleId === null
+    ? []
+    : activeSubtitleCues(subtitleCues[activeSubtitleId], currentTime, subtitleDelay);
   const subtitleGroups = subtitleDiscovery.preferences.enabledLanguages
     .map((language) => ({
       language,
@@ -668,21 +703,27 @@ export default function VideoPlayer({
         >
           {subtitles.map((subtitle) => (
             <track
-              key={`${subtitle.id}-${subtitleOffsetMs}`}
+              key={subtitle.id}
               kind="subtitles"
-              src={`${subtitle.src}?offsetMs=${subtitleOffsetMs}`}
+              src={subtitle.src}
               srcLang={subtitle.language}
               label={subtitle.label}
-              onLoad={(event) => {
-                event.currentTarget.track.mode = subtitle.id === activeSubtitleId ? "showing" : "disabled";
-                applySubtitleCuePosition(event.currentTarget.track, subtitleAppearance.bottomOffsetPercent);
-                setSubtitleError("");
-              }}
-              onError={() => setSubtitleError(`${subtitle.label} subtitles could not be loaded.`)}
             />
           ))}
           Your browser does not support HTML5 video.
         </video>
+
+        {visibleSubtitleCues.length > 0 ? (
+          <div
+            className="subtitleOverlay"
+            aria-live="off"
+            style={{ "--subtitle-bottom-offset": `${subtitleAppearance.bottomOffsetPercent}%` }}
+          >
+            {visibleSubtitleCues.map((cue, index) => (
+              <SubtitleCue cue={cue} key={`${cue.startTime}-${cue.endTime}-${index}`} />
+            ))}
+          </div>
+        ) : null}
 
         <div className="playerShade" aria-hidden="true" />
         <div className="playerTopBar">

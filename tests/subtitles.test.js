@@ -102,16 +102,9 @@ test("normalizes Windows-1251 and Windows-1250 Balkan subtitles to UTF-8 WebVTT"
   }
 });
 
-test("shifts subtitle cues without changing video timing", () => {
+test("keeps subtitle cues on their original media timeline", () => {
   const input = new TextEncoder().encode(
     "1\n00:00:05,000 --> 00:00:07,000\nDelayed line\n",
   );
-  assert.match(
-    subtitleToWebVtt(input, "srt", { offsetMs: -500 }),
-    /00:04\.500 --> 00:06\.500/,
-  );
-  assert.match(
-    subtitleToWebVtt(input, "srt", { offsetMs: 500 }),
-    /00:05\.500 --> 00:07\.500/,
-  );
+  assert.match(subtitleToWebVtt(input, "srt"), /00:00:05\.000 --> 00:00:07\.000/);
 });
