@@ -53,57 +53,20 @@ When asked to implement a GitHub issue:
 
 ## Git Workflow
 
-When implementing a GitHub issue or a requested change that is intended to be merged:
+Use `main` as the stable/release branch and `develop` as the integration/testing branch.
 
-1. Start from the latest `main` branch.
-   - Fetch the latest remote changes.
-   - Ensure `main` is up to date before creating the working branch.
-   - Do not make implementation commits directly on `main`.
+1. Fetch origin. Ensure `develop` is clean and synchronized with `origin/develop`, then start each issue/change from latest `origin/develop`. Preserve unrelated work before switching branches. Do not make implementation commits directly on `main` or `develop`.
+2. Create a scoped branch:
+   - `feat/issue-<number>-<description>` for features.
+   - `fix/issue-<number>-<description>` for fixes.
+   - `refactor/issue-<number>-<description>` for refactoring.
+3. Implement the change, add/update tests, and run relevant tests, the full test suite, lint, and a production build.
+4. Commit and push the working branch.
+5. Refresh remote state and incorporate any new changes safely. Merge the completed branch into `develop` only when verification passes, verify the integrated tree, then push `develop`.
+6. Delete the completed local and remote working branch only after verifying its commit is contained in remote `develop`. Return to clean, synchronized `develop` and STOP for manual testing.
+7. If testing on `develop` finds a problem, create a new `fix/<description>` or `fix/issue-<number>-<description>` branch from latest `origin/develop`. Follow the same verification and integration flow. Keep fixes as separate commits rather than rewriting original feature commits, then return to `develop` for further testing.
+8. Merge `develop` into `main` only when explicitly instructed that testing passed and it is ready for stable/release use. Fetch origin, verify clean synchronized `develop`, reconcile remote changes, and run final tests/lint/build before merging into current `main` and pushing normally. Never automatically merge to `main`. Keep `develop` alive permanently; safely synchronize any newer main changes into it before future feature work.
+9. Only bump the application version when preparing a public release/build. During beta, increment only the beta number unless instructed otherwise.
+10. Never force-push any branch, rewrite published history, discard unrelated work, or merge with failing checks.
 
-2. Create a new branch for the change.
-   - Use a descriptive branch name based on the issue/change.
-   - Prefer:
-     - `fix/<short-description>` for bug fixes.
-     - `feat/<short-description>` for features.
-     - `refactor/<short-description>` for refactoring.
-   - If a GitHub issue number is available, include it where practical.
-
-3. Implement the requested change.
-   - Follow the issue description and acceptance criteria.
-   - Keep changes scoped to the task.
-   - Add or update relevant tests.
-   - Run the appropriate tests and lint before publishing.
-
-4. Bump the application version only when this work is intended to produce a new public build/release.
-   - During the current beta cycle, increment only the beta number unless explicitly instructed otherwise.
-   - Example: `0.1.0-beta.2` -> `0.1.0-beta.3`.
-   - Keep all files containing the application version consistent.
-   - Do not create additional version bumps for individual commits within the same release.
-
-5. Commit the completed changes on the working branch.
-   - Use a concise conventional commit message where appropriate, for example:
-     - `fix: keep subtitles synchronized after seeking`
-     - `feat: add native indexer provider`
-     - `refactor: decouple torrent search from Jackett`
-   - Include the version bump in the same change unless there is a specific reason to separate it.
-
-6. Push the working branch to `origin`.
-
-7. Merge the working branch into `main` only after:
-   - Tests pass.
-   - Lint passes.
-   - The implementation satisfies the requested issue/change.
-   - There are no unresolved merge conflicts.
-   - The remote `main` has not changed in a way that must first be incorporated.
-
-8. Push the updated `main` branch to `origin`.
-
-9. Do not force-push `main`, rewrite published history, bypass failing tests, or discard unrelated remote changes in order to complete the merge.
-
-10. After completion, report:
-    - Branch created.
-    - Version before and after, if bumped.
-    - Commit hash and message.
-    - Tests/lint executed and their results.
-    - Whether the branch was pushed.
-    - Whether it was successfully merged into `main`.
+After completion, report the branch, commit, verification results, and merge/push status.
