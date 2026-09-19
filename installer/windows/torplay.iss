@@ -7,6 +7,9 @@
 #ifndef AppVersion
   #error AppVersion must be supplied by the release script
 #endif
+#ifndef VersionInfoVersion
+  #error VersionInfoVersion must be supplied by the release script
+#endif
 
 #define AppGuid "{{8DA50D54-84AA-49E9-994F-0E82F5B7E88F}"
 
@@ -29,7 +32,7 @@ UninstallLogging=yes
 OutputDir={#OutputDir}
 OutputBaseFilename=TorPlay-Setup-{#AppVersion}
 UninstallDisplayName=TorPlay
-VersionInfoVersion={#AppVersion}
+VersionInfoVersion={#VersionInfoVersion}
 
 [Dirs]
 Name: "{localappdata}\TorPlay\config"; Flags: uninsneveruninstall
