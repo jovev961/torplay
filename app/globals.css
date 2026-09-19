@@ -511,6 +511,27 @@ a {
   font-size: 0.78rem;
 }
 
+.cardMetaRow {
+  display: flex;
+  min-height: 18px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.cardCopy .imdbRating {
+  flex: none;
+  color: #f5c451;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.imdbRating small {
+  color: #b8c0c8;
+  font-size: 0.66rem;
+  font-weight: 700;
+}
+
 .credits {
   display: grid;
   justify-items: center;

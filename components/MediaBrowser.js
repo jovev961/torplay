@@ -1,25 +1,4 @@
-import Image from "next/image";
-import Link from "next/link";
-import { mediaDetailsHref } from "../lib/metadata/catalog.js";
-
-export function MediaCard({ item }) {
-  return (
-    <Link className="mediaCard" href={mediaDetailsHref(item)}>
-      <div className="posterFrame">
-        {item.posterUrl ? (
-          <Image src={item.posterUrl} alt="" fill sizes="(max-width: 640px) 42vw, 190px" />
-        ) : (
-          <div className="imageFallback" aria-hidden="true">{item.title?.slice(0, 1) || "?"}</div>
-        )}
-        <span className="mediaTypeBadge">{item.mediaType === "movie" ? "Movie" : "TV Show"}</span>
-      </div>
-      <div className="cardCopy">
-        <h3>{item.title}</h3>
-        <span>{item.year || "Date unavailable"}</span>
-      </div>
-    </Link>
-  );
-}
+import ImdbRatedCards from "./ImdbRatedCards.js";
 
 export function MediaShelf({ title, items, error }) {
   const headingId = `${title.replace(/\s+/g, "-").toLowerCase()}-heading`;
@@ -32,9 +11,7 @@ export function MediaShelf({ title, items, error }) {
       {error ? <div className="notice error">{error}</div> : null}
       {!error && items.length === 0 ? <div className="notice">No titles available.</div> : null}
       {items.length > 0 ? (
-        <div className="posterRow">
-          {items.map((item) => <MediaCard item={item} key={`${item.mediaType}-${item.id}`} />)}
-        </div>
+        <ImdbRatedCards className="posterRow" items={items} />
       ) : null}
     </section>
   );

@@ -23,7 +23,7 @@ Restart the relevant TorPlay runtime after changing either file. Do not commit r
 | --- | --- | --- |
 | `JACKETT_MOVIE_INDEXERS` | Template-defined list | Comma-separated Jackett IDs used for movies. Empty searches all configured indexers. |
 | `JACKETT_SHOW_INDEXERS` | Template-defined list | Comma-separated Jackett IDs used for shows. Empty searches all configured indexers. |
-| `OMDB_API_KEY` | Unset | Optional OMDb key copied into Jackett for IMDb-only aggregate-search fallback. When absent, TorPlay preserves Jackett's existing key. |
+| `OMDB_API_KEY` | Unset | Optional server-side OMDb key used for IMDb ratings on catalog cards and copied into Jackett for IMDb-only aggregate-search fallback. Ratings are omitted when absent; TorPlay preserves Jackett's existing key. |
 
 Every explicitly named indexer must already be enabled and configured in Jackett. TorPlay queries media-specific lists independently and retains results from healthy indexers when another fails.
 
