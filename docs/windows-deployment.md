@@ -1,6 +1,6 @@
 # Windows Deployment
 
-The recommended production deployment is the per-user TorPlay installer. It bundles the production Next.js application and Node.js runtime, starts TorPlay automatically at login, and exposes `http://torplay.local` without requiring npm or a source checkout.
+The recommended production deployment is the per-user TorPlay installer. It bundles the production Next.js application and Node.js runtime, starts TorPlay automatically at login, and opens locally at `http://localhost` without requiring npm, a source checkout, or environment-file setup. Household devices use `http://torplay.local` after setup.
 
 ## Requirements
 
@@ -18,16 +18,9 @@ Docker Desktop remains external because Jackett and FlareSolverr continue to use
 2. Open Docker Desktop once and accept its agreement.
 3. Run `TorPlay-Setup-<version>.exe` as the Windows account that should host TorPlay.
 4. Approve the administrator prompt that creates the Private-network firewall rules.
-5. Open `%LOCALAPPDATA%\TorPlay\config\torplay.env` and configure at least:
-
-   ```dotenv
-   TMDB_API_TOKEN=your-tmdb-read-access-token
-   JACKETT_URL=http://localhost:9117
-   JACKETT_API_KEY=your-jackett-api-key
-   ```
-
-6. Restart Windows or sign out and back in.
-7. Open [http://torplay.local](http://torplay.local).
+5. Choose **Open TorPlay** from the Start menu, or open [http://localhost](http://localhost).
+6. Follow the setup screen to verify and save the TMDB and Jackett credentials.
+7. Open [http://torplay.local](http://torplay.local) on other household devices.
 
 If Docker Desktop is missing, setup explains the requirement and offers its official download page. After installing Docker later, open it once and then restart Windows or choose **Start or Restart TorPlay**.
 
@@ -39,7 +32,7 @@ After installing TorPlay and starting Docker, open Jackett in your browser:
 
 `http://localhost:9117`
 
-### 1. Add the required indexers
+### 1. Add authorized indexers
 
 In Jackett:
 
@@ -49,7 +42,7 @@ In Jackett:
 4. Complete any configuration requested by Jackett.
 5. Use **Test** to verify that the indexer is working.
 
-For the default TorPlay configuration, add these indexers:
+Examples commonly used for the listed media types include:
 
 **Movies**
 
@@ -81,34 +74,18 @@ Indexer availability can change over time. If one of the recommended indexers is
 
 Jackett displays its API key in the Jackett dashboard.
 
-TorPlay needs this key in its configuration:
-
-`JACKETT_API_KEY=your_jackett_api_key`
-
-For the Windows installation, the TorPlay configuration is stored at:
-
-`%LOCALAPPDATA%\TorPlay\config\torplay.env`
-
-The default Jackett address is:
-
-`JACKETT_URL=http://localhost:9117`
+Enter this key in TorPlay's setup screen at [http://localhost/setup](http://localhost/setup). The default Jackett address is `http://localhost:9117`. TorPlay verifies the connection before it saves the key.
 
 ### 4. TorPlay indexer configuration
 
-TorPlay's default configuration separates movie and TV indexers:
-
-`JACKETT_MOVIE_INDEXERS=yts,limetorrents,torrentdownload,torrentdownloads,knaben,thepiratebay`
-
-`JACKETT_SHOW_INDEXERS=eztv,limetorrents,torrentdownload,knaben,kickasstorrents-ws,thepiratebay`
-
-The names in these lists correspond to the Jackett indexers TorPlay will search. If you change the configured indexers in Jackett, update these values accordingly.
+TorPlay searches all configured Jackett indexers by default. Advanced owners can set `JACKETT_MOVIE_INDEXERS` and `JACKETT_SHOW_INDEXERS` in the configuration file to restrict each media type to comma-separated Jackett IDs.
 
 ### Troubleshooting
 
 If Jackett shows as **OK** in TorPlay Status but movies or TV shows return no torrent sources:
 
 1. Open `http://localhost:9117`.
-2. Confirm that the required indexers have been added.
+2. Confirm that your authorized indexers have been added.
 3. Run **Test** for the affected indexers.
 4. Confirm that `JACKETT_API_KEY` is correct.
 5. Confirm that the indexer names configured in `JACKETT_MOVIE_INDEXERS` and `JACKETT_SHOW_INDEXERS` match the indexers you have enabled.
@@ -134,7 +111,7 @@ Docker readiness uses bounded retries: 5 seconds, 10 seconds, 20 seconds, and th
 
 ## Start menu
 
-- **Open TorPlay** opens `http://torplay.local`.
+- **Open TorPlay** opens the editable local owner address at `http://localhost`.
 - **TorPlay Status** reports Docker, Jackett, FlareSolverr, TorPlay, and mDNS state, plus the last failure and important file paths.
 - **Start or Restart TorPlay** gracefully stops an existing runtime and launches it again.
 - **Stop TorPlay** requests a graceful shutdown and uses the recorded TorPlay process tree only as a fallback.
@@ -174,7 +151,7 @@ Windows must classify the home network as **Private**. Guest Wi-Fi or access-poi
 
 ## Configuration changes
 
-Edit `%LOCALAPPDATA%\TorPlay\config\torplay.env`, save it, and use **Start or Restart TorPlay**. See [Configuration](configuration.md) for every supported owner setting.
+Open [http://localhost/settings](http://localhost/settings) to update provider settings. Required TMDB and Jackett changes activate immediately. Optional OMDb changes still require **Start or Restart TorPlay** so Jackett receives the new value. Advanced runtime settings can be edited in `%LOCALAPPDATA%\TorPlay\config\torplay.env`; see [Configuration](configuration.md).
 
 ## Upgrade and reinstall
 

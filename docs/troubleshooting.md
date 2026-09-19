@@ -32,15 +32,19 @@ The installed runtime attempts to start Docker Desktop and waits for up to ten m
 - Confirm Docker is healthy.
 - Open [http://localhost:9117](http://localhost:9117).
 - Confirm at least one Jackett indexer is configured and working.
-- Confirm `JACKETT_API_KEY` matches the value shown by Jackett.
+- Open [http://localhost/settings](http://localhost/settings) and confirm the Jackett API key matches the value shown by Jackett.
 - Confirm explicitly listed movie/show indexer IDs exist in Jackett.
-- Use **Start or Restart TorPlay** after changing configuration.
+- Required Jackett settings activate immediately after TorPlay verifies and saves them.
 
 TorPlay configures Jackett's FlareSolverr URL internally as `http://flaresolverr:8191`; port 8191 is intentionally not published to Windows.
 
 ## Metadata is unavailable
 
 Open [http://localhost/settings](http://localhost/settings) on the TorPlay computer and check TMDB's connection status. The token must be the TMDB API Read Access Token, not the 32-character v3 API key. Provider credentials can also be maintained in `.env.local` for development or `%LOCALAPPDATA%\TorPlay\config\torplay.env` for an installed runtime.
+
+## Setup keeps reopening
+
+Open [http://localhost/setup](http://localhost/setup) on the TorPlay computer. TorPlay saves nothing until both TMDB and Jackett pass live validation. Check that Docker and Jackett are running, copy the API Read Access Token rather than TMDB's v3 key, and verify the Jackett API key. A Jackett indexer is not required to finish setup, but source searches need at least one authorized working indexer.
 
 ## Settings are read-only
 

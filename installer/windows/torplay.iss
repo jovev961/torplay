@@ -46,7 +46,7 @@ Source: "{#StageDir}\config\torplay.env"; DestDir: "{localappdata}\TorPlay\confi
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "TorPlay"; ValueData: """{sys}\wscript.exe"" ""{app}\runtime\torplay-launcher.vbs"" start"; Flags: uninsdeletevalue
 
 [Icons]
-Name: "{group}\Open TorPlay"; Filename: "http://torplay.local"
+Name: "{group}\Open TorPlay"; Filename: "http://localhost"
 Name: "{group}\TorPlay Status"; Filename: "{app}\runtime\torplay-status.cmd"; WorkingDir: "{app}"
 Name: "{group}\Start or Restart TorPlay"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\runtime\torplay-launcher.vbs"" restart"; WorkingDir: "{app}"
 Name: "{group}\Stop TorPlay"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\runtime\torplay-launcher.vbs"" stop"; WorkingDir: "{app}"

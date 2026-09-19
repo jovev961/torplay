@@ -9,6 +9,7 @@ import {
   parseSettingsEnvironment,
   settingsState,
   updateProviderSettings,
+  validateAndUpdateProvidersSettings,
 } from "../lib/settings/config.js";
 
 async function fixture(source = "") {
@@ -122,6 +123,39 @@ test("reports configuration writability without creating a missing parent direct
     const nested = path.join(directory, "missing", "torplay.env");
     assert.equal(await configurationWritable({ environment: { TORPLAY_CONFIG_PATH: nested } }), false);
     await assert.rejects(stat(path.dirname(nested)), { code: "ENOENT" });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("validates required providers before committing them as one configuration change", async () => {
+  const { directory, filename } = await fixture("# preserved\nUNRELATED=value\n");
+  const environment = { TORPLAY_CONFIG_PATH: filename };
+  const changes = [
+    { providerId: "tmdb", payload: { values: { apiToken: "tmdb-token" } } },
+    { providerId: "jackett", payload: { values: { url: "http://localhost:9117", apiKey: "jackett-token" } } },
+  ];
+  try {
+    const rejected = await validateAndUpdateProvidersSettings(changes, async (candidate) => {
+      assert.equal(candidate.TMDB_API_TOKEN, "tmdb-token");
+      assert.equal(candidate.JACKETT_API_KEY, "jackett-token");
+      return { valid: false, results: [{ provider: "tmdb", status: "invalid" }] };
+    }, { environment, configPath: filename });
+    assert.equal(rejected.committed, false);
+    assert.equal(await readFile(filename, "utf8"), "# preserved\nUNRELATED=value\n");
+    assert.equal(environment.TMDB_API_TOKEN, undefined);
+
+    const accepted = await validateAndUpdateProvidersSettings(changes, async () => ({ valid: true, results: [] }), {
+      environment,
+      configPath: filename,
+    });
+    assert.equal(accepted.committed, true);
+    const source = await readFile(filename, "utf8");
+    assert.match(source, /^# preserved$/m);
+    assert.match(source, /^TMDB_API_TOKEN=tmdb-token$/m);
+    assert.match(source, /^JACKETT_API_KEY=jackett-token$/m);
+    assert.equal(environment.TMDB_API_TOKEN, "tmdb-token");
+    assert.equal(environment.JACKETT_API_KEY, "jackett-token");
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

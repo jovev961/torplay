@@ -116,10 +116,19 @@ test("installer declares durable data, login startup, shortcuts, and firewall cl
   assert.match(installer, /PrivilegesRequired=lowest/);
   assert.match(installer, /Software\\Microsoft\\Windows\\CurrentVersion\\Run/);
   assert.match(installer, /Open TorPlay/);
+  assert.match(installer, /Open TorPlay"; Filename: "http:\/\/localhost"/);
   assert.match(installer, /TorPlay Status/);
   assert.match(installer, /Start or Restart TorPlay/);
   assert.match(installer, /Stop TorPlay/);
   assert.match(installer, /windows-firewall\.ps1"" -Remove/);
   assert.match(installer, /uninsneveruninstall/);
   assert.doesNotMatch(installer, /docker compose down/);
+});
+
+test("fresh Windows configuration leaves required provider credentials for browser setup", async () => {
+  const template = await readFile(new URL("../installer/windows/torplay.env", import.meta.url), "utf8");
+  assert.doesNotMatch(template, /^TMDB_API_TOKEN=/m);
+  assert.doesNotMatch(template, /^JACKETT_API_KEY=/m);
+  assert.match(template, /^JACKETT_MOVIE_INDEXERS=$/m);
+  assert.match(template, /^JACKETT_SHOW_INDEXERS=$/m);
 });

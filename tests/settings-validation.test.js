@@ -75,3 +75,21 @@ test("caches validation briefly and rejects malformed provider selections", asyn
   await assert.rejects(validateSettingsProviders("tmdb"), /must be an array/);
   await assert.rejects(validateSettingsProviders(["unknown"]), /unknown provider/);
 });
+
+test("uncached candidate validation does not replace the live validation cache", async () => {
+  clearSettingsValidation("tmdb");
+  let calls = 0;
+  const fetchImpl = async () => { calls += 1; return response({}); };
+  await validateSettingsProviders(["tmdb"], {
+    environment: { TMDB_API_TOKEN: "candidate" },
+    fetchImpl,
+    now: 1_000,
+    useCache: false,
+  });
+  await validateSettingsProviders(["tmdb"], {
+    environment: { TMDB_API_TOKEN: "live" },
+    fetchImpl,
+    now: 1_001,
+  });
+  assert.equal(calls, 2);
+});

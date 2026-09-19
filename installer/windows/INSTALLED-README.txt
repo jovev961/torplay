@@ -1,7 +1,9 @@
 2TorPlay for Windows
 ===================
 
-Open TorPlay at http://torplay.local after Docker Desktop and TorPlay finish starting.
+Open TorPlay at http://localhost after Docker Desktop and TorPlay finish starting.
+The first launch guides you through TMDB and Jackett setup without editing files.
+Household devices can use http://torplay.local after setup is complete.
 
 Configuration:
   Open http://localhost/settings on the TorPlay computer to manage provider keys.

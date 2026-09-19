@@ -13,16 +13,15 @@ TorPlay requires a persistent Node.js process. It is not designed for serverless
 
 ```bash
 npm install
-cp .env.local.example .env.local
 npm run dev
 ```
 
-Add the required TMDB and Jackett credentials to `.env.local`; see [Configuration](configuration.md). Open:
+Open TorPlay and complete the browser setup; a `.env.local` file and restart are not required:
 
 - TorPlay: [http://localhost:3000](http://localhost:3000)
 - Jackett: [http://localhost:9117](http://localhost:9117)
 
-Configure at least one authorized Jackett indexer and copy its API key into `.env.local`. Restart `npm run dev` after changing configuration.
+Configure authorized Jackett indexers in its dashboard, then copy its API key into TorPlay's setup screen. Required provider changes activate immediately.
 
 ## Development runtime
 
