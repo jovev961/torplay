@@ -8,6 +8,7 @@ const links = [
   { href: "/search", label: "Search", id: "search" },
   { href: "/discover", label: "Discover", id: "discover" },
   { href: "/history", label: "History", id: "history" },
+  { href: "/settings", label: "Settings", id: "settings" },
 ];
 
 export default function AppHeader({ active = "" }) {

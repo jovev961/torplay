@@ -4,7 +4,9 @@
 Open TorPlay at http://torplay.local after Docker Desktop and TorPlay finish starting.
 
 Configuration:
-  %LOCALAPPDATA%\TorPlay\config\torplay.env
+  Open http://localhost/settings on the TorPlay computer to manage provider keys.
+  For manual fallback, edit %LOCALAPPDATA%\TorPlay\config\torplay.env.
+  Settings opened through torplay.local are intentionally read-only.
 
 Runtime logs:
   %LOCALAPPDATA%\TorPlay\logs\torplay.log

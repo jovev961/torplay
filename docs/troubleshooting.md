@@ -40,7 +40,13 @@ TorPlay configures Jackett's FlareSolverr URL internally as `http://flaresolverr
 
 ## Metadata is unavailable
 
-Check `TMDB_API_TOKEN`. It must be the TMDB API Read Access Token, not the 32-character v3 API key. Provider credentials belong in `.env.local` for development or `%LOCALAPPDATA%\TorPlay\config\torplay.env` for an installed runtime.
+Open [http://localhost/settings](http://localhost/settings) on the TorPlay computer and check TMDB's connection status. The token must be the TMDB API Read Access Token, not the 32-character v3 API key. Provider credentials can also be maintained in `.env.local` for development or `%LOCALAPPDATA%\TorPlay\config\torplay.env` for an installed runtime.
+
+## Settings are read-only
+
+Provider settings can be changed only from `localhost` on the TorPlay computer. This protects credentials from other household devices. Open [http://localhost/settings](http://localhost/settings), not `http://torplay.local/settings`, to edit them. Values supplied by the host environment are also read-only in the page and must be changed at their source.
+
+If Settings reports that a restart is required after an OMDb change, choose **Start or Restart TorPlay** from the Windows Start menu. Other provider credential changes are used by new requests without a restart.
 
 ## `torplay.local` does not open
 

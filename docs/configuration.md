@@ -7,7 +7,9 @@ TorPlay configuration is server-only. Never expose provider keys, Jackett downlo
 - Development and source runtime: `.env.local`, created from `.env.local.example`
 - Installed Windows runtime: `%LOCALAPPDATA%\TorPlay\config\torplay.env`
 
-Restart the relevant TorPlay runtime after changing either file. Do not commit real credentials.
+Open **Settings** in TorPlay to configure TMDB, Jackett, OMDb, OpenSubtitles, and SubDL without editing these files. Changes are permitted only through `localhost` on the TorPlay computer; household/LAN browsers can see secret-free provider health but cannot edit settings. A blank secret input keeps the configured value, while **Remove** explicitly deletes it.
+
+TorPlay stores Settings changes atomically in the runtime's configuration file and restricts its permissions where the operating system supports that. Credentials supplied by the host environment remain read-only. Most provider changes take effect immediately. Updating OMDb requires **Start or Restart TorPlay** so Jackett can receive the new value. Do not commit real credentials.
 
 ## Required providers
 

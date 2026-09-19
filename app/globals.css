@@ -2216,7 +2216,9 @@ footer {
 
   .appHeader nav {
     width: 100%;
-    justify-content: space-between;
+    justify-content: flex-start;
+    gap: 18px;
+    overflow-x: auto;
   }
 
   .catalogHero {

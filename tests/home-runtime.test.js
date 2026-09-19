@@ -107,6 +107,7 @@ test("installed configuration keeps process overrides and uses its explicit conf
     assert.equal(environment.TORPLAY_PORT, "5000");
     assert.equal(environment.TMDB_API_TOKEN, "from-file");
     assert.equal(environment.TORPLAY_DATABASE_PATH, "D:\\\\custom.db");
+    assert.equal(environment.TORPLAY_EXTERNAL_CONFIG_KEYS, "");
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

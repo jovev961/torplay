@@ -1,0 +1,373 @@
+.settingsLayout {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  align-items: start;
+  gap: 34px;
+}
+
+.settingsNav {
+  position: sticky;
+  top: 22px;
+  display: grid;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--panel);
+}
+
+.settingsNav a {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.settingsNav a:last-child {
+  border-bottom: 0;
+}
+
+.settingsNav a:hover,
+.settingsNav a:focus-visible {
+  color: var(--text);
+  background: #181d23;
+  outline: none;
+}
+
+.settingsContent {
+  display: grid;
+  min-width: 0;
+  gap: 28px;
+}
+
+.settingsSection {
+  scroll-margin-top: 24px;
+}
+
+.sectionHeading {
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+  margin-bottom: 15px;
+}
+
+.sectionHeading > span {
+  margin-top: 4px;
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.sectionHeading h2 {
+  margin: 0 0 4px;
+  font-size: 1.5rem;
+}
+
+.sectionHeading p,
+.providerHeading p,
+.providerCard > p,
+.summaryCard p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.providerGrid {
+  display: grid;
+  gap: 14px;
+}
+
+.providerCard,
+.summaryCard {
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--panel);
+}
+
+.providerGrid + .providerCard {
+  margin-top: 14px;
+}
+
+.providerHeading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.providerTitle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 7px;
+}
+
+.providerTitle h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.providerTitle span {
+  padding: 3px 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.testButton,
+.inlineButton,
+.removeButton,
+.saveButton {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  background: #101419;
+  cursor: pointer;
+}
+
+.testButton {
+  flex: none;
+  padding: 8px 10px;
+}
+
+.testButton:hover,
+.inlineButton:hover,
+.removeButton:hover {
+  border-color: #606b77;
+  background: #1a2027;
+}
+
+.providerStatus {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 15px 0 10px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.statusBadge {
+  flex: none;
+  padding: 4px 7px;
+  border-radius: 999px;
+  color: #d4dae0;
+  background: #343b43;
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.valid {
+  color: #b5f0cb;
+  background: #16492c;
+}
+
+.invalid,
+.missing {
+  color: #ffd0d0;
+  background: #642323;
+}
+
+.unreachable {
+  color: #ffe2a6;
+  background: #5a4219;
+}
+
+.helpText {
+  color: #aeb7c0;
+  font-size: 0.82rem;
+}
+
+.helpText a,
+.sectionNote a,
+.summaryCard a {
+  color: #dce4ec;
+  text-decoration: underline;
+  text-decoration-color: #687582;
+  text-underline-offset: 3px;
+}
+
+.providerForm {
+  display: grid;
+  gap: 13px;
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+
+.field {
+  display: grid;
+  gap: 7px;
+}
+
+.field label {
+  color: #dce2e8;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.field small,
+.muted,
+.sectionNote {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.inputRow {
+  display: flex;
+  min-width: 0;
+  gap: 7px;
+}
+
+.inputRow input {
+  flex: 1;
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  outline: none;
+  color: var(--text);
+  background: #0d1115;
+}
+
+.inputRow input:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(229, 9, 20, 0.15);
+}
+
+.inputRow input:disabled,
+.testButton:disabled,
+.inlineButton:disabled,
+.removeButton:disabled,
+.saveButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.inlineButton,
+.removeButton {
+  flex: none;
+  padding: 0 10px;
+}
+
+.removeButton {
+  color: #ffb7b7;
+}
+
+.saveButton {
+  justify-self: start;
+  padding: 10px 14px;
+  border-color: var(--accent);
+  background: var(--accent-dark);
+  font-weight: 800;
+}
+
+.summaryCard dl {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.summaryCard dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.summaryCard dl > div:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.summaryCard dt,
+.capabilityGrid span,
+.runtimeGrid span {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.summaryCard dd {
+  margin: 0;
+  text-align: right;
+}
+
+.runtimeGrid,
+.capabilityGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.runtimeGrid > div,
+.capabilityGrid > div {
+  display: grid;
+  gap: 6px;
+  padding: 13px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #101419;
+}
+
+.runtimeGrid strong,
+.capabilityGrid strong {
+  font-size: 0.85rem;
+}
+
+.runtimeGrid .ok {
+  color: #76d7a0;
+}
+
+.sectionNote {
+  margin: 13px 2px 0;
+  line-height: 1.55;
+}
+
+.summaryCard .muted {
+  margin-top: 18px;
+}
+
+@media (max-width: 760px) {
+  .settingsLayout {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  .settingsNav {
+    position: static;
+    display: flex;
+    overflow-x: auto;
+  }
+
+  .settingsNav a {
+    flex: none;
+    border-right: 1px solid var(--border);
+    border-bottom: 0;
+  }
+
+  .providerHeading {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .inputRow {
+    flex-wrap: wrap;
+  }
+
+  .inputRow input {
+    flex-basis: 100%;
+  }
+
+  .inlineButton,
+  .removeButton {
+    min-height: 38px;
+  }
+}
