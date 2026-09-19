@@ -12,7 +12,7 @@ Next.js pages and API routes
         |
         +--> TMDB metadata and catalog discovery
         +--> SQLite profiles, history, and progress
-        +--> Jackett Torznab search --> indexers / FlareSolverr
+        +--> Torrent search service --> Jackett adapter --> indexers / FlareSolverr
         +--> WebTorrent session manager --> torrent swarm
         +--> subtitle providers and torrent sidecars
         +--> native Range stream or FFmpeg-prepared playback
@@ -46,7 +46,7 @@ lib/history/          Progress, completion, grouping, and history rules
 lib/metadata/         TMDB client and catalog normalization
 lib/playback/         Next-episode and autoplay orchestration
 lib/profiles/         Profile persistence
-lib/search/           Jackett integration, ranking, validation, result storage
+lib/search/           Shared search processing, provider selection, adapters, result storage
 lib/subtitles/        Providers, cache, conversion, selection, appearance
 lib/torrent/          Torrent validation, sessions, files, pieces, cleanup
 lib/video/            Range handling, episode matching, probing, conversion
@@ -60,7 +60,9 @@ The browser-facing application never imports or controls the torrent client dire
 
 ## Search flow
 
-TMDB provides title metadata and discovery. Selecting a movie or episode starts a separate server-side Jackett search. TorPlay queries media-specific indexers, normalizes results, validates torrent metadata where possible, hides proven-incompatible sources, and keeps credential-bearing download URLs in an expiring server-side result store.
+TMDB provides title metadata and discovery. Selecting a movie or episode calls the server-side torrent search service. Provider selection is isolated in `lib/search/provider.js`; Jackett remains the active adapter, owning its configuration, Torznab HTTP requests, XML parsing, and partial indexer failures.
+
+Adapters return internal candidates with title, size, seeders, info hash, indexer label, and server-only source references. Shared processing validates search context, filters titles and episodes, deduplicates, and ranks candidates using the existing rules. The service allocates expiring result IDs and validates streamability before returning an explicit public projection. Magnets and credential-bearing download URLs remain in the server-side result store. Search routes and automatic next-episode playback use the same service without importing adapters. Native providers and a richer common provider interface are separate follow-up work.
 
 ## Torrent lifecycle
 

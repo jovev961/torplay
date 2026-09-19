@@ -20,7 +20,7 @@ export default async function Home() {
     <main className="shell homeShell">
       <AppHeader active="home" />
       <section className="catalogHero">
-        <span className="eyebrow">Metadata by TMDB · Sources by Jackett</span>
+        <span className="eyebrow">Metadata by TMDB · Authorized torrent sources</span>
         <h1>Browse first. Choose an authorized source when you are ready.</h1>
         <p>Explore movie and series metadata without mixing it with torrent availability.</p>
       </section>

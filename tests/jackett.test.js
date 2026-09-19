@@ -1,13 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  filterAndRankResults,
   JackettSearchError,
   parseIndexerIds,
   parseJackettXml,
-  searchJackett,
-  validateSearchQuery,
+  searchJackett as searchAdapter,
 } from "../lib/search/jackett.js";
+import { filterAndRankResults, searchContext, uniqueResults, validateSearchQuery } from "../lib/search/processing.js";
+
+async function searchJackett(title, options = {}) {
+  const context = searchContext({ title, ...options });
+  return filterAndRankResults(uniqueResults(await searchAdapter({ title, ...options })), context);
+}
 
 const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <rss xmlns:torznab="http://torznab.com/schemas/2015/feed">
@@ -73,7 +77,7 @@ function withJackettEnvironment(run) {
   });
 }
 
-test("normalizes Jackett results without exposing download URLs", () => {
+test("parses Jackett into internal candidates without allocating public result IDs", () => {
   const results = parseJackettXml(xml);
   assert.equal(results.length, 2);
   assert.deepEqual(
@@ -104,7 +108,9 @@ test("normalizes Jackett results without exposing download URLs", () => {
       },
     ],
   );
-  assert.equal(JSON.stringify(results).includes("download-secret"), false);
+  assert.equal(results[0].source.downloadUrl, "https://indexer.test/download/one?apikey=download-secret");
+  assert.equal("id" in results[0], false);
+  assert.equal("downloadUrl" in results[0], false);
 });
 
 test("handles empty feeds and rejects malformed XML", () => {

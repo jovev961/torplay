@@ -53,7 +53,7 @@ export default function SourcePanel({
       </div>
 
       {lookup.error ? <div className="notice error" role="alert">{lookup.error}</div> : null}
-      {lookup.searching ? <div className="notice">Searching Jackett…</div> : null}
+      {lookup.searching ? <div className="notice">Searching sources…</div> : null}
       {!lookup.searching && lookup.hasSearched && lookup.results.length === 0 && !lookup.error ? (
         <div className="notice">No usable authorized sources were found.</div>
       ) : null}
@@ -71,8 +71,8 @@ export default function SourcePanel({
                   <span className={result.verification === "verified" ? "available" : "muted"}>
                     {result.verification === "verified" ? "Streamable" : "Magnet · verify on start"}
                   </span>
-                  <span className={result.magnet ? "available" : "muted"}>
-                    Magnet: {result.magnet ? "Yes" : "No"}
+                  <span className={result.hasMagnet ? "available" : "muted"}>
+                    Magnet: {result.hasMagnet ? "Yes" : "No"}
                   </span>
                 </div>
               </div>
@@ -99,7 +99,7 @@ export default function SourcePanel({
       ) : null}
       {noReachablePeers ? (
         <div className="notice">
-          No reachable peers have responded through trackers or DHT yet. Jackett&apos;s seeder count may be stale.
+          No reachable peers have responded through trackers or DHT yet. The source&apos;s seeder count may be stale.
         </div>
       ) : null}
       {lookup.session?.status === "error" ? (
