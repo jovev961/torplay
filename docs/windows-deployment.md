@@ -174,6 +174,14 @@ It preserves `%LOCALAPPDATA%\TorPlay` and TorPlay's Docker named volumes by defa
 
 Release builds must run on Windows x64 so SQLite, FFmpeg, and FFprobe native files match the target platform.
 
+### GitHub Actions
+
+The **Windows installer** workflow is the standard hosted build path. It runs for pull requests targeting `main`, version tags matching `v*`, and manual dispatches from the GitHub Actions page. Tag names must exactly match `v<package-version>` or the build fails.
+
+Each successful run retains one workflow artifact for 14 days containing the versioned installer and its SHA-256 file. The workflow verifies the checksum before upload. Download both files and compare the published digest before distributing the installer. This workflow does not create or modify a GitHub Release.
+
+### Local Windows build
+
 Requirements:
 
 - Node.js and npm for the release workstation only
