@@ -6,6 +6,7 @@
   "license": "AGPL-3.0-only",
   "scripts": {
     "dev": "exec node scripts/dev.js",
+    "dev:native": "node scripts/dev-native.js",
     "build": "next build",
     "start": "next start",
     "start:home": "node scripts/home.js",
