@@ -1,14 +1,21 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { findAuthorizedSources, startBestVerifiedSource } from "../lib/search/service.js";
+import { findAuthorizedSources as findSources, startBestVerifiedSource as startBest } from "../lib/search/service.js";
 import { getSearchResult } from "../lib/search/result-store.js";
+
+function dependencies(options) {
+  const { searchProvider, ...rest } = options;
+  return { ...rest, onFailure: () => {}, providers: [{ id: "fake", name: "Fake", search: searchProvider }] };
+}
+const findAuthorizedSources = (context, options) => findSources(context, dependencies(options));
+const startBestVerifiedSource = (context, options) => startBest(context, dependencies(options));
 
 const hash = "0123456789012345678901234567890123456789";
 const magnet = `magnet:?xt=urn:btih:${hash}`;
 function candidate(title, seeders = 10, infoHash = hash) {
   return {
-    title, seeders, infoHash, size: 1000, indexer: "Fake provider",
-    source: { magnet, downloadUrl: "https://provider.test/torrent?apikey=secret" },
+    title, seeders, infoHash: infoHash === hash ? hash : infoHash.padEnd(40, "0").replace(/[^a-f0-9]/g, "a"), size: 1000, indexer: "Fake provider",
+    source: { downloadUrl: "https://provider.test/torrent?apikey=secret" },
     privatePayload: "secret",
   };
 }
@@ -36,7 +43,7 @@ test("shared search accepts a replacement provider, filters, deduplicates, and p
   }
   assert.equal(results[0].hasMagnet, true);
   assert.equal(results[0].verification, "verified");
-  assert.equal(getSearchResult(results[0].id).magnet, magnet);
+  assert.equal(getSearchResult(results[0].id).magnet, `magnet:?xt=urn:btih:${results[0].infoHash}`);
 });
 
 test("shared validation rejects invalid requests before invoking a provider", async () => {

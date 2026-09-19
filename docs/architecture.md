@@ -62,7 +62,7 @@ The browser-facing application never imports or controls the torrent client dire
 
 TMDB provides title metadata and discovery. Selecting a movie or episode calls the server-side torrent search service. Provider selection is isolated in `lib/search/provider.js`; Jackett remains the active adapter, owning its configuration, Torznab HTTP requests, XML parsing, and partial indexer failures.
 
-Adapters return internal candidates with title, size, seeders, info hash, indexer label, and server-only source references. Shared processing validates search context, filters titles and episodes, deduplicates, and ranks candidates using the existing rules. The service allocates expiring result IDs and validates streamability before returning an explicit public projection. Magnets and credential-bearing download URLs remain in the server-side result store. Search routes and automatic next-episode playback use the same service without importing adapters. Native providers and a richer common provider interface are separate follow-up work.
+Adapters implement the [common provider contract](torrent-providers.md), with normalized candidates and independent failure handling. Shared processing validates search context, filters titles and episodes, deduplicates, and ranks candidates using the existing rules. The service allocates expiring result IDs and validates streamability before returning an explicit public projection. Magnets and credential-bearing download URLs remain in the server-side result store. Search routes and automatic next-episode playback use the same service without importing adapters. Native providers remain separate follow-up work.
 
 ## Torrent lifecycle
 
