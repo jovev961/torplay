@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   discoverCatalog,
   getGenreDefinitions,
+  getImdbId,
   getMovieDetails,
   getSeasonDetails,
   getShowDetails,
@@ -233,6 +234,24 @@ test("normalizes movie, show, season, and episode details", async () => {
       assert.equal((await getMovieDetails(1)).runtime, 90);
       assert.equal((await getShowDetails(2)).seasons[0].number, 1);
       assert.equal((await getSeasonDetails(2, 1)).episodes[0].stillUrl, "https://image.tmdb.org/t/p/w500/still.jpg");
+    } finally {
+      globalThis.fetch = previousFetch;
+    }
+  });
+});
+
+test("resolves a precise IMDb ID through TMDB external IDs", async () => {
+  await withTmdb(async () => {
+    const previousFetch = globalThis.fetch;
+    let request;
+    globalThis.fetch = async (url, options) => {
+      request = { url: new URL(url), options };
+      return new Response(JSON.stringify({ imdb_id: "tt1234567" }), { status: 200 });
+    };
+    try {
+      assert.equal(await getImdbId("tv", 42), "tt1234567");
+      assert.equal(request.url.pathname, "/3/tv/42/external_ids");
+      assert.equal(request.options.next.revalidate, 2592000);
     } finally {
       globalThis.fetch = previousFetch;
     }

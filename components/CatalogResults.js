@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { catalogHref } from "../lib/metadata/catalog.js";
-import { MediaCard } from "./MediaBrowser.js";
+import ImdbRatedCards from "./ImdbRatedCards.js";
 
 export default function CatalogResults({ pathname, result, state, emptyMessage }) {
   const countLabel = result.totalsExact
@@ -14,11 +14,7 @@ export default function CatalogResults({ pathname, result, state, emptyMessage }
         <span>{countLabel}</span>
       </div>
       {result.results.length === 0 ? <div className="notice">{emptyMessage}</div> : (
-        <div className="mediaGrid">
-          {result.results.map((item) => (
-            <MediaCard item={item} key={`${item.mediaType}-${item.id}`} />
-          ))}
-        </div>
+        <ImdbRatedCards className="mediaGrid" items={result.results} />
       )}
       {(result.hasPreviousPage || result.hasNextPage) ? (
         <nav className="pagination" aria-label="Results pages">

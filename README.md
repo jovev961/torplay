@@ -21,9 +21,9 @@ Installation:
 
 1. Install and open Docker Desktop once, accepting its agreement.
 2. Run `TorPlay-Setup-<version>.exe`.
-3. Edit `%LOCALAPPDATA%\TorPlay\config\torplay.env` and add the TMDB and Jackett credentials.
-4. Restart Windows or sign out and back in.
-5. Open [http://torplay.local](http://torplay.local).
+3. Choose **Open TorPlay** from the Start menu, or open [http://localhost](http://localhost).
+4. Follow the setup screen to verify and save the TMDB and Jackett credentials.
+5. Use [http://torplay.local](http://torplay.local) from other devices on the household network.
 
 TorPlay starts automatically for the Windows account that installed it. The Start menu provides **Open TorPlay**, **TorPlay Status**, **Start or Restart TorPlay**, and **Stop TorPlay**.
 
@@ -35,11 +35,10 @@ Requirements: Node.js 20.9 or newer and Docker with the `docker compose` command
 
 ```bash
 npm install
-cp .env.local.example .env.local
 npm run dev
 ```
 
-Configure `.env.local`, then open [http://localhost:3000](http://localhost:3000). `npm run dev` starts Jackett and FlareSolverr before Next.js.
+Open [http://localhost:3000](http://localhost:3000) and complete the setup screen. No environment file or restart is required. You can still use `.env.local` for advanced or externally managed configuration. `npm run dev` starts Jackett and FlareSolverr before Next.js.
 
 See [Development](docs/development.md) and [Configuration](docs/configuration.md) for the complete setup.
 

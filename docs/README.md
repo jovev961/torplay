@@ -16,6 +16,7 @@ Use these guides for the current application. Files under [`tasks/`](tasks/) are
 
 ## Quick links
 
-- Installed TorPlay: [http://torplay.local](http://torplay.local)
+- Installed TorPlay owner/setup: [http://localhost](http://localhost)
+- Installed TorPlay household access: [http://torplay.local](http://torplay.local)
 - Development server: [http://localhost:3000](http://localhost:3000)
 - Jackett dashboard: [http://localhost:9117](http://localhost:9117)

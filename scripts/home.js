@@ -11,6 +11,7 @@ import { resolveDockerCommand, resolveDockerDesktopCommand } from "./docker-path
 import { startMdnsAdvertisement, startReverseProxy } from "./home-network.js";
 import { controlEndpoint, startControlServer } from "./runtime-control.js";
 import { createStatusReporter } from "./runtime-status.js";
+import { SETTINGS_ENVIRONMENT_KEYS } from "../lib/settings/definitions.js";
 
 const require = createRequire(import.meta.url);
 const REQUIRED_SERVICES = ["flaresolverr", "jackett"];
@@ -30,7 +31,10 @@ function withCode(message, code) {
 
 export function loadHomeEnvironment({ cwd = process.cwd(), environment = process.env } = {}) {
   const configPath = environment.TORPLAY_CONFIG_PATH || path.join(cwd, ".env.local");
-  const loaded = { ...readLocalEnvironment(configPath), ...environment };
+  const fileEnvironment = readLocalEnvironment(configPath);
+  const externalKeys = SETTINGS_ENVIRONMENT_KEYS.filter((key) => Object.hasOwn(environment, key));
+  const loaded = { ...fileEnvironment, ...environment };
+  loaded.TORPLAY_EXTERNAL_CONFIG_KEYS = externalKeys.join(",");
   loaded.TORPLAY_DATABASE_PATH ||= environment.TORPLAY_DEFAULT_DATABASE_PATH;
   loaded.TORRENT_DOWNLOAD_PATH ||= environment.TORPLAY_DEFAULT_TORRENT_PATH;
   loaded.SUBTITLE_CACHE_PATH ||= environment.TORPLAY_DEFAULT_SUBTITLE_PATH;

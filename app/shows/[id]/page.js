@@ -3,10 +3,12 @@ import { notFound } from "next/navigation";
 import AppHeader from "../../../components/AppHeader.js";
 import ShowDetails from "../../../components/ShowDetails.js";
 import { getSeasonDetails, getShowDetails } from "../../../lib/metadata/tmdb.js";
+import { requireSetupReady } from "../../../lib/settings/gate.js";
 
 export const dynamic = "force-dynamic";
 
 export default async function ShowPage({ params, searchParams }) {
+  await requireSetupReady();
   let show;
   let initialSeason = null;
   const query = await searchParams;

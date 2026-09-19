@@ -1,0 +1,31 @@
+.setupShell { width: min(760px, calc(100% - 32px)); margin: 0 auto; padding: 52px 0 80px; }
+.setupHero { margin-bottom: 28px; }
+.brand { display: block; margin-bottom: 34px; color: var(--accent); font-weight: 900; letter-spacing: .12em; }
+.setupHero h1 { max-width: 660px; margin: 8px 0 12px; font-size: clamp(2rem, 5vw, 3.5rem); line-height: 1.05; }
+.setupHero p, .providerHeading p, .help, .finishRow p { color: var(--muted); line-height: 1.55; }
+.setupHero p { max-width: 620px; margin: 0; }
+.setupForm { display: grid; gap: 16px; }
+.providerCard { padding: 22px; border: 1px solid var(--border); border-radius: 16px; background: var(--panel); }
+.providerHeading { display: flex; gap: 14px; }
+.providerHeading > span { padding-top: 4px; color: var(--accent); font-size: .72rem; font-weight: 800; letter-spacing: .12em; }
+.providerHeading h2 { margin: 0 0 5px; }
+.providerHeading p, .help { margin: 0; }
+.help { margin-top: 15px; font-size: .82rem; }
+.help a { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+.field { display: grid; gap: 7px; margin-top: 16px; }
+.field label { font-size: .8rem; font-weight: 700; }
+.field small { color: var(--muted); }
+.inputRow { display: flex; gap: 7px; }
+.inputRow input { flex: 1; min-width: 0; padding: 12px; border: 1px solid var(--border); border-radius: 8px; outline: none; color: var(--text); background: #0d1115; }
+.inputRow input:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(229,9,20,.15); }
+.inputRow button, .finishRow button { border: 1px solid var(--border); border-radius: 8px; color: var(--text); background: #101419; cursor: pointer; }
+.inputRow button { padding: 0 12px; }
+.result { display: flex; gap: 10px; margin-top: 16px; padding: 10px 12px; border-radius: 8px; color: #ffe2a6; background: #382b16; font-size: .82rem; }
+.result strong { flex: none; }
+.valid { color: #b5f0cb; background: #163724; }
+.invalid, .missing { color: #ffd0d0; background: #431d1d; }
+.finishRow { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding-top: 8px; }
+.finishRow p { margin: 0; font-size: .82rem; }
+.finishRow button { flex: none; padding: 12px 18px; border-color: var(--accent); background: var(--accent-dark); font-weight: 800; }
+.inputRow button:disabled, .finishRow button:disabled { cursor: not-allowed; opacity: .55; }
+@media (max-width: 560px) { .setupShell { padding-top: 30px; } .finishRow { align-items: stretch; flex-direction: column; } .finishRow button { width: 100%; } }

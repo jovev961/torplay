@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { resolveDockerCommand, resolveDockerDesktopCommand } from "../scripts/dev.js";
-import { validateStage } from "../scripts/release-windows.js";
+import { INNO_VERSION, NODE_VERSION, validateStage } from "../scripts/release-windows.js";
 import { sendControlCommand, startControlServer } from "../scripts/runtime-control.js";
 import { createStatusReporter, readRuntimeStatus } from "../scripts/runtime-status.js";
 import { installedEnvironment, installedPaths } from "../scripts/windows-paths.js";
@@ -116,10 +116,48 @@ test("installer declares durable data, login startup, shortcuts, and firewall cl
   assert.match(installer, /PrivilegesRequired=lowest/);
   assert.match(installer, /Software\\Microsoft\\Windows\\CurrentVersion\\Run/);
   assert.match(installer, /Open TorPlay/);
+  assert.match(installer, /Open TorPlay"; Filename: "http:\/\/localhost"/);
   assert.match(installer, /TorPlay Status/);
   assert.match(installer, /Start or Restart TorPlay/);
   assert.match(installer, /Stop TorPlay/);
   assert.match(installer, /windows-firewall\.ps1"" -Remove/);
   assert.match(installer, /uninsneveruninstall/);
   assert.doesNotMatch(installer, /docker compose down/);
+});
+
+test("fresh Windows configuration leaves required provider credentials for browser setup", async () => {
+  const template = await readFile(new URL("../installer/windows/torplay.env", import.meta.url), "utf8");
+  assert.doesNotMatch(template, /^TMDB_API_TOKEN=/m);
+  assert.doesNotMatch(template, /^JACKETT_API_KEY=/m);
+  assert.match(template, /^JACKETT_MOVIE_INDEXERS=$/m);
+  assert.match(template, /^JACKETT_SHOW_INDEXERS=$/m);
+});
+
+test("Windows installer workflow pins its toolchain and publishes verified artifacts", async () => {
+  const workflow = await readFile(
+    new URL("../.github/workflows/windows-installer.yml", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(workflow, /pull_request:\s*\n\s*branches: \[main\]/);
+  assert.match(workflow, /push:\s*\n\s*tags:\s*\n\s*- "v\*"/);
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /permissions:\s*\n\s*contents: read/);
+  assert.match(workflow, /runs-on: windows-2025/);
+  assert.match(workflow, new RegExp(`node-version: "${NODE_VERSION.replaceAll(".", "\\.")}"`));
+  assert.match(workflow, new RegExp(`INNO_SETUP_VERSION: "${INNO_VERSION.replaceAll(".", "\\.")}"`));
+  assert.match(workflow, /INNO_SETUP_SHA256: "[a-f0-9]{64}"/);
+  assert.match(workflow, /releases\/download\/is-7_1_0\/innosetup-\$env:INNO_SETUP_VERSION-x64\.exe/);
+  assert.match(workflow, /GITHUB_REF_NAME -ne "v\$version"/);
+  assert.match(workflow, /actions\/checkout@[a-f0-9]{40} # v6/);
+  assert.match(workflow, /actions\/setup-node@[a-f0-9]{40} # v7/);
+  assert.match(workflow, /actions\/upload-artifact@[a-f0-9]{40} # v7/);
+  assert.match(workflow, /run: npm ci/);
+  assert.match(workflow, /run: npm run release:windows/);
+  assert.match(workflow, /Get-FileHash[^\n]+SHA256/);
+  assert.match(workflow, /TorPlay-Setup-\$\{\{ steps\.package\.outputs\.version \}\}\.exe/);
+  assert.match(workflow, /TorPlay-Setup-\$\{\{ steps\.package\.outputs\.version \}\}\.exe\.sha256/);
+  assert.match(workflow, /if-no-files-found: error/);
+  assert.match(workflow, /retention-days: 14/);
+  assert.doesNotMatch(workflow, /contents: write|gh release|softprops\/action-gh-release/i);
 });

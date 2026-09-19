@@ -3,10 +3,12 @@ import AppHeader from "../components/AppHeader.js";
 import CatalogFooter from "../components/CatalogFooter.js";
 import HistoryShelf from "../components/HistoryShelf.js";
 import { getTrending } from "../lib/metadata/tmdb.js";
+import { requireSetupReady } from "../lib/settings/gate.js";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
+  await requireSetupReady();
   const [movieResult, showResult] = await Promise.allSettled([
     getTrending("movie"),
     getTrending("tv"),

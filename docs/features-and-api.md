@@ -99,3 +99,13 @@ Profile responses include `subtitlePreferences`. Update them with `PUT /api/prof
 ## Health
 
 - `GET /api/health` returns a small, non-cacheable, secret-free service response used by supervisors and diagnostics.
+
+## Settings
+
+The Settings page separates General, Services, Subtitles, Playback, and About information. It explains each external provider, links to its official credential instructions, and checks configured services in the background.
+
+- `GET /api/settings` returns secret-free configuration and runtime status. Non-secret editable values are returned only to a localhost request.
+- `PATCH /api/settings` updates one provider from a same-origin JSON request on localhost only.
+- `POST /api/settings/validate` checks selected provider connections and returns sanitized validity states.
+
+Secret values are never returned by these endpoints. LAN clients can inspect safe status but cannot change provider configuration.

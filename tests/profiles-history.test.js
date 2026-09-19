@@ -74,7 +74,7 @@ test("subtitle preferences are validated, persisted, and isolated by profile", (
     const second = createProfile({ name: "Second" }, database);
     assert.deepEqual(first.subtitlePreferences, {
       defaultLanguage: "en",
-      enabledLanguages: ["en", "mk", "sr", "hr", "bs"],
+      enabledLanguages: ["en"],
     });
 
     const updated = updateSubtitlePreferences(first.id, {
@@ -85,9 +85,12 @@ test("subtitle preferences are validated, persisted, and isolated by profile", (
       defaultLanguage: "de",
       enabledLanguages: ["de", "en"],
     });
+    const newest = createProfile({ name: "Newest" }, database);
+    assert.deepEqual(newest.subtitlePreferences, { defaultLanguage: "en", enabledLanguages: ["en"] });
+    assert.deepEqual(getProfile(first.id, database).subtitlePreferences, updated.subtitlePreferences);
     assert.deepEqual(getProfile(second.id, database).subtitlePreferences, {
       defaultLanguage: "en",
-      enabledLanguages: ["en", "mk", "sr", "hr", "bs"],
+      enabledLanguages: ["en"],
     });
     assert.throws(() => updateSubtitlePreferences(first.id, {
       defaultLanguage: "fr",
@@ -175,7 +178,7 @@ test("database migration restores started media that only has a progress writer"
     assert.equal(restored.position, 0);
     assert.equal(restored.duration, 0);
     assert.equal(restored.episodeTitle, "Chapter Three: Body Double");
-    assert.equal(database.pragma("user_version", { simple: true }), 3);
+    assert.equal(database.pragma("user_version", { simple: true }), 4);
   } finally {
     database?.close();
     await rm(directory, { recursive: true, force: true });

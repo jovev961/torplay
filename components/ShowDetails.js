@@ -323,6 +323,11 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
               heading={`${episodeCode(selectedEpisode.season, selectedEpisode.number)} · ${selectedEpisode.title}`}
               playerTitle={`${show.title} · ${episodeCode(selectedEpisode.season, selectedEpisode.number)} · ${selectedEpisode.title}`}
               episode={{ season: selectedEpisode.season, number: selectedEpisode.number }}
+              episodeChoices={season.episodes.map((item) => ({
+                season: season.number,
+                number: item.number,
+                title: item.title,
+              }))}
               playback={{
                 profileId: activeProfile?.id,
                 media,

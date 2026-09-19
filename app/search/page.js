@@ -4,6 +4,7 @@ import CatalogFooter from "../../components/CatalogFooter.js";
 import CatalogResults from "../../components/CatalogResults.js";
 import { catalogHref } from "../../lib/metadata/catalog.js";
 import { getGenreDefinitions, searchCatalog } from "../../lib/metadata/tmdb.js";
+import { requireSetupReady } from "../../lib/settings/gate.js";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +13,7 @@ function value(input, fallback = "") {
 }
 
 export default async function SearchPage({ searchParams }) {
+  await requireSetupReady();
   const params = await searchParams;
   const query = value(params.q).trim();
   const type = ["movie", "tv"].includes(value(params.type)) ? params.type : "all";

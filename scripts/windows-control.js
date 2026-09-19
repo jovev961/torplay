@@ -140,7 +140,7 @@ export function formatStatus({ components, snapshot, paths }) {
   const lines = Object.entries(components).map(
     ([name, value]) => `${name.padEnd(14)} ${value}`,
   );
-  lines.push("", "Open:", "http://torplay.local", "", `Config: ${paths.configPath}`, `Logs:   ${paths.logPath}`);
+  lines.push("", "Open on this computer:", "http://localhost", "", "Open on household devices:", "http://torplay.local", "", `Config: ${paths.configPath}`, `Logs:   ${paths.logPath}`);
   if (snapshot?.lastError) lines.push("", `Last failure: ${snapshot.lastError}`);
   return lines.join("\n");
 }

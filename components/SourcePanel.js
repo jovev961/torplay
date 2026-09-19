@@ -1,19 +1,11 @@
 "use client";
 
 import { findEpisodeFile, findLargestFile } from "../lib/video/episode.js";
+import { episodeFilePresentation, formatFileSize } from "../lib/video/episode-display.js";
 import VideoPlayer from "./VideoPlayer.js";
 
-function formatBytes(value) {
-  if (!Number.isFinite(value) || value < 0) return "Unknown size";
-  if (value === 0) return "0 B";
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  const unit = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1);
-  const amount = value / 1024 ** unit;
-  return `${amount >= 10 || unit === 0 ? amount.toFixed(0) : amount.toFixed(1)} ${units[unit]}`;
-}
-
 function formatSpeed(value) {
-  return Number.isFinite(value) && value > 0 ? `${formatBytes(value)}/s` : "0 B/s";
+  return Number.isFinite(value) && value > 0 ? `${formatFileSize(value)}/s` : "0 B/s";
 }
 
 export default function SourcePanel({
@@ -21,6 +13,7 @@ export default function SourcePanel({
   heading,
   playerTitle = heading,
   episode = null,
+  episodeChoices = [],
   playback = {},
 }) {
   const suggestedFile = lookup.session?.status === "ready" && episode
@@ -37,6 +30,12 @@ export default function SourcePanel({
   const discovery = lookup.session?.discovery;
   const noReachablePeers = lookup.session?.peers === 0
     && discovery?.noPeerSources?.length > 0;
+  const episodeFiles = episode
+    ? (lookup.session?.files || []).map((file) => ({
+      file,
+      display: episodeFilePresentation(file, episodeChoices),
+    }))
+    : [];
 
   return (
     <section className="sourcePanel" aria-labelledby="source-heading">
@@ -66,7 +65,7 @@ export default function SourcePanel({
                 <h3>{result.title}</h3>
                 <div className="metadata">
                   <span>{result.indexer}</span>
-                  <span>{formatBytes(result.size)}</span>
+                  <span>{formatFileSize(result.size)}</span>
                   <span>{result.seeders.toLocaleString()} seeders</span>
                   <span className={result.verification === "verified" ? "available" : "muted"}>
                     {result.verification === "verified" ? "Streamable" : "Magnet · verify on start"}
@@ -136,7 +135,7 @@ export default function SourcePanel({
                 />
                 <div className="bufferStatus" aria-live="polite">
                   <div>
-                    <span>Buffering {formatBytes(selectedFile.downloaded)} of {formatBytes(selectedFile.size)}</span>
+                    <span>Buffering {formatFileSize(selectedFile.downloaded)} of {formatFileSize(selectedFile.size)}</span>
                     <span>{formatSpeed(lookup.session.downloadSpeed)} · {lookup.session.peers ?? 0} peers</span>
                   </div>
                   <progress value={selectedFile.progress} max={1}>
@@ -148,7 +147,32 @@ export default function SourcePanel({
               <div className="videoPlaceholder">Choose a video file to begin.</div>
             )}
           </div>
-          {lookup.session.files.length > 1 ? (
+          {episode && episodeFiles.length > 1 ? (
+            <div className="episodeFileList" aria-label="Episodes in this source">
+              {episodeFiles.map(({ file, display }) => {
+                const active = selectedFile?.id === file.id;
+                const primary = `${display.code ? `${display.code} · ` : ""}${display.title}`;
+                return (
+                  <button
+                    className={active ? "episodeFileChoice active" : "episodeFileChoice"}
+                    type="button"
+                    key={file.id}
+                    title={display.fullPath}
+                    aria-current={active ? "true" : undefined}
+                    aria-label={`${primary}. ${display.technical.join(", ")}. ${display.filename}`}
+                    onClick={() => lookup.setSelectedFileId(file.id)}
+                  >
+                    <span className="episodeFileHeading">
+                      <strong>{primary}</strong>
+                      {active ? <span className="playingBadge">Playing</span> : null}
+                    </span>
+                    <small>{display.technical.join(" · ")}</small>
+                    <span className="episodeFilename">{display.filename}</span>
+                  </button>
+                );
+              })}
+            </div>
+          ) : !episode && lookup.session.files.length > 1 ? (
             <div className="fileList" aria-label="Video files">
               {lookup.session.files.map((file) => (
                 <button
@@ -160,8 +184,8 @@ export default function SourcePanel({
                   <span>{file.name}</span>
                   <small>
                     {file.relativePath && file.relativePath !== file.name
-                      ? `${file.relativePath} · ${formatBytes(file.size)}`
-                      : formatBytes(file.size)}
+                      ? `${file.relativePath} · ${formatFileSize(file.size)}`
+                      : formatFileSize(file.size)}
                   </small>
                 </button>
               ))}

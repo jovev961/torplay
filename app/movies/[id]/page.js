@@ -3,10 +3,12 @@ import { notFound } from "next/navigation";
 import AppHeader from "../../../components/AppHeader.js";
 import MovieSource from "../../../components/MovieSource.js";
 import { getMovieDetails } from "../../../lib/metadata/tmdb.js";
+import { requireSetupReady } from "../../../lib/settings/gate.js";
 
 export const dynamic = "force-dynamic";
 
 export default async function MoviePage({ params, searchParams }) {
+  await requireSetupReady();
   let movie;
   try {
     const { id } = await params;
