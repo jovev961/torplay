@@ -20,6 +20,20 @@ export const NODE_ARCHIVE_SHA256 =
   "158f7685b44de51f6c0df1d153526cbcd3e1bc739a8dfc607721cef75de9e541";
 export const INNO_VERSION = "7.1.0";
 
+export function windowsFileVersion(version) {
+  const match = /^(\d+)\.(\d+)\.(\d+)(?:-beta\.(\d+))?$/.exec(version);
+  if (!match) {
+    throw new Error(`Unsupported Windows release version: ${version}`);
+  }
+
+  const parts = [match[1], match[2], match[3], match[4] || "0"].map(Number);
+  if (parts.some((part) => !Number.isSafeInteger(part) || part < 0 || part > 65_535)) {
+    throw new Error(`Windows release version is out of range: ${version}`);
+  }
+
+  return parts.join(".");
+}
+
 const projectRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
@@ -515,6 +529,7 @@ async function main() {
       `/DStageDir=${stageDir}`,
       `/DOutputDir=${outputDir}`,
       `/DAppVersion=${packageJson.version}`,
+      `/DVersionInfoVersion=${windowsFileVersion(packageJson.version)}`,
       path.join(
         projectRoot,
         "installer",

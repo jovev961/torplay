@@ -2,7 +2,7 @@ name: Windows installer
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, develop]
   push:
     tags:
       - "v*"

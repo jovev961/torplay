@@ -5,11 +5,23 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { resolveDockerCommand, resolveDockerDesktopCommand } from "../scripts/dev.js";
-import { INNO_VERSION, NODE_VERSION, validateStage } from "../scripts/release-windows.js";
+import {
+  INNO_VERSION,
+  NODE_VERSION,
+  validateStage,
+  windowsFileVersion,
+} from "../scripts/release-windows.js";
 import { sendControlCommand, startControlServer } from "../scripts/runtime-control.js";
 import { createStatusReporter, readRuntimeStatus } from "../scripts/runtime-status.js";
 import { installedEnvironment, installedPaths } from "../scripts/windows-paths.js";
 import { createRotatingLog } from "../scripts/windows-runner.js";
+
+test("Windows file versions are numeric and preserve beta build numbers", () => {
+  assert.equal(windowsFileVersion("0.1.0-beta.2"), "0.1.0.2");
+  assert.equal(windowsFileVersion("1.2.3"), "1.2.3.0");
+  assert.throws(() => windowsFileVersion("1.2.3-rc.1"), /Unsupported/);
+  assert.throws(() => windowsFileVersion("1.2.65536"), /out of range/);
+});
 
 test("Windows Docker discovery supports per-user and all-user installations", () => {
   const environment = { LOCALAPPDATA: "C:\\Users\\Owner\\AppData\\Local", ProgramFiles: "C:\\Program Files" };
@@ -122,6 +134,7 @@ test("installer declares durable data, login startup, shortcuts, and firewall cl
   assert.match(installer, /Stop TorPlay/);
   assert.match(installer, /windows-firewall\.ps1"" -Remove/);
   assert.match(installer, /uninsneveruninstall/);
+  assert.match(installer, /VersionInfoVersion=\{#VersionInfoVersion\}/);
   assert.doesNotMatch(installer, /docker compose down/);
 });
 
@@ -139,7 +152,7 @@ test("Windows installer workflow pins its toolchain and publishes verified artif
     "utf8",
   );
 
-  assert.match(workflow, /pull_request:\s*\n\s*branches: \[main\]/);
+  assert.match(workflow, /pull_request:\s*\n\s*branches: \[main, develop\]/);
   assert.match(workflow, /push:\s*\n\s*tags:\s*\n\s*- "v\*"/);
   assert.match(workflow, /workflow_dispatch:/);
   assert.match(workflow, /permissions:\s*\n\s*contents: read/);

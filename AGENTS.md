@@ -55,18 +55,13 @@ When asked to implement a GitHub issue:
 
 Use `main` as the stable/release branch and `develop` as the integration/testing branch.
 
-1. Fetch origin. Ensure `develop` is clean and synchronized with `origin/develop`, then start each issue/change from latest `origin/develop`. Preserve unrelated work before switching branches. Do not make implementation commits directly on `main` or `develop`.
-2. Create a scoped branch:
-   - `feat/issue-<number>-<description>` for features.
-   - `fix/issue-<number>-<description>` for fixes.
-   - `refactor/issue-<number>-<description>` for refactoring.
-3. Implement the change, add/update tests, and run relevant tests, the full test suite, lint, and a production build.
-4. Commit and push the working branch.
-5. Refresh remote state and incorporate any new changes safely. Merge the completed branch into `develop` only when verification passes, verify the integrated tree, then push `develop`.
-6. Delete the completed local and remote working branch only after verifying its commit is contained in remote `develop`. Return to clean, synchronized `develop` and STOP for manual testing.
-7. If testing on `develop` finds a problem, create a new `fix/<description>` or `fix/issue-<number>-<description>` branch from latest `origin/develop`. Follow the same verification and integration flow. Keep fixes as separate commits rather than rewriting original feature commits, then return to `develop` for further testing.
-8. Merge `develop` into `main` only when explicitly instructed that testing passed and it is ready for stable/release use. Fetch origin, verify clean synchronized `develop`, reconcile remote changes, and run final tests/lint/build before merging into current `main` and pushing normally. Never automatically merge to `main`. Keep `develop` alive permanently; safely synchronize any newer main changes into it before future feature work.
-9. Only bump the application version when preparing a public release/build. During beta, increment only the beta number unless instructed otherwise.
-10. Never force-push any branch, rewrite published history, discard unrelated work, or merge with failing checks.
+1. Fetch origin and start new work from a clean, current `origin/develop` on a scoped `feat/...`, `fix/...`, or `refactor/...` branch.
+2. Implement and verify the change with relevant tests, the full suite, lint, and a production build.
+3. Push the completed branch and open a pull request into `develop`. Required CI must pass before merging.
+4. Testing fixes branch from current `develop` and return through a separate pull request and commit; do not rewrite the original feature commit.
+5. Delete completed feature/fix/refactor branches only after their pull requests are successfully merged.
+6. Promote `develop` to `main` only through a pull request after explicit user approval and final verification. Never promote it automatically.
+7. Never directly push implementation changes to protected `main` or `develop`, force-push, rewrite published history, discard unrelated work, or bypass failing checks.
+8. Only bump the application version when preparing a public release/build. During beta, increment only the beta number unless instructed otherwise.
 
-After completion, report the branch, commit, verification results, and merge/push status.
+After completion, report the branch, pull request, commit, verification results, and merge status.

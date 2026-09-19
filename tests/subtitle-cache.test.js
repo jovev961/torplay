@@ -150,11 +150,11 @@ test("cleanup ignores unmanaged directories and files", async () => {
 test("subtitle cache paths remain stable for movies and TV episodes", () => {
   const cacheConfig = config("/tmp/subtitle-cache-root");
   assert.match(
-    subtitleCachePath(movie, "SubDL", "same-id", cacheConfig),
+    subtitleCachePath(movie, "SubDL", "same-id", cacheConfig).replaceAll("\\", "/"),
     /subtitle-cache-root\/movies\/10\/subdl\/[a-f\d]{64}\.vtt$/,
   );
   assert.match(
-    subtitleCachePath(episode, "OpenSubtitles", "same-id", cacheConfig),
+    subtitleCachePath(episode, "OpenSubtitles", "same-id", cacheConfig).replaceAll("\\", "/"),
     /subtitle-cache-root\/shows\/20\/s1\/e2\/opensubtitles\/[a-f\d]{64}\.vtt$/,
   );
 });
