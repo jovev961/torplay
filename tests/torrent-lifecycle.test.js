@@ -7,6 +7,7 @@ import { DELETE as deleteSession } from "../app/api/torrents/[id]/route.js";
 import { POST as releaseSession } from "../app/api/torrents/[id]/release/route.js";
 import { releaseTorrentSession } from "../components/useSourceLookup.js";
 import {
+  cleanupSubtitleCacheForSessions,
   cleanupIdleTorrentSessions,
   stopTorrent,
   TORRENT_SESSION_IDLE_TTL_MS,
@@ -125,6 +126,40 @@ test("expires abandoned sessions after two minutes but keeps recent and streamin
     assert.equal(globalThis[stateKey].sessions.has("expired"), false);
     assert.equal(globalThis[stateKey].sessions.has("recent"), true);
     assert.equal(globalThis[stateKey].sessions.has("streaming"), true);
+  });
+});
+
+test("protects subtitle cache paths only while their playback session is active", async () => {
+  await withTemporaryTorrentState(async () => {
+    const resource = createResource("4444444444444444444444444444444444444444");
+    const cachePath = path.resolve("/cache/active-subtitle.vtt");
+    const session = createSession("subtitle-session", resource, {
+      subtitleDiscoveries: new Map([
+        ["0", { cachePaths: new Set([cachePath]) }],
+      ]),
+    });
+    globalThis[stateKey] = createState([session], [resource]);
+
+    const protectedBeforeRelease = await cleanupSubtitleCacheForSessions(Date.now(), {
+      cleanupSubtitleCache: async ({ isProtected }) => ({
+        removedFiles: 0,
+        removedDirectories: 0,
+        failures: [],
+        protected: isProtected(cachePath),
+      }),
+    });
+    assert.equal(protectedBeforeRelease.protected, true);
+
+    await stopTorrent(session.id);
+    const protectedAfterRelease = await cleanupSubtitleCacheForSessions(Date.now(), {
+      cleanupSubtitleCache: async ({ isProtected }) => ({
+        removedFiles: 0,
+        removedDirectories: 0,
+        failures: [],
+        protected: isProtected(cachePath),
+      }),
+    });
+    assert.equal(protectedAfterRelease.protected, false);
   });
 });
 

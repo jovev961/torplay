@@ -1,9 +1,14 @@
 import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 import {
+  loadSubtitleTrack,
   publicSubtitleDiscovery,
   startSubtitleDiscovery,
 } from "../lib/subtitles/service.js";
+import { subtitleCachePath } from "../lib/subtitles/cache.js";
 import { applyAutomaticSubtitle } from "../lib/subtitles/selection.js";
 import { subtitleConfig as readSubtitleConfig } from "../lib/subtitles/config.js";
 
@@ -12,6 +17,7 @@ function subtitleConfig(overrides = {}) {
     defaultLanguage: "en",
     enabledLanguages: ["en", "mk", "sr", "hr", "bs"],
     cachePath: ".data/subtitles",
+    cacheTtlDays: 30,
     opensubtitles: { apiKey: "open-key", userAgent: "TorPlay tests" },
     subdl: { apiKey: "subdl-key" },
     bufferAheadSeconds: 60,
@@ -42,11 +48,12 @@ function providerResponse(body, status = 200) {
   });
 }
 
-test("reads shared subtitle preferences and buffer-ahead tuning from configuration", () => {
+test("reads built-in subtitle defaults and server tuning from configuration", () => {
   assert.deepEqual(readSubtitleConfig({}), {
     defaultLanguage: "en",
     enabledLanguages: ["en", "mk", "sr", "hr", "bs"],
     cachePath: ".data/subtitles",
+    cacheTtlDays: 30,
     opensubtitles: { apiKey: null, userAgent: "TorPlay v0.1" },
     subdl: { apiKey: null },
     bufferAheadSeconds: 60,
@@ -55,15 +62,21 @@ test("reads shared subtitle preferences and buffer-ahead tuning from configurati
     SUBTITLE_DEFAULT_LANGUAGE: "mk",
     SUBTITLE_LANGUAGES: "mk,en",
     SUBTITLE_CACHE_PATH: "/tmp/torplay-subtitles",
+    SUBTITLE_CACHE_TTL_DAYS: "14",
     PLAYBACK_BUFFER_AHEAD_SECONDS: "90",
   });
-  assert.equal(configured.defaultLanguage, "mk");
-  assert.deepEqual(configured.enabledLanguages, ["mk", "en"]);
+  assert.equal(configured.defaultLanguage, "en");
+  assert.deepEqual(configured.enabledLanguages, ["en", "mk", "sr", "hr", "bs"]);
   assert.equal(configured.cachePath, "/tmp/torplay-subtitles");
+  assert.equal(configured.cacheTtlDays, 14);
   assert.equal(configured.bufferAheadSeconds, 90);
   assert.throws(
-    () => readSubtitleConfig({ SUBTITLE_DEFAULT_LANGUAGE: "sr", SUBTITLE_LANGUAGES: "en,mk" }),
-    /must be included/,
+    () => readSubtitleConfig({ SUBTITLE_CACHE_TTL_DAYS: "0" }),
+    /must be a positive number/,
+  );
+  assert.throws(
+    () => readSubtitleConfig({ SUBTITLE_CACHE_PATH: "   " }),
+    /must not be empty/,
   );
 });
 
@@ -179,4 +192,74 @@ test("public subtitle tracks expose opaque IDs and client routes without provide
   assert.equal(publicResult.tracks[0].src.includes("open-key"), false);
   assert.equal(publicResult.tracks[0].src.includes("subdl-key"), false);
   assert.match(publicResult.tracks[0].src, /\/files\/0\/subtitles\//);
+});
+
+test("restarts discovery when a profile changes its subtitle preferences", async () => {
+  const session = seasonSession();
+  const providerless = {
+    opensubtitles: { apiKey: null, userAgent: "TorPlay tests" },
+    subdl: { apiKey: null },
+  };
+  const first = startSubtitleDiscovery(session, session.resource.torrent.files[0], {
+    config: subtitleConfig({ ...providerless, defaultLanguage: "en", enabledLanguages: ["en"] }),
+    probeMedia: async () => ({ subtitleStreams: [] }),
+  });
+  await first.done;
+  const unchanged = startSubtitleDiscovery(session, session.resource.torrent.files[0], {
+    config: subtitleConfig({ ...providerless, defaultLanguage: "en", enabledLanguages: ["en"] }),
+    probeMedia: async () => ({ subtitleStreams: [] }),
+  });
+  assert.equal(unchanged, first);
+
+  const changed = startSubtitleDiscovery(session, session.resource.torrent.files[0], {
+    config: subtitleConfig({ ...providerless, defaultLanguage: "de", enabledLanguages: ["de", "en"] }),
+    probeMedia: async () => ({ subtitleStreams: [] }),
+  });
+  await changed.done;
+  assert.notEqual(changed, first);
+  assert.deepEqual(changed.preferences, {
+    defaultLanguage: "de",
+    enabledLanguages: ["de", "en"],
+  });
+});
+
+test("loaded cached tracks are protected by their session and reused without extraction", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "torplay-subtitle-service-"));
+  try {
+    const config = subtitleConfig({
+      cachePath: root,
+      opensubtitles: { apiKey: null, userAgent: "TorPlay tests" },
+      subdl: { apiKey: null },
+    });
+    const session = seasonSession();
+    const discovery = startSubtitleDiscovery(session, session.resource.torrent.files[0], {
+      config,
+      probeMedia: async () => ({
+        subtitleStreams: [{ index: 4, language: "hr", title: "Croatian", textBased: true }],
+      }),
+    });
+    await discovery.done;
+    const track = discovery.tracks.find((candidate) => candidate.provider === "embedded");
+    let extractions = 0;
+
+    const first = await loadSubtitleTrack(session, "0", track.id, {
+      config,
+      extractEmbedded: async () => {
+        extractions += 1;
+        return "WEBVTT\n\n00:00.000 --> 00:01.000\nCached\n";
+      },
+    });
+    const filename = subtitleCachePath(session.mediaContext, track.provider, track.providerId, config);
+    assert.equal(first.body.includes("Cached"), true);
+    assert.equal(discovery.cachePaths.has(filename), true);
+
+    const second = await loadSubtitleTrack(session, "0", track.id, {
+      config,
+      extractEmbedded: async () => { throw new Error("cache was not reused"); },
+    });
+    assert.equal(second.body, first.body);
+    assert.equal(extractions, 1);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });

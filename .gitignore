@@ -8,4 +8,5 @@ persistent-data/
 .release/
 dist/
 npm-debug.log*
+docs/tasks
 .DS_Store

@@ -82,15 +82,19 @@ Native MP4, M4V, and WebM support HTTP Range seeking. Recognized non-native cont
 Torrent `.srt` and `.vtt` sidecars are downloaded by the server and delivered as WebVTT. TorPlay can also expose embedded tracks and configured OpenSubtitles/SubDL results.
 
 - Captions remain off until enabled.
-- Automatic English selection yields permanently to a manual language or Off choice for that playback.
+- Each profile chooses multiple searched languages and one primary language from Manage Profiles.
+- Automatic primary-language selection yields permanently to a manual language or Off choice for that playback.
 - Subtitle delay belongs to the current playback.
 - Appearance preferences are validated and retained on the current browser device.
 
 Subtitle endpoints:
 
+- `GET /api/subtitles/languages`
 - `GET|POST /api/torrents/{id}/files/{fileId}/subtitles`
 - `GET /api/torrents/{id}/files/{fileId}/subtitles/{trackId}`
 - `GET /api/torrents/{id}/subtitles/{subtitleId}`
+
+Profile responses include `subtitlePreferences`. Update them with `PUT /api/profiles/{id}/subtitle-preferences` using `{ "defaultLanguage": "en", "enabledLanguages": ["en", "mk"] }`.
 
 ## Health
 

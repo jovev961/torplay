@@ -59,13 +59,13 @@ MP4, M4V, and WebM use native browser playback with HTTP Range seeking. Other re
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `SUBTITLE_DEFAULT_LANGUAGE` | `en` | Default language; must also appear in `SUBTITLE_LANGUAGES`. |
-| `SUBTITLE_LANGUAGES` | `en,mk,sr,hr,bs` | Unique comma-separated two- or three-letter language codes, optionally with a region suffix. |
+| `SUBTITLE_CACHE_TTL_DAYS` | `30` | Days since last use before a cached subtitle becomes eligible for automatic cleanup. |
 | `OPENSUBTITLES_API_KEY` | Unset | Optional OpenSubtitles API key. |
 | `OPENSUBTITLES_USER_AGENT` | `TorPlay v0.1` | User agent supplied to OpenSubtitles. |
 | `SUBDL_API_KEY` | Unset | Optional SubDL API key. |
 
 Torrent and embedded subtitles continue to work without external subtitle-provider keys.
+Preferred and primary subtitle languages are configured per profile from **Manage Profiles → Subtitles**. They are stored in TorPlay's local database and take effect without restarting the app. Existing profile language values from the removed environment variables are imported once during the database migration.
 
 ## Windows home network runtime
 

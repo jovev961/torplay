@@ -20,6 +20,7 @@ import {
   getProfile,
   listProfiles,
   renameProfile,
+  updateSubtitlePreferences,
 } from "../lib/profiles/service.js";
 
 function movie(id, title = `Movie ${id}`) {
@@ -66,6 +67,41 @@ test("profiles keep stable IDs through rename and delete their history", () => {
   }
 });
 
+test("subtitle preferences are validated, persisted, and isolated by profile", () => {
+  const database = createDatabase(":memory:");
+  try {
+    const first = createProfile({ name: "First" }, database);
+    const second = createProfile({ name: "Second" }, database);
+    assert.deepEqual(first.subtitlePreferences, {
+      defaultLanguage: "en",
+      enabledLanguages: ["en", "mk", "sr", "hr", "bs"],
+    });
+
+    const updated = updateSubtitlePreferences(first.id, {
+      defaultLanguage: "de",
+      enabledLanguages: ["de", "en", "de"],
+    }, database);
+    assert.deepEqual(updated.subtitlePreferences, {
+      defaultLanguage: "de",
+      enabledLanguages: ["de", "en"],
+    });
+    assert.deepEqual(getProfile(second.id, database).subtitlePreferences, {
+      defaultLanguage: "en",
+      enabledLanguages: ["en", "mk", "sr", "hr", "bs"],
+    });
+    assert.throws(() => updateSubtitlePreferences(first.id, {
+      defaultLanguage: "fr",
+      enabledLanguages: ["en"],
+    }, database), /must also be enabled/);
+    assert.throws(() => updateSubtitlePreferences(first.id, {
+      defaultLanguage: "en",
+      enabledLanguages: [],
+    }, database), /at least one/);
+  } finally {
+    database.close();
+  }
+});
+
 test("movie and episode progress is isolated by profile and stable media identity", () => {
   const database = createDatabase(":memory:");
   try {
@@ -87,7 +123,7 @@ test("movie and episode progress is isolated by profile and stable media identit
   }
 });
 
-test("opening a player creates a zero-position Continue Watching entry", () => {
+test("opening a player creates a zero-position Continue Watching entry", async () => {
   const database = createDatabase(":memory:");
   try {
     const profile = createProfile({ name: "Viewer" }, database);
@@ -97,7 +133,7 @@ test("opening a player creates a zero-position Continue Watching entry", () => {
     assert.equal(started.progress.position, 0);
     assert.equal(started.progress.duration, 0);
     assert.equal(started.progress.completed, false);
-    assert.deepEqual(listContinueWatching(profile.id, database).map((item) => item.episodeNumber), [3]);
+    assert.deepEqual((await listContinueWatching(profile.id, database)).map((item) => item.episodeNumber), [3]);
 
     saveProgress(profile.id, {
       writerToken: started.writerToken,
@@ -139,8 +175,48 @@ test("database migration restores started media that only has a progress writer"
     assert.equal(restored.position, 0);
     assert.equal(restored.duration, 0);
     assert.equal(restored.episodeTitle, "Chapter Three: Body Double");
-    assert.equal(database.pragma("user_version", { simple: true }), 2);
+    assert.equal(database.pragma("user_version", { simple: true }), 3);
   } finally {
+    database?.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("database migration imports legacy environment languages once", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "torplay-profile-preferences-"));
+  const filename = path.join(directory, "legacy.db");
+  const previousDefault = process.env.SUBTITLE_DEFAULT_LANGUAGE;
+  const previousLanguages = process.env.SUBTITLE_LANGUAGES;
+  let database;
+  try {
+    database = createDatabase(filename);
+    const profile = createProfile({ name: "Viewer" }, database);
+    database.pragma("user_version = 2");
+    database.close();
+    database = null;
+
+    process.env.SUBTITLE_DEFAULT_LANGUAGE = "de";
+    process.env.SUBTITLE_LANGUAGES = "de,en,de";
+    database = createDatabase(filename);
+    assert.deepEqual(getProfile(profile.id, database).subtitlePreferences, {
+      defaultLanguage: "de",
+      enabledLanguages: ["de", "en"],
+    });
+    database.close();
+    database = null;
+
+    process.env.SUBTITLE_DEFAULT_LANGUAGE = "fr";
+    process.env.SUBTITLE_LANGUAGES = "fr";
+    database = createDatabase(filename);
+    assert.deepEqual(getProfile(profile.id, database).subtitlePreferences, {
+      defaultLanguage: "de",
+      enabledLanguages: ["de", "en"],
+    });
+  } finally {
+    if (previousDefault === undefined) delete process.env.SUBTITLE_DEFAULT_LANGUAGE;
+    else process.env.SUBTITLE_DEFAULT_LANGUAGE = previousDefault;
+    if (previousLanguages === undefined) delete process.env.SUBTITLE_LANGUAGES;
+    else process.env.SUBTITLE_LANGUAGES = previousLanguages;
     database?.close();
     await rm(directory, { recursive: true, force: true });
   }
@@ -188,7 +264,7 @@ test("sequence and writer tokens prevent stale progress from overwriting newer p
   }
 });
 
-test("Continue Watching applies centralized thresholds and recent ordering", () => {
+test("Continue Watching applies centralized thresholds and recent ordering", async () => {
   const database = createDatabase(":memory:");
   const originalNow = Date.now;
   try {
@@ -204,7 +280,7 @@ test("Continue Watching applies centralized thresholds and recent ordering", () 
     save(database, profile.id, movie(4, "Complete"), 960, 1_000);
 
     assert.deepEqual(
-      listContinueWatching(profile.id, database).map((item) => item.title),
+      (await listContinueWatching(profile.id, database)).map((item) => item.title),
       ["Show 3", "Older", "Tiny"],
     );
     assert.equal(listHistory(profile.id, database).length, 4);
@@ -218,7 +294,7 @@ test("Continue Watching applies centralized thresholds and recent ordering", () 
   }
 });
 
-test("history groups TV episodes by title while preserving episode progress", () => {
+test("history groups TV episodes by title while preserving episode progress", async () => {
   const database = createDatabase(":memory:");
   const originalNow = Date.now;
   try {
@@ -236,14 +312,141 @@ test("history groups TV episodes by title while preserving episode progress", ()
     assert.equal(history.length, 2);
     assert.equal(show.episodeNumber, 5);
     assert.deepEqual(show.episodes.map((item) => item.episodeNumber), [5, 4, 3, 2, 1]);
-    assert.equal(listContinueWatching(profile.id, database).filter((item) => item.tmdbId === 77).length, 1);
+    assert.equal((await listContinueWatching(profile.id, database)).filter((item) => item.tmdbId === 77).length, 1);
 
     now += 1;
     save(database, profile.id, episode(77, 1, 5), 960, 1_000);
-    assert.equal(listContinueWatching(profile.id, database).some((item) => item.tmdbId === 77), false);
+    assert.equal((await listContinueWatching(profile.id, database, {
+      findNextEpisode: async () => null,
+    })).some((item) => item.tmdbId === 77), false);
     assert.equal(getProgress(profile.id, episode(77, 1, 1), database).position, 60);
   } finally {
     Date.now = originalNow;
+    database.close();
+  }
+});
+
+test("Continue Watching advances a completed show to a zero-position next episode", async () => {
+  const database = createDatabase(":memory:");
+  try {
+    const profile = createProfile({ name: "Viewer" }, database);
+    const current = {
+      ...episode(80, 1, 3),
+      posterUrl: "https://images.example/show.jpg",
+      backdropUrl: "https://images.example/episode-3.jpg",
+    };
+    save(database, profile.id, current, 960, 1_000);
+
+    const items = await listContinueWatching(profile.id, database, {
+      findNextEpisode: async (tmdbId, seasonNumber, episodeNumber) => {
+        assert.deepEqual([tmdbId, seasonNumber, episodeNumber], [80, 1, 3]);
+        return {
+          season: 1,
+          number: 4,
+          title: "The Next Chapter",
+          stillUrl: "https://images.example/episode-4.jpg",
+        };
+      },
+    });
+
+    assert.equal(items.length, 1);
+    assert.deepEqual(
+      {
+        seasonNumber: items[0].seasonNumber,
+        episodeNumber: items[0].episodeNumber,
+        episodeTitle: items[0].episodeTitle,
+        backdropUrl: items[0].backdropUrl,
+        position: items[0].position,
+        duration: items[0].duration,
+        completed: items[0].completed,
+      },
+      {
+        seasonNumber: 1,
+        episodeNumber: 4,
+        episodeTitle: "The Next Chapter",
+        backdropUrl: "https://images.example/episode-4.jpg",
+        position: 0,
+        duration: 0,
+        completed: false,
+      },
+    );
+    assert.equal(getProgress(profile.id, episode(80, 1, 4), database), null);
+  } finally {
+    database.close();
+  }
+});
+
+test("Continue Watching preserves progress already saved for the next episode", async () => {
+  const database = createDatabase(":memory:");
+  const originalNow = Date.now;
+  try {
+    const profile = createProfile({ name: "Viewer" }, database);
+    let now = 3_000;
+    Date.now = () => now;
+    save(database, profile.id, episode(81, 1, 4), 240, 1_000);
+    now += 1;
+    save(database, profile.id, episode(81, 1, 3), 960, 1_000);
+
+    const items = await listContinueWatching(profile.id, database, {
+      findNextEpisode: async () => ({ season: 1, number: 4, title: "Episode 4" }),
+    });
+
+    assert.equal(items.length, 1);
+    assert.equal(items[0].episodeNumber, 4);
+    assert.equal(items[0].position, 240);
+    assert.equal(items[0].duration, 1_000);
+  } finally {
+    Date.now = originalNow;
+    database.close();
+  }
+});
+
+test("Continue Watching crosses seasons, skips completed rows, and stops at series end", async () => {
+  const database = createDatabase(":memory:");
+  const originalNow = Date.now;
+  try {
+    const profile = createProfile({ name: "Viewer" }, database);
+    let now = 4_000;
+    Date.now = () => now;
+    save(database, profile.id, episode(82, 1, 4), 960, 1_000);
+    now += 1;
+    save(database, profile.id, episode(82, 1, 3), 960, 1_000);
+
+    const crossed = await listContinueWatching(profile.id, database, {
+      findNextEpisode: async (_tmdbId, seasonNumber, episodeNumber) => {
+        if (seasonNumber === 1 && episodeNumber === 3) {
+          return { season: 1, number: 4, title: "Finale" };
+        }
+        return { season: 2, number: 1, title: "Premiere" };
+      },
+    });
+    assert.deepEqual(
+      crossed.map((item) => [item.seasonNumber, item.episodeNumber, item.position]),
+      [[2, 1, 0]],
+    );
+
+    const ended = await listContinueWatching(profile.id, database, {
+      findNextEpisode: async () => null,
+    });
+    assert.equal(ended.length, 0);
+  } finally {
+    Date.now = originalNow;
+    database.close();
+  }
+});
+
+test("a next-episode metadata failure does not hide other Continue Watching items", async () => {
+  const database = createDatabase(":memory:");
+  try {
+    const profile = createProfile({ name: "Viewer" }, database);
+    save(database, profile.id, episode(83, 1, 3), 960, 1_000);
+    save(database, profile.id, movie(84, "Playable Movie"), 120, 1_000);
+
+    const items = await listContinueWatching(profile.id, database, {
+      findNextEpisode: async () => { throw new Error("TMDB unavailable"); },
+    });
+    assert.deepEqual(items.map((item) => item.title), ["Playable Movie"]);
+  } finally {
     database.close();
   }
 });
@@ -269,7 +472,7 @@ test("whole-title removal deletes every episode without affecting other titles",
   }
 });
 
-test("progress validation clamps impossible positions and rejects invalid numbers", () => {
+test("progress validation clamps impossible positions and rejects invalid numbers", async () => {
   const database = createDatabase(":memory:");
   try {
     const profile = createProfile({ name: "Viewer" }, database);
@@ -289,7 +492,7 @@ test("progress validation clamps impossible positions and rejects invalid number
     }, database);
     assert.equal(getProgress(profile.id, media, database).position, 500);
     assert.equal(removeHistory(profile.id, media, database), true);
-    assert.equal(listContinueWatching(profile.id, database).length, 0);
+    assert.equal((await listContinueWatching(profile.id, database)).length, 0);
   } finally {
     database.close();
   }
