@@ -1335,6 +1335,84 @@ a {
   background: var(--accent-dark);
 }
 
+.episodeFileList {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  align-content: start;
+  gap: 8px;
+  max-height: 270px;
+  overflow: auto;
+}
+
+.episodeFileChoice {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+  width: 100%;
+  padding: 10px 11px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  outline: none;
+  color: var(--text);
+  background: #0e1115;
+  text-align: left;
+}
+
+.episodeFileChoice:hover,
+.episodeFileChoice:focus-visible {
+  border-color: #7b838c;
+  background: #171b20;
+}
+
+.episodeFileChoice.active {
+  border-color: var(--accent);
+  box-shadow: inset 3px 0 0 var(--accent);
+  background: var(--accent-dark);
+}
+
+.episodeFileHeading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.episodeFileHeading strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.88rem;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.playingBadge {
+  flex: none;
+  padding: 3px 6px;
+  border-radius: 999px;
+  color: white;
+  background: var(--accent);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.episodeFileChoice small {
+  color: #aeb7c0;
+  font-size: 0.75rem;
+}
+
+.episodeFilename {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.68rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .videoFrame {
   display: grid;
   min-height: 330px;
@@ -2130,6 +2208,11 @@ footer {
   .detailsContent,
   .episodeCard {
     grid-template-columns: 1fr;
+  }
+
+  .episodeFileList {
+    grid-template-columns: 1fr;
+    max-height: 300px;
   }
 
   .catalogSearch {
