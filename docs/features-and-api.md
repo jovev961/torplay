@@ -15,7 +15,7 @@ Key metadata endpoints:
 
 ## Source search
 
-Movie and episode pages query Jackett only after the user requests sources. Results are normalized and ranked without exposing API keys or download URLs.
+Movie and episode pages call the provider-independent torrent search service only after the user requests sources. Jackett remains the configured adapter. Results are filtered and ranked by the service without exposing API keys, download URLs, or magnet URIs. Public results expose `hasMagnet` instead of `magnet`; opaque result IDs resolve to server-side playback references.
 
 - Direct `.torrent` metadata is inspected for the top 20 relevant candidates.
 - Verified playable results appear before unverified magnet fallbacks.
@@ -52,7 +52,7 @@ Profile and progress endpoints:
 
 ## Next episode and autoplay
 
-TMDB must confirm that a real next episode exists. TorPlay first checks the active torrent using its exact episode matcher. Only when the episode is absent does it perform the normal ranked Jackett search.
+TMDB must confirm that a real next episode exists. TorPlay first checks the active torrent using its exact episode matcher. Only when the episode is absent does it call the same ranked torrent search service used by manual source selection.
 
 The player exposes the next-episode action during the final two minutes. **Play Now** advances immediately; automatic advancement otherwise occurs only when playback genuinely ends. Cancelling disables automatic advancement for that episode.
 
