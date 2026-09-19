@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  allowedDevOrigins: ['192.168.1.104', `192.168.1.109`],
   agentRules: false,
   ...(process.env.TORPLAY_STANDALONE_BUILD === "1" ? { output: "standalone" } : {}),
   images: {

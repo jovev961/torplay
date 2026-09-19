@@ -990,6 +990,112 @@ a {
   margin-top: 22px;
 }
 
+.subtitlePreferences {
+  display: grid;
+  gap: 18px;
+  margin-top: 22px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: #0e1115;
+}
+
+.subtitlePreferences .sectionHeading {
+  margin: 0;
+}
+
+.subtitlePreferences .sectionHeading h2,
+.subtitlePreferences .sectionHeading p {
+  margin: 0;
+}
+
+.subtitlePreferences .sectionHeading p {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.selectedLanguages,
+.subtitlePreferenceActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.selectedLanguages span {
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  background: var(--panel);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.selectedLanguages span.primary {
+  border-color: var(--accent);
+  color: white;
+}
+
+.primaryLanguage,
+.languageSearch {
+  display: grid;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.primaryLanguage select,
+.languageSearch input {
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  outline: none;
+  color: var(--text);
+  background: var(--panel);
+}
+
+.languageChecklist {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 8px;
+  max-height: 330px;
+  padding: 3px;
+  overflow: auto;
+}
+
+.languageChecklist label {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  cursor: pointer;
+}
+
+.languageChecklist label:has(input:checked) {
+  border-color: var(--accent);
+  background: rgba(181, 26, 35, 0.12);
+}
+
+.languageChecklist input {
+  accent-color: var(--accent);
+}
+
+.languageChecklist small,
+.languageSource {
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.subtitlePreferenceActions {
+  align-items: center;
+}
+
 .sourceWorkspace {
   margin-top: 22px;
   scroll-margin-top: 20px;

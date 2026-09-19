@@ -377,7 +377,14 @@ export default function VideoPlayer({
     let timer = null;
     async function update(method) {
       try {
-        const response = await fetch(subtitleUrl, { method, cache: "no-store" });
+        const response = await fetch(subtitleUrl, {
+          method,
+          cache: "no-store",
+          ...(method === "POST" ? {
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ profileId }),
+          } : {}),
+        });
         const payload = await responseJson(response);
         if (!response.ok) throw new Error(payload?.error || "Subtitle discovery failed.");
         if (cancelled) return;
@@ -400,7 +407,7 @@ export default function VideoPlayer({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [subtitleUrl]);
+  }, [profileId, subtitleUrl]);
 
   useEffect(() => {
     const video = videoRef.current;

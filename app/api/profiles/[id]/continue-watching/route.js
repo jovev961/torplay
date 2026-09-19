@@ -7,7 +7,7 @@ export async function GET(_request, context) {
   try {
     const { id } = await context.params;
     return Response.json(
-      { items: listContinueWatching(id) },
+      { items: await listContinueWatching(id) },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {

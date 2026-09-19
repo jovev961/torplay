@@ -55,7 +55,7 @@ Press Ctrl+C to stop Next.js and the two Compose services. The containers and na
 | --- | --- | --- |
 | `persistent-data/torplay.db` | Profiles, history, progress, writer state | Persistent, gitignored |
 | `.data/torrents` | Managed torrent session files | Temporary, gitignored |
-| `.data/subtitles` | Subtitle cache | Re-creatable, gitignored |
+| `.data/subtitles` | Subtitle cache | Re-creatable, gitignored, automatically expires after the configured retention period |
 | OS temporary directory | HLS and subtitle-conversion jobs | Temporary |
 | Docker named volumes | Jackett and FlareSolverr configuration | Persistent |
 

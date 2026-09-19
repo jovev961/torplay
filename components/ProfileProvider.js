@@ -117,6 +117,20 @@ export function ProfileProvider({ children }) {
     return data.profile;
   }
 
+  async function updateSubtitlePreferences(id, preferences) {
+    const data = await readJson(await fetch(
+      `/api/profiles/${encodeURIComponent(id)}/subtitle-preferences`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(preferences),
+      },
+    ));
+    setProfiles((items) => items.map((item) => item.id === id ? data.profile : item));
+    setActiveProfile((profile) => profile?.id === id ? data.profile : profile);
+    return data.profile;
+  }
+
   async function remove(id) {
     const response = await fetch(`/api/profiles/${encodeURIComponent(id)}`, { method: "DELETE" });
     if (!response.ok) throw new Error("Could not delete the profile.");
@@ -128,7 +142,15 @@ export function ProfileProvider({ children }) {
   }
 
   const value = {
-    activeProfile, create, error, profiles, remove, rename, select, status,
+    activeProfile,
+    create,
+    error,
+    profiles,
+    remove,
+    rename,
+    select,
+    status,
+    updateSubtitlePreferences,
   };
 
   return (
