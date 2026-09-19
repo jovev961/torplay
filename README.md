@@ -31,6 +31,10 @@ Profiles, history, configuration, and logs are kept under `%LOCALAPPDATA%\TorPla
 
 ## Development quick start
 
+For native Knaben, YTS, and EZTV discovery without starting Docker services, run
+`npm run dev:native`. Configure TMDB as usual. Provider selection and endpoint
+overrides are documented in [Torrent providers](docs/torrent-providers.md).
+
 Requirements: Node.js 20.9 or newer and Docker with the `docker compose` command.
 
 ```bash

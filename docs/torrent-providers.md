@@ -31,5 +31,39 @@ leechers, quality/resolution/codec, and optional release media metadata. Magnets
 download URLs, and credentials remain private; the client receives an opaque ID
 and hasMagnet. Requested playback context is stored separately from release metadata.
 
-Jackett remains the only configured production provider. Native integrations,
-configuration and health UI, Prowlarr setup, and ranking improvements are separate work.
+## Native providers
+
+Knaben, YTS, and EZTV are enabled by default. Jackett is also included when its
+URL and non-placeholder API key are configured. Set `TORPLAY_SEARCH_PROVIDERS`
+to a comma-separated allowlist of `knaben,yts,eztv,jackett` to override this.
+Unknown IDs are rejected. An empty list produces a configuration error.
+
+Run `npm run dev:native` to start Next.js with only `knaben,yts,eztv`, even if
+Jackett credentials exist. This command does not start, stop, or configure Docker,
+Jackett, or FlareSolverr. The existing development and Windows launchers are unchanged.
+
+Native adapters use JSON APIs, with no scraping or anti-bot dependency:
+
+- Knaben: general/movie title searches and episode plus season-pack searches;
+  at most 150 results per request.
+- YTS: movie IMDb-ID lookup, or title search when no IMDb ID exists; at most
+  50 movies with one candidate per torrent variant.
+- EZTV: show IMDb-ID lookup, filtering episodes and season packs; sequential
+  pages of 100, capped at ten pages. Older releases beyond that cap may be omitted.
+  Shows without an IMDb ID still search Knaben.
+
+Server-side HTTP(S) endpoint overrides:
+
+| Setting | Default |
+| --- | --- |
+| `KNABEN_API_URL` | `https://api.knaben.org/v1` |
+| `YTS_API_URL` | `https://movies-api.accel.li/api/v2/` |
+| `EZTV_API_URL` | `https://eztvx.to/api/` |
+
+YTS and EZTV settings are API base URLs; Knaben is the search endpoint.
+Provider outages or invalid JSON remain isolated by the shared provider runner.
+No mirror discovery or automatic anti-bot workaround is attempted.
+Only search/download content you are authorized to access.
+
+Provider configuration/health UI, additional indexers, Prowlarr setup, and ranking
+improvements remain separate work.
