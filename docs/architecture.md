@@ -22,6 +22,31 @@ Next.js pages and API routes
 
 This boundary keeps the reusable APIs suitable for another trusted client, such as a future Android TV application, without moving torrent or provider secrets into that client.
 
+## Core and platform boundaries
+
+TorPlay core lives under `lib/` and is organized by capability. It contains no Next.js imports and does not depend on application, UI, runtime-script, or operating-system adapter directories.
+
+| Core capability | Boundary |
+| --- | --- |
+| Configuration | `lib/settings/` |
+| Metadata | `lib/metadata/` |
+| Torrent search | `lib/search/` |
+| Torrent engine | `lib/torrent/` and `lib/video/` |
+| Subtitle providers | `lib/subtitles/` |
+| Profiles | `lib/profiles/` |
+| Playback state | `lib/history/` and `lib/playback/` |
+
+Platform adapters depend inward on these services:
+
+```text
+Next.js pages and routes (app/) ──┐
+React UI (components/) ───────────┼──> TorPlay core (lib/)
+Runtime adapters (platform/) ─────┤
+Process entry points (scripts/) ──┘
+```
+
+Next.js-only setup redirects and settings-response composition stay in `app/_lib/`. Runtime status-file persistence stays in `platform/runtime/`. The automated architecture-boundary test prevents core modules from importing these outer layers.
+
 ## Technology
 
 | Area | Technology |
@@ -52,7 +77,8 @@ lib/search/           Shared search processing, provider selection, adapters, re
 lib/subtitles/        Providers, cache, conversion, selection, appearance
 lib/torrent/          Torrent validation, sessions, files, pieces, cleanup
 lib/video/            Range handling, episode matching, probing, conversion
-scripts/              Development, home runtime, Windows control, release tooling
+platform/runtime/     Host runtime status persistence adapter
+scripts/              Development and platform process entry points, Windows control, release tooling
 installer/windows/    Inno Setup definition and installed-runtime assets
 tests/                Unit and integration tests
 docs/                 Current guides and historical task specifications

@@ -3,7 +3,7 @@ import AppHeader from "../components/AppHeader.js";
 import CatalogFooter from "../components/CatalogFooter.js";
 import HistoryShelf from "../components/HistoryShelf.js";
 import { getTrending } from "../lib/metadata/tmdb.js";
-import { requireSetupReady } from "../lib/settings/gate.js";
+import { requireSetupReady } from "./_lib/require-setup.js";
 
 export const dynamic = "force-dynamic";
 

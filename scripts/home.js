@@ -9,7 +9,7 @@ import { pathToFileURL } from "node:url";
 import { startMdnsAdvertisement, startReverseProxy } from "./home-network.js";
 import { readLocalEnvironment } from "./local-environment.js";
 import { controlEndpoint, startControlServer } from "./runtime-control.js";
-import { createStatusReporter } from "./runtime-status.js";
+import { createStatusReporter } from "../platform/runtime/status.js";
 import { SETTINGS_ENVIRONMENT_KEYS } from "../lib/settings/definitions.js";
 
 const require = createRequire(import.meta.url);

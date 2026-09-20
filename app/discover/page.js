@@ -4,7 +4,7 @@ import CatalogFooter from "../../components/CatalogFooter.js";
 import CatalogResults from "../../components/CatalogResults.js";
 import { catalogHref } from "../../lib/metadata/catalog.js";
 import { discoverCatalog, getGenreDefinitions } from "../../lib/metadata/tmdb.js";
-import { requireSetupReady } from "../../lib/settings/gate.js";
+import { requireSetupReady } from "../_lib/require-setup.js";
 
 export const dynamic = "force-dynamic";
 

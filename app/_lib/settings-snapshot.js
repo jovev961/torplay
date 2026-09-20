@@ -1,8 +1,8 @@
 import packageJson from "../../package.json" with { type: "json" };
-import { readRuntimeStatus } from "../../scripts/runtime-status.js";
-import { configurationWritable, settingsState } from "./config.js";
-import { setupStatusFromProviders } from "./readiness.js";
-import { publicCustomProviders } from "./torrent-providers.js";
+import { configurationWritable, settingsState } from "../../lib/settings/config.js";
+import { setupStatusFromProviders } from "../../lib/settings/readiness.js";
+import { publicCustomProviders } from "../../lib/settings/torrent-providers.js";
+import { readRuntimeStatus } from "../../platform/runtime/status.js";
 
 function runtimeComponents(environment) {
   const state = readRuntimeStatus(environment.TORPLAY_STATUS_PATH);

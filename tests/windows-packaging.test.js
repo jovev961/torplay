@@ -11,7 +11,7 @@ import {
   windowsFileVersion,
 } from "../scripts/release-windows.js";
 import { sendControlCommand, startControlServer } from "../scripts/runtime-control.js";
-import { createStatusReporter, readRuntimeStatus } from "../scripts/runtime-status.js";
+import { createStatusReporter, readRuntimeStatus } from "../platform/runtime/status.js";
 import { installedEnvironment, installedPaths } from "../scripts/windows-paths.js";
 import { createRotatingLog } from "../scripts/windows-runner.js";
 

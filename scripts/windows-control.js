@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { controlEndpoint, sendControlCommand } from "./runtime-control.js";
-import { readRuntimeStatus } from "./runtime-status.js";
+import { readRuntimeStatus } from "../platform/runtime/status.js";
 import { installedEnvironment, installedPaths } from "./windows-paths.js";
 
 function processIsRunning(pid) {

@@ -7,7 +7,7 @@ import {
   assertSettingsMutationRequest,
   isLoopbackSettingsRequest,
 } from "../../../lib/settings/security.js";
-import { getSettingsSnapshot } from "../../../lib/settings/snapshot.js";
+import { getSettingsSnapshot } from "../../_lib/settings-snapshot.js";
 import { clearSettingsValidation } from "../../../lib/settings/validation.js";
 
 export const runtime = "nodejs";
