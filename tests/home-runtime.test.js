@@ -170,3 +170,79 @@ test("Windows startup ignores obsolete managed-service settings and does not inv
   assert.equal(proxyStops, 1);
   assert.equal(mdnsStops, 1);
 });
+
+test("the supervisor recovers an unexpectedly exited application process", async () => {
+  const children = [];
+  const statusUpdates = [];
+  const logs = [];
+  let activeChild;
+  const runtime = await startHomeRuntime({
+    platform: "win32", environment: {}, buildExists: () => true,
+    spawnProcess: (_command, args) => {
+      if (args.includes("/T")) {
+        queueMicrotask(() => {
+          activeChild.exitCode = 0;
+          activeChild.emit("exit", 0, null);
+        });
+        return new FakeChild(0);
+      }
+      activeChild = new FakeChild();
+      children.push(activeChild);
+      return activeChild;
+    },
+    fetchProcess: async () => ({ ok: true }),
+    checkPortProcess: async () => {}, acquireLockProcess: async () => async () => {},
+    startProxyProcess: async () => ({ isHealthy: () => true, stop: async () => {} }),
+    startMdnsProcess: async () => ({ isHealthy: () => true, stop: async () => {} }),
+    statusReporter: { write(update) { statusUpdates.push(update); } },
+    log: (message) => logs.push(message),
+  });
+
+  const failedChild = children[0];
+  failedChild.exitCode = 1;
+  failedChild.emit("exit", 1, null);
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(children.length, 2);
+  assert.equal(statusUpdates.some((update) => update.components?.TorPlay === "RECOVERING"), true);
+  assert.equal(statusUpdates.at(-1).components.TorPlay, "OK");
+  assert.equal(logs.some((message) => message.includes("TorPlay recovered")), true);
+  await runtime.stop();
+});
+
+test("the supervisor restarts an unexpectedly closed LAN proxy", async () => {
+  const child = new FakeChild();
+  const proxies = [];
+  const runtime = await startHomeRuntime({
+    platform: "win32", environment: {}, buildExists: () => true,
+    spawnProcess: (_command, args) => {
+      if (args.includes("/T")) {
+        queueMicrotask(() => {
+          child.exitCode = 0;
+          child.emit("exit", 0, null);
+        });
+        return new FakeChild(0);
+      }
+      return child;
+    },
+    fetchProcess: async () => ({ ok: true }),
+    checkPortProcess: async () => {}, acquireLockProcess: async () => async () => {},
+    startProxyProcess: async () => {
+      const server = new EventEmitter();
+      const instance = {
+        server,
+        isHealthy: () => true,
+        stop: async () => { server.emit("close"); },
+      };
+      proxies.push(instance);
+      return instance;
+    },
+    startMdnsProcess: async () => ({ isHealthy: () => true, stop: async () => {} }),
+    statusReporter: { write() {} }, log() {},
+  });
+
+  proxies[0].server.emit("close");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(proxies.length, 2);
+  await runtime.stop();
+});

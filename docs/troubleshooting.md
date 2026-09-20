@@ -2,7 +2,7 @@
 
 ## Start with status and logs
 
-On an installed Windows host, right-click the TorPlay system-tray icon for current runtime status and quick access to logs or start/stop controls. **TorPlay Status** in the Start menu provides the detailed TorPlay and mDNS report plus the last startup failure.
+On an installed Windows host, right-click the TorPlay system-tray icon for current runtime status and quick access to logs or start/stop controls. **TorPlay Status** in the Start menu provides the detailed application, LAN proxy, and mDNS report plus the last runtime failure.
 
 Runtime logs are stored at:
 
@@ -11,6 +11,8 @@ Runtime logs are stored at:
 ```
 
 The log rotates at 5 MiB and retains three backups. Setup and uninstall logs are kept in the same directory.
+
+TorPlay automatically retries an application, LAN proxy, or mDNS component after two consecutive health failures. If the same component exceeds three recovery attempts within 60 seconds, the tray shows **Status: Error** and the log records the failing component and each attempt. Choose **Retry TorPlay** to perform a clean full restart after correcting the reported problem.
 
 ## Jackett fails
 
@@ -40,7 +42,7 @@ Provider credential changes are used by new requests without a restart.
 
 Check these conditions:
 
-- TorPlay Status reports TorPlay and mDNS as `OK`.
+- TorPlay Status reports TorPlay, LAN proxy, and mDNS as `OK`.
 - The Windows network profile is **Private**, not Public.
 - The client is on the same home network.
 - Guest Wi-Fi, client isolation, or access-point isolation is disabled.

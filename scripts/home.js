@@ -9,6 +9,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { startMdnsAdvertisement, startReverseProxy } from "./home-network.js";
 import { readLocalEnvironment } from "./local-environment.js";
 import { controlEndpoint, startControlServer } from "./runtime-control.js";
+import { createComponentRecovery, startHealthMonitor } from "./runtime-recovery.js";
 import { createStatusReporter } from "../platform/runtime/status.js";
 import { SETTINGS_ENVIRONMENT_KEYS } from "../lib/settings/definitions.js";
 
@@ -217,6 +218,18 @@ export async function waitForHttp(url, {
   throw new Error(`Timed out waiting for ${url}${lastError ? `: ${lastError.message}` : "."}`);
 }
 
+async function httpIsHealthy(url, fetchProcess) {
+  try {
+    const response = await fetchProcess(url, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(2_000),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
 function waitForChildExit(child, timeoutMs) {
   if (!child || child.exitCode !== null) return Promise.resolve(true);
   return new Promise((resolve) => {
@@ -272,6 +285,8 @@ export async function startHomeRuntime({
   buildExists = existsSync,
   statusReporter,
   log = console.log,
+  healthIntervalMs = 15_000,
+  healthFailureThreshold = 2,
 } = {}) {
   if (platform !== "win32") {
     throw new Error("The TorPlay home runtime currently supports Windows only. Use npm run dev here.");
@@ -291,24 +306,201 @@ export async function startHomeRuntime({
     logPath: environment.TORPLAY_LOG_PATH || null,
   });
   const releaseLock = await acquireLockProcess({ lockPath: path.join(runtimeDir, "home.lock") });
+  const componentStates = { TorPlay: "WAITING", "LAN proxy": "WAITING", "mDNS": "WAITING" };
+  const componentErrors = {};
   let nextProcess = null;
   let proxy = null;
   let mdns = null;
+  let healthMonitor = null;
+  let supervisionStarted = false;
+  let startupFailure = null;
   let stopped = false;
+  const expectedApplicationStops = new WeakSet();
+  const expectedProxyStops = new WeakSet();
+
+  function updateComponent(component, value, error = null) {
+    componentStates[component] = value;
+    if (error) componentErrors[component] = error.message;
+    else delete componentErrors[component];
+    const values = Object.values(componentStates);
+    const state = values.includes("ERROR")
+      ? "error"
+      : values.includes("RECOVERING")
+        ? "recovering"
+        : values.every((entry) => entry === "OK")
+          ? "ready"
+          : "starting";
+    reporter.write({
+      state,
+      components: { [component]: value },
+      lastError: Object.values(componentErrors)[0] || null,
+    });
+  }
+
+  function applicationFailure(child, error) {
+    if (stopped || expectedApplicationStops.has(child) || child !== nextProcess) return;
+    if (!supervisionStarted) {
+      startupFailure = error;
+      return;
+    }
+    void applicationRecovery.recover(error);
+  }
+
+  async function startApplication() {
+    if (stopped) throw new Error("TorPlay is shutting down.");
+    const server = serverStart(environment, config);
+    const child = spawnProcess(
+      process.execPath,
+      server.args,
+      {
+        cwd,
+        env: server.environment,
+        stdio: "inherit",
+        windowsHide: true,
+      },
+    );
+    nextProcess = child;
+    child.once("error", (error) => {
+      applicationFailure(child, new Error(`Application process failed: ${error.message}`));
+    });
+    child.once("exit", (code, signal) => {
+      applicationFailure(
+        child,
+        new Error(`Application stopped unexpectedly${signal ? ` with ${signal}` : ` (exit ${code})`}.`),
+      );
+    });
+    await waitForHttp(`${formatHttpUrl(config.connectHost, config.port)}/api/health`, {
+      fetchProcess,
+      child,
+    });
+    if (startupFailure) throw startupFailure;
+    if (stopped) {
+      expectedApplicationStops.add(child);
+      await stopNextProcess(child, { platform, spawnProcess, environment });
+      throw new Error("TorPlay stopped during application recovery.");
+    }
+    updateComponent("TorPlay", "OK");
+    return child;
+  }
+
+  async function restartApplication() {
+    const previous = nextProcess;
+    if (previous) {
+      expectedApplicationStops.add(previous);
+      await stopNextProcess(previous, { platform, spawnProcess, environment });
+      if (nextProcess === previous) nextProcess = null;
+    }
+    await startApplication();
+  }
+
+  function proxyFailure(current, error) {
+    if (stopped || expectedProxyStops.has(current) || current !== proxy) return;
+    if (!supervisionStarted) {
+      startupFailure = error;
+      return;
+    }
+    void proxyRecovery.recover(error);
+  }
+
+  async function startProxy() {
+    if (stopped) throw new Error("TorPlay is shutting down.");
+    const current = await startProxyProcess({
+      targetHost: config.connectHost,
+      targetPort: config.port,
+      publicHost: config.publicHost,
+      publicPort: config.publicPort,
+    });
+    proxy = current;
+    current.server?.once("close", () => {
+      proxyFailure(current, new Error(`LAN proxy on port ${config.publicPort} stopped unexpectedly.`));
+    });
+    await waitForHttp(`${formatHttpUrl("127.0.0.1", config.publicPort)}/api/health`, { fetchProcess });
+    if (startupFailure) throw startupFailure;
+    if (stopped) {
+      expectedProxyStops.add(current);
+      await current.stop();
+      throw new Error("TorPlay stopped during LAN proxy recovery.");
+    }
+    updateComponent("LAN proxy", "OK");
+    return current;
+  }
+
+  async function restartProxy() {
+    const previous = proxy;
+    if (previous) {
+      expectedProxyStops.add(previous);
+      await previous.stop();
+      if (proxy === previous) proxy = null;
+    }
+    await startProxy();
+  }
+
+  async function startMdns() {
+    if (stopped) throw new Error("TorPlay is shutting down.");
+    const current = await startMdnsProcess({
+      hostname: config.publicHostname,
+      port: config.publicPort,
+      mdnsInterface: config.mdnsInterface,
+    });
+    if (stopped) {
+      await current.stop();
+      throw new Error("TorPlay stopped during mDNS recovery.");
+    }
+    mdns = current;
+    updateComponent("mDNS", "OK");
+    return current;
+  }
+
+  async function restartMdns() {
+    const previous = mdns;
+    if (previous) {
+      await previous.stop();
+      if (mdns === previous) mdns = null;
+    }
+    await startMdns();
+  }
+
+  function recoveryOptions(component, restart) {
+    return {
+      name: component,
+      restart,
+      log,
+      onAttempt: (error) => updateComponent(component, "RECOVERING", error),
+      onRecovered: () => updateComponent(component, "OK"),
+      onPersistentFailure: (error) => updateComponent(component, "ERROR", error),
+    };
+  }
+
+  const applicationRecovery = createComponentRecovery(recoveryOptions("TorPlay", restartApplication));
+  const proxyRecovery = createComponentRecovery(recoveryOptions("LAN proxy", restartProxy));
+  const mdnsRecovery = createComponentRecovery(recoveryOptions("mDNS", restartMdns));
+  const recoveries = {
+    TorPlay: applicationRecovery,
+    "LAN proxy": proxyRecovery,
+    "mDNS": mdnsRecovery,
+  };
 
   const stop = async () => {
     if (stopped) return;
     stopped = true;
+    supervisionStarted = false;
+    healthMonitor?.stop();
+    Object.values(recoveries).forEach((recovery) => recovery.disable());
     log("[TorPlay] Shutting down...");
     const errors = [];
     if (mdns) await mdns.stop().catch((error) => errors.push(error));
-    if (proxy) await proxy.stop().catch((error) => errors.push(error));
+    if (proxy) {
+      expectedProxyStops.add(proxy);
+      await proxy.stop().catch((error) => errors.push(error));
+    }
+    if (nextProcess) expectedApplicationStops.add(nextProcess);
     await stopNextProcess(nextProcess, { platform, spawnProcess, environment })
       .catch((error) => errors.push(error));
     await releaseLock().catch((error) => errors.push(error));
     reporter.write({
       state: "stopped",
-      components: { TorPlay: "STOPPED", "mDNS": "STOPPED" },
+      lastError: errors[0]?.message || null,
+      components: { TorPlay: "STOPPED", "LAN proxy": "STOPPED", "mDNS": "STOPPED" },
     });
     log("[TorPlay] Shutdown complete.");
     if (errors.length) throw new AggregateError(errors, "TorPlay shutdown encountered errors.");
@@ -320,57 +512,37 @@ export async function startHomeRuntime({
     await checkPortProcess(config.port, config.host);
     await checkPortProcess(config.publicPort, config.publicHost);
 
-    const server = serverStart(environment, config);
-    nextProcess = spawnProcess(
-      process.execPath,
-      server.args,
-      {
-        cwd,
-        env: server.environment,
-        stdio: "inherit",
-        windowsHide: true,
-      },
-    );
-    let nextFailure = null;
-    nextProcess.on("error", (error) => {
-      nextFailure = new Error(`TorPlay could not start: ${error.message}`);
-    });
-    nextProcess.on("exit", (code, signal) => {
-      if (!stopped) {
-        nextFailure = new Error(
-          `TorPlay stopped during startup${signal ? ` with ${signal}` : ` (exit ${code})`}.`,
-        );
-      }
-    });
-    const requireNextRunning = () => {
-      if (nextFailure) throw nextFailure;
-    };
-    await waitForHttp(`${formatHttpUrl(config.connectHost, config.port)}/api/health`, {
-      fetchProcess,
-      child: nextProcess,
-    });
-    requireNextRunning();
-    reporter.write({ components: { TorPlay: "OK" } });
+    await startApplication();
     log("[TorPlay] Application ready.");
 
-    proxy = await startProxyProcess({
-      targetHost: config.connectHost,
-      targetPort: config.port,
-      publicHost: config.publicHost,
-      publicPort: config.publicPort,
-    });
-    await waitForHttp(`${formatHttpUrl("127.0.0.1", config.publicPort)}/api/health`, { fetchProcess });
-    requireNextRunning();
+    await startProxy();
     log(`[TorPlay] Port ${config.publicPort} frontend ready.`);
 
-    mdns = await startMdnsProcess({
-      hostname: config.publicHostname,
-      port: config.publicPort,
-      mdnsInterface: config.mdnsInterface,
-    });
-    requireNextRunning();
-    reporter.write({ components: { "mDNS": "OK" }, state: "ready" });
+    await startMdns();
+    if (startupFailure) throw startupFailure;
+    supervisionStarted = true;
     log(`[TorPlay] mDNS registered ${config.publicHostname}.`);
+
+    healthMonitor = startHealthMonitor({
+      intervalMs: healthIntervalMs,
+      failureThreshold: healthFailureThreshold,
+      inspect: async () => {
+        const internalUrl = `${formatHttpUrl(config.connectHost, config.port)}/api/health`;
+        if (!nextProcess || nextProcess.exitCode !== null || !await httpIsHealthy(internalUrl, fetchProcess)) {
+          return { component: "TorPlay", error: new Error(`Application health check failed at ${internalUrl}.`) };
+        }
+        const publicUrl = `${formatHttpUrl("127.0.0.1", config.publicPort)}/api/health`;
+        if (!proxy?.isHealthy?.() || !await httpIsHealthy(publicUrl, fetchProcess)) {
+          return { component: "LAN proxy", error: new Error(`LAN proxy health check failed at ${publicUrl}.`) };
+        }
+        if (mdns?.isHealthy && !mdns.isHealthy()) {
+          return { component: "mDNS", error: new Error("mDNS advertisement is no longer active.") };
+        }
+        return null;
+      },
+      onFailure: ({ component, error }) => recoveries[component].recover(error),
+      onError: (error) => log(`[TorPlay] Health monitor error: ${error.message}`),
+    });
 
     const localUrl = formatHttpUrl("localhost", config.publicPort);
     const networkUrl = formatHttpUrl(config.publicHostname, config.publicPort);
@@ -383,7 +555,13 @@ export async function startHomeRuntime({
     log("");
     log(`Network:\n${networkUrl}`);
 
-    return { config, nextProcess, reporter, stop };
+    return {
+      config,
+      get nextProcess() { return nextProcess; },
+      reporter,
+      checkHealth: () => healthMonitor.checkNow(),
+      stop,
+    };
   } catch (error) {
     reporter.write({ state: "error", lastError: error.message });
     await stop().catch((shutdownError) => {
@@ -433,20 +611,6 @@ async function main() {
   process.once("SIGINT", () => void shutdown(130));
   process.once("SIGTERM", () => void shutdown(143));
   process.once("SIGHUP", () => void shutdown(129));
-  runtime.nextProcess.once("error", (error) => {
-    reporter.write({ state: "error", lastError: `Application process failed: ${error.message}` });
-    console.error(`[TorPlay] Application process failed: ${error.message}`);
-    void shutdown(1);
-  });
-  runtime.nextProcess.once("exit", (code, signal) => {
-    if (shuttingDown) return;
-    const message = `Application stopped unexpectedly${signal ? ` with ${signal}` : ` (exit ${code})`}.`;
-    reporter.write({ state: "error", lastError: message });
-    console.error(
-      `[TorPlay] ${message}`,
-    );
-    void shutdown(1);
-  });
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

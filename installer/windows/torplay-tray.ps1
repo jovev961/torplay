@@ -102,21 +102,25 @@ function New-TorPlayIcon {
   }
 }
 
-function Test-TorPlayRunning {
+function Get-TorPlayRuntimeStatus {
   try {
     if (-not (Test-Path -LiteralPath $statusPath -PathType Leaf)) {
-      return $false
+      return $null
     }
     $status = Get-Content -LiteralPath $statusPath -Raw | ConvertFrom-Json
     $runtimePid = [int]$status.pid
     if ($runtimePid -le 0) {
-      return $false
+      return $null
     }
     Get-Process -Id $runtimePid -ErrorAction Stop | Out-Null
-    return $true
+    return $status
   } catch {
-    return $false
+    return $null
   }
+}
+
+function Test-TorPlayRunning {
+  return $null -ne (Get-TorPlayRuntimeStatus)
 }
 
 function Invoke-TorPlayControl([string]$Command) {
@@ -184,12 +188,36 @@ function Show-TrayError([string]$Message) {
 }
 
 function Update-TrayStatus {
-  $running = Test-TorPlayRunning
-  $statusItem.Text = if ($running) { "Status: Running" } else { "Status: Stopped" }
-  $runtimeItem.Text = if ($running) { "Restart TorPlay" } else { "Start TorPlay" }
+  $runtimeStatus = Get-TorPlayRuntimeStatus
+  $running = $null -ne $runtimeStatus
+  $state = if ($running) { [string]$runtimeStatus.state } else { "stopped" }
+  if ($state -eq "error") {
+    $statusItem.Text = "Status: Error"
+    $runtimeItem.Text = "Retry TorPlay"
+  } elseif ($state -eq "recovering") {
+    $statusItem.Text = "Status: Recovering..."
+    $runtimeItem.Text = "Restart TorPlay"
+  } elseif ($state -eq "starting") {
+    $statusItem.Text = "Status: Starting..."
+    $runtimeItem.Text = "Restart TorPlay"
+  } elseif ($running) {
+    $statusItem.Text = "Status: Running"
+    $runtimeItem.Text = "Restart TorPlay"
+  } else {
+    $statusItem.Text = "Status: Stopped"
+    $runtimeItem.Text = "Start TorPlay"
+  }
   $stopItem.Enabled = $running
   $startupItem.Checked = Test-StartWithWindows
-  $notifyIcon.Text = if ($running) { "TorPlay - Running" } else { "TorPlay - Stopped" }
+  $notifyIcon.Text = if ($state -eq "error") {
+    "TorPlay - Error"
+  } elseif ($state -eq "recovering") {
+    "TorPlay - Recovering"
+  } elseif ($running) {
+    "TorPlay - Running"
+  } else {
+    "TorPlay - Stopped"
+  }
 }
 
 $script:exitStarted = $false

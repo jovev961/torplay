@@ -167,6 +167,7 @@ export async function runtimeStatus({
   const running = processIsRunning(snapshot?.pid);
   const components = {
     TorPlay: "ERROR",
+    "LAN proxy": "ERROR",
     "mDNS": running && snapshot?.components?.["mDNS"] === "OK" ? "OK" : "ERROR",
   };
   try {
@@ -174,7 +175,10 @@ export async function runtimeStatus({
       cache: "no-store",
       signal: AbortSignal.timeout(2_000),
     });
-    if (response.ok) components.TorPlay = "OK";
+    if (response.ok && running) {
+      if (snapshot?.components?.TorPlay === "OK") components.TorPlay = "OK";
+      if (snapshot?.components?.["LAN proxy"] === "OK") components["LAN proxy"] = "OK";
+    }
   } catch {
     components.TorPlay = "ERROR";
   }

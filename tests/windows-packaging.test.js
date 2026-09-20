@@ -49,7 +49,7 @@ test("runtime status retains actionable failure details", async () => {
   const statusPath = path.join(directory, "runtime", "status.json");
   try {
     const reporter = createStatusReporter(statusPath);
-    assert.deepEqual(Object.keys(reporter.get().components), ["TorPlay", "mDNS"]);
+    assert.deepEqual(Object.keys(reporter.get().components), ["TorPlay", "LAN proxy", "mDNS"]);
     reporter.write({ components: { TorPlay: "OK" } });
     reporter.write({ state: "error", lastError: "Application failed" });
     const status = readRuntimeStatus(statusPath);
@@ -260,6 +260,9 @@ test("Windows tray controls the existing runtime without starting a second backe
 
   assert.match(tray, /Windows\.Forms\.NotifyIcon/);
   assert.match(tray, /Status: Running/);
+  assert.match(tray, /Status: Recovering/);
+  assert.match(tray, /Status: Error/);
+  assert.match(tray, /Retry TorPlay/);
   assert.match(tray, /Open TorPlay/);
   assert.match(tray, /Open Logs/);
   assert.match(tray, /Restart TorPlay/);
