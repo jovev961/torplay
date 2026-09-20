@@ -4,17 +4,24 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { stringify } from "yaml";
-import { cardigannAdapter } from "../lib/search/cardigann/engine.js";
+import { cardigannAdapter, testCardigannProvider } from "../lib/search/cardigann/engine.js";
 import {
   importDefinition,
   normalizeDefinitionUrl,
   parseDefinition,
+  settingDescriptors,
   validateDefinitionSettings,
 } from "../lib/search/cardigann/definition.js";
 import { applyFilters } from "../lib/search/cardigann/filters.js";
 import { pinnedLookup, resolvePublicAddress, safeRequest } from "../lib/search/cardigann/http.js";
 import { renderTemplate } from "../lib/search/cardigann/template.js";
-import { createCardigannProvider, publicCustomProviders, readCustomProviders, updateCardigannProvider } from "../lib/settings/torrent-providers.js";
+import {
+  createCardigannProvider,
+  publicCustomProviders,
+  readCustomProviders,
+  testCardigannProviderConnection,
+  updateCardigannProvider,
+} from "../lib/settings/torrent-providers.js";
 
 const definition = {
   id: "example",
@@ -70,6 +77,7 @@ test("definition URLs accept public YAML and normalize GitHub blob pages", () =>
 test("Cardigann v11 definitions are schema checked and report unsupported features", () => {
   const parsed = parseDefinition(stringify(definition));
   assert.deepEqual(parsed.capabilities.mediaTypes, ["Movies", "TV"]);
+  assert.deepEqual(parsed.capabilities.categories, ["Movies", "TV"]);
   assert.throws(() => parseDefinition("id: broken"), /valid Cardigann v11/);
   try {
     parseDefinition(stringify({ ...definition, login: { method: "post", path: "/login", captcha: { type: "image", selector: "img", input: "captcha" } } }));
@@ -94,6 +102,25 @@ test("definition settings validate options and preserve stored secrets", () => {
   assert.deepEqual(validateDefinitionSettings(definition, { token: "new", safe: false }), { token: "new", safe: false });
   assert.deepEqual(validateDefinitionSettings(definition, { token: "", safe: true }, { token: "stored" }), { token: "stored", safe: true });
   assert.throws(() => validateDefinitionSettings(definition, { token: "x", extra: "no" }), /unknown field/);
+});
+
+test("definition settings preserve generic controls and informational guidance", () => {
+  const configured = {
+    ...definition,
+    settings: [
+      { name: "username", label: "Username", type: "text" },
+      { name: "password", label: "Password", type: "password" },
+      { name: "section", label: "Section", type: "select", options: { all: "All", trusted: "Trusted" }, default: "all" },
+      { name: "safe", label: "Safe search", type: "checkbox", default: true },
+      { name: "cookie-help", label: "Paste the cookie from an authenticated browser session.", type: "info_cookie" },
+    ],
+  };
+  const descriptors = settingDescriptors(configured);
+  assert.deepEqual(descriptors.map((field) => field.type), ["text", "password", "select", "checkbox", "info_cookie"]);
+  assert.equal(descriptors.at(-1).informational, true);
+  assert.deepEqual(validateDefinitionSettings(configured, {
+    username: "alice", password: "secret", section: "trusted", safe: false,
+  }), { username: "alice", password: "secret", section: "trusted", safe: false });
 });
 
 test("Cardigann templates and filters render supported expressions without evaluation", () => {
@@ -204,6 +231,32 @@ test("definition imports report HTTP and YAML failures at their actual stage", a
   }), (error) => error.code === "CARDIGANN_INVALID" && /invalid YAML/.test(error.message));
 });
 
+test("live Cardigann verification reports safe and specific failure categories", async () => {
+  const provider = { id: "cardigann-diagnostics", name: definition.name, definition, settings: { token: "secret", safe: true }, capabilities: parseDefinition(stringify(definition)).capabilities };
+  for (const [status, code] of [[403, "CARDIGANN_HTTP_403"], [429, "CARDIGANN_RATE_LIMITED"]]) {
+    await assert.rejects(testCardigannProvider(provider, {
+      request: async (url) => response(url, "temporarily unavailable", status),
+    }), (error) => error.code === code && !error.message.includes("secret"));
+  }
+  await assert.rejects(testCardigannProvider(provider, {
+    request: async (url) => response(url, '<html><script src="/challenge-platform/test.js"></script>Verify you are human</html>', 403, { server: "cloudflare" }),
+  }), (error) => error.code === "CARDIGANN_CHALLENGE_DETECTED");
+  await assert.rejects(testCardigannProvider(provider, {
+    request: async () => { throw Object.assign(new Error("lookup contained private internal detail"), { code: "ENOTFOUND" }); },
+  }), (error) => error.code === "REMOTE_DNS_FAILED" && !error.message.includes("internal"));
+  await assert.rejects(testCardigannProvider(provider, {
+    request: async (url) => response(url, "<html></html>"),
+  }), (error) => error.code === "CARDIGANN_NO_SEARCH_ROWS");
+
+  const jsonDefinition = {
+    ...definition,
+    search: { ...definition.search, paths: [{ path: "/search", response: { type: "json" } }] },
+  };
+  await assert.rejects(testCardigannProvider({ ...provider, definition: jsonDefinition }, {
+    request: async (url) => response(url, "not-json"),
+  }), (error) => error.code === "CARDIGANN_RESPONSE_PARSE_FAILED");
+});
+
 test("Cardigann adapter searches HTML and keeps magnets server-side", async () => {
   const requests = [];
   const provider = { id: "cardigann-example", name: definition.name, definition, settings: { token: "secret", safe: true }, capabilities: { mediaTypes: ["Movies", "TV"], modes: definition.caps.modes } };
@@ -271,6 +324,39 @@ test("Cardigann adapter renders raw category queries and expands JSON row attrib
   assert.equal(requested.searchParams.get("imdb"), "tt1727587");
   assert.equal(requested.searchParams.get("short"), "1727587");
   assert.equal(results[0].title, "Sintel API");
+});
+
+test("Cardigann category hierarchy survives import and supports exact anime searches", async () => {
+  const categoryDefinition = {
+    ...definition,
+    caps: {
+      ...definition.caps,
+      categories: undefined,
+      categorymappings: [
+        { id: "2000", cat: "Movies" }, { id: "2040", cat: "Movies/HD" }, { id: "2045", cat: "Movies/UHD" },
+        { id: "5000", cat: "TV" }, { id: "5040", cat: "TV/HD" }, { id: "5070", cat: "TV/Anime" },
+        { id: "anime-native", cat: "TV/Anime" }, { id: "3000", cat: "Audio" }, { id: "7000", cat: "Books" },
+        { id: "4000", cat: "PC" }, { id: "1000", cat: "Console" }, { id: "8000", cat: "Other" },
+      ],
+    },
+    settings: [],
+    search: {
+      ...definition.search,
+      inputs: { $raw: "{{ range .Categories }}category[]={{.}}&{{ end }}", q: "{{ .Keywords }}" },
+    },
+  };
+  const parsed = parseDefinition(stringify(categoryDefinition));
+  assert.deepEqual(parsed.capabilities.categories, [
+    "Movies", "Movies/HD", "Movies/UHD", "TV", "TV/HD", "TV/Anime", "Audio", "Books", "PC", "Console", "Other",
+  ]);
+  const requested = [];
+  const provider = { id: "cardigann-categories", name: "Category fixture", definition: categoryDefinition, settings: {}, capabilities: parsed.capabilities };
+  const results = await cardigannAdapter(provider, { request: async (url) => {
+    requested.push(new URL(url).searchParams.getAll("category[]"));
+    return response(url, '<article class="result"><span class="title">Anime result</span><span class="size">1 MB</span><span class="seeders">1</span><a href="magnet:?xt=urn:btih:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa">Get</a></article>');
+  } }).search({ title: "Example", type: "show", categories: ["TV/Anime"] });
+  assert.equal(results.length, 1);
+  assert.deepEqual(requested[0], ["5070", "anime-native"]);
 });
 
 test("Cardigann adapter decodes definition-selected legacy encodings", async () => {
@@ -371,6 +457,7 @@ test("imported definitions persist only after live verification and redact setti
       access: "public",
       language: "en-US",
       mediaTypes: ["Movies", "TV"],
+      categories: ["Movies", "TV"],
       website: "https://indexer.example/",
       sourceUrl: "https://github.com/example/indexers/blob/main/example.yml",
       settings: [
@@ -390,6 +477,58 @@ test("imported definitions persist only after live verification and redact setti
     assert.equal(stored[0].definitionYaml, definitionYaml);
     assert.equal(stored[0].definitionSourceFormat, "original");
     assert.equal(publicCustomProviders(environment)[0].definitionUrl, "https://github.com/example/indexers/blob/main/example.yml");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("temporarily unreachable definitions can be confirmed as unverified and retested later", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "torplay-cardigann-unverified-"));
+  const environment = { TORPLAY_CONFIG_PATH: path.join(directory, "torplay.env") };
+  try {
+    const imported = await importDefinition("https://definitions.example/unreachable.yml", {
+      request: async (url) => response(url, stringify({ ...definition, id: "unreachable-fixture" })),
+    });
+    let confirmation;
+    await assert.rejects(createCardigannProvider({
+      importId: imported.importId,
+      settings: { token: "private", safe: true },
+    }, {
+      environment,
+      request: async () => { throw Object.assign(new Error("private resolver details"), { code: "ENOTFOUND" }); },
+      now: () => 1_700_000_000_000,
+    }), (error) => {
+      confirmation = error.confirmationToken;
+      return error.code === "CARDIGANN_VERIFICATION_FAILED"
+        && error.canAddUnverified === true
+        && error.verificationFailure.code === "REMOTE_DNS_FAILED"
+        && !JSON.stringify(error).includes("private resolver details");
+    });
+    assert.deepEqual(readCustomProviders(environment), []);
+    await assert.rejects(createCardigannProvider({
+      importId: imported.importId,
+      settings: { token: "changed", safe: true },
+      addUnverified: true,
+      confirmationToken: confirmation,
+    }, { environment }), (error) => error.code === "CARDIGANN_VERIFICATION_CONFIRMATION_INVALID");
+
+    const [saved] = await createCardigannProvider({
+      importId: imported.importId,
+      settings: { token: "private", safe: true },
+      addUnverified: true,
+      confirmationToken: confirmation,
+    }, { environment, now: () => 1_700_000_000_000 });
+    assert.equal(saved.verification.status, "unverified");
+    assert.equal(saved.verification.code, "REMOTE_DNS_FAILED");
+    assert.equal(JSON.stringify(saved).includes("private"), false);
+
+    const retested = await testCardigannProviderConnection({ id: saved.id }, {
+      environment,
+      request: async (url) => response(url, '<article class="result"><span class="title">Sintel</span><a href="magnet:?xt=urn:btih:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa">Get</a></article>'),
+      now: () => 1_700_000_001_000,
+    });
+    assert.equal(retested.verification.status, "verified");
+    assert.equal(readCustomProviders(environment)[0].verification.status, "verified");
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

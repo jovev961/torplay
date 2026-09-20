@@ -4,6 +4,7 @@ import {
   createCardigannProvider,
   customProviderHealth,
   removeCardigannProvider,
+  testCardigannProviderConnection,
   testCustomProvider,
   updateCardigannProvider,
 } from "../../../../lib/settings/torrent-providers.js";
@@ -23,6 +24,7 @@ export async function POST(request) {
     if (body?.action === "import-definition") return json(await importDefinition(body.definitionUrl));
     if (body?.action === "create-cardigann") return json({ providers: await createCardigannProvider(body.provider || {}) });
     if (body?.action === "update-cardigann") return json({ providers: await updateCardigannProvider(body.provider || {}) });
+    if (body?.action === "test-cardigann") return json(await testCardigannProviderConnection(body.provider || {}));
     if (body?.action === "remove-cardigann") return json({ providers: await removeCardigannProvider(body.provider || {}) });
     if (body?.action === "test") return json({ capabilities: await testCustomProvider(body.provider || {}) });
     if (!["create", "update", "remove"].includes(body?.action)) return json({ error: "Unknown provider action." }, 400);
@@ -32,6 +34,8 @@ export async function POST(request) {
       error: error.status ? error.message : "Provider settings could not be processed.",
       ...(error.code ? { code: error.code } : {}),
       ...(error.unsupportedFeatures ? { unsupportedFeatures: error.unsupportedFeatures } : {}),
+      ...(error.verificationFailure ? { verificationFailure: error.verificationFailure } : {}),
+      ...(error.canAddUnverified ? { canAddUnverified: true, confirmationToken: error.confirmationToken } : {}),
     }, error.status || 400);
   }
 }
