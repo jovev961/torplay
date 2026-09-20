@@ -120,7 +120,7 @@ export default function SetupManager() {
         );
       })}
       <div className={styles.finishRow}>
-        <p>TorPlay will verify TMDB and open the catalog. Built-in torrent sources are ready to use; optional sources can be added in Settings.</p>
+        <p>TorPlay will verify TMDB and open the catalog. Add a compatible third-party torrent source in Settings when you are ready to search.</p>
         <button type="submit" disabled={busy}>{busy ? "Verifying connections…" : "Verify and finish"}</button>
       </div>
     </form>

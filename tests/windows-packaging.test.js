@@ -382,8 +382,7 @@ test("fresh Windows configuration leaves required provider credentials for brows
   assert.doesNotMatch(template, /^JACKETT_API_KEY=/m);
   assert.match(template, /^JACKETT_MOVIE_INDEXERS=$/m);
   assert.match(template, /^JACKETT_SHOW_INDEXERS=$/m);
-  assert.match(template, /^TORPLAY_NATIVE_PROVIDERS=$/m);
-  assert.match(template, /^TORPLAY_CONFIGURED_NATIVE_PROVIDERS=$/m);
+  assert.doesNotMatch(template, /TORPLAY_(?:CONFIGURED_)?NATIVE_PROVIDERS/);
   assert.doesNotMatch(template, /DOCKER|COMPOSE|TORPLAY_MANAGED_JACKETT/i);
 });
 

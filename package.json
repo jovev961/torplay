@@ -8,8 +8,6 @@
     "icons:generate": "node scripts/generate-icons.js",
     "predev": "npm run icons:generate",
     "dev": "exec node scripts/dev.js",
-    "predev:native": "npm run icons:generate",
-    "dev:native": "node scripts/dev-native.js",
     "prebuild": "npm run icons:generate",
     "build": "next build",
     "start": "next start",

@@ -1,6 +1,5 @@
 import {
   SettingsError,
-  updateNativeProviderSettings,
   updateProviderSettings,
 } from "../../../lib/settings/config.js";
 import {
@@ -47,13 +46,8 @@ export async function PATCH(request) {
     if (!body || typeof body.provider !== "string") {
       throw new SettingsError("A settings provider is required.");
     }
-    if (body.provider === "nativeProviders") {
-      await updateNativeProviderSettings(body.enabled, { configuredIds: body.configured });
-    } else {
-      await updateProviderSettings(body.provider, body);
-    }
-    if (body.provider === "nativeProviders") clearSettingsValidation();
-    else clearSettingsValidation(body.provider);
+    await updateProviderSettings(body.provider, body);
+    clearSettingsValidation(body.provider);
     const snapshot = await getSettingsSnapshot({ canEdit: true });
     return Response.json(snapshot, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {

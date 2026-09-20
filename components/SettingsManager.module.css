@@ -221,14 +221,12 @@
   line-height: 1.55;
 }
 
-.sourceCardHeading span,
-.addIndexerCard span {
+.sourceCardHeading span {
   display: grid;
   gap: 3px;
 }
 
-.sourceCardHeading small,
-.addIndexerCard small {
+.sourceCardHeading small {
   color: var(--muted);
   font-size: 0.7rem;
   font-weight: 700;
@@ -269,53 +267,12 @@
   line-height: 1.45;
 }
 
-.sourceToggle {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  cursor: pointer;
-}
-
-.sourceToggle input {
-  width: 18px;
-  height: 18px;
-  margin: 0;
-  accent-color: var(--accent);
-}
-
-.sourceToggle input:disabled {
-  cursor: not-allowed;
-}
-
-.sourceToggle span {
-  display: grid;
-  gap: 3px;
-}
-
-.sourceToggle strong {
-  font-size: 1rem;
-}
-
-.sourceToggle small {
-  color: var(--muted);
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
 .sourceActions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 9px;
   margin-top: 14px;
-}
-
-.sourceWarning {
-  margin: 12px 2px 0;
-  color: var(--muted);
-  font-size: 0.8rem;
 }
 
 .indexerManager {
@@ -423,27 +380,6 @@
 .addIndexerOptions section {
   display: grid;
   gap: 12px;
-}
-
-.addIndexerGrid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.addIndexerCard {
-  display: grid;
-  align-content: space-between;
-  gap: 18px;
-  min-height: 126px;
-  padding: 16px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: #101419;
-}
-
-.addIndexerCard .testButton {
-  justify-self: start;
 }
 
 .customIndexerOption {
@@ -911,10 +847,6 @@
   .indexerHeading {
     align-items: flex-start;
     flex-direction: column;
-  }
-
-  .addIndexerGrid {
-    grid-template-columns: 1fr;
   }
 
   .dialogBackdrop {

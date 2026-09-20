@@ -156,11 +156,11 @@ test("uses the union of configured indexers for generic searches", async () => {
 
 test("parses, trims, and deduplicates indexer lists", () => {
   assert.deepEqual(
-    parseIndexerIds(" yts, internetarchive,yts ", "JACKETT_MOVIE_INDEXERS"),
-    ["yts", "internetarchive"],
+    parseIndexerIds(" public-domain, internetarchive,public-domain ", "JACKETT_MOVIE_INDEXERS"),
+    ["public-domain", "internetarchive"],
   );
   assert.throws(
-    () => parseIndexerIds("yts,../all", "JACKETT_MOVIE_INDEXERS"),
+    () => parseIndexerIds("public-domain,../all", "JACKETT_MOVIE_INDEXERS"),
     (error) => error.status === 500 && error.message.includes("JACKETT_MOVIE_INDEXERS"),
   );
 });

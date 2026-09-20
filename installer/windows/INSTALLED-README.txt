@@ -29,7 +29,7 @@ Runtime logs:
 Persistent profiles and watch history:
   %LOCALAPPDATA%\TorPlay\data\torplay.db
 
-Torrent sources are opt-in. Add preconfigured or custom indexers in Settings.
+TorPlay does not include torrent indexers. Add a compatible third-party source in Settings.
 An independently operated Jackett instance can be connected through Settings.
 
 Migration from the source-checkout runtime:
