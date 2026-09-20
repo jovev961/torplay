@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { access, readFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
@@ -68,6 +69,11 @@ test("installed readme points first-time users to browser setup", async () => {
 });
 
 test("local links in the standalone setup documents resolve", async () => {
+  const trackedFiles = execFileSync("git", ["ls-files", "-z"], {
+    cwd: root,
+    encoding: "utf8",
+  }).split("\0").filter(Boolean);
+
   for (const relativePath of ["README.md", "docs/README.md", "docs/windows-deployment.md"]) {
     const contents = await document(relativePath);
     const links = [...contents.matchAll(/\]\(([^)]+)\)/g)].map((match) => match[1]);
@@ -75,9 +81,13 @@ test("local links in the standalone setup documents resolve", async () => {
     for (const link of links) {
       if (/^(?:https?:|mailto:|#)/.test(link)) continue;
       const target = link.split("#", 1)[0];
-      await assert.doesNotReject(
-        () => access(path.resolve(root, path.dirname(relativePath), target)),
-        `${relativePath} links to missing file ${target}`,
+      const trackedTarget = path.relative(
+        root,
+        path.resolve(root, path.dirname(relativePath), target),
+      ).split(path.sep).join("/").replace(/\/$/, "");
+      assert.ok(
+        trackedFiles.some((file) => file === trackedTarget || file.startsWith(`${trackedTarget}/`)),
+        `${relativePath} links to untracked or missing path ${target}`,
       );
     }
   }

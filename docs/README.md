@@ -1,6 +1,6 @@
 # TorPlay Documentation
 
-Use these guides for the current application. Files under [`tasks/`](tasks/) are historical implementation specifications rather than setup instructions.
+Use these guides for the current application.
 
 ## Household owners
 
