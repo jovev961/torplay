@@ -6,7 +6,7 @@ import SourcePanel from "./SourcePanel.js";
 import { releaseTorrentSession, useSourceLookup } from "./useSourceLookup.js";
 import useSavedProgress from "./useSavedProgress.js";
 import { useProfile } from "./ProfileProvider.js";
-import { formatPlaybackTime } from "./HistoryShelf.js";
+import { formatPlaybackTime } from "../lib/history/presentation.js";
 import { findEpisodeFile } from "../lib/video/episode.js";
 import { autoplayReducer } from "../lib/playback/autoplay.js";
 

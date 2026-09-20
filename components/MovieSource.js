@@ -5,7 +5,7 @@ import SourcePanel from "./SourcePanel.js";
 import { useSourceLookup } from "./useSourceLookup.js";
 import useSavedProgress from "./useSavedProgress.js";
 import { useProfile } from "./ProfileProvider.js";
-import { formatPlaybackTime } from "./HistoryShelf.js";
+import { formatPlaybackTime } from "../lib/history/presentation.js";
 
 export default function MovieSource({ movie, initialIntent = null }) {
   const { activeProfile } = useProfile();
