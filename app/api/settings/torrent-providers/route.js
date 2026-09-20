@@ -1,5 +1,13 @@
 import { assertSettingsMutationRequest, assertSameOriginSettingsRequest } from "../../../../lib/settings/security.js";
-import { changeCustomProvider, customProviderHealth, testCustomProvider } from "../../../../lib/settings/torrent-providers.js";
+import {
+  changeCustomProvider,
+  createCardigannProvider,
+  customProviderHealth,
+  removeCardigannProvider,
+  testCustomProvider,
+  updateCardigannProvider,
+} from "../../../../lib/settings/torrent-providers.js";
+import { importDefinition } from "../../../../lib/search/cardigann/definition.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,10 +20,18 @@ export async function POST(request) {
     try { body = await request.json(); } catch { return json({ error: "Request body must be valid JSON." }, 400); }
     if (body?.action === "health") return json({ results: await customProviderHealth({ refresh: body.refresh === true }) });
     assertSettingsMutationRequest(request);
+    if (body?.action === "import-definition") return json(await importDefinition(body.definitionUrl));
+    if (body?.action === "create-cardigann") return json({ providers: await createCardigannProvider(body.provider || {}) });
+    if (body?.action === "update-cardigann") return json({ providers: await updateCardigannProvider(body.provider || {}) });
+    if (body?.action === "remove-cardigann") return json({ providers: await removeCardigannProvider(body.provider || {}) });
     if (body?.action === "test") return json({ capabilities: await testCustomProvider(body.provider || {}) });
     if (!["create", "update", "remove"].includes(body?.action)) return json({ error: "Unknown provider action." }, 400);
     return json({ providers: await changeCustomProvider(body.action, body.provider || {}) });
   } catch (error) {
-    return json({ error: error.status ? error.message : "Provider settings could not be processed." }, error.status || 400);
+    return json({
+      error: error.status ? error.message : "Provider settings could not be processed.",
+      ...(error.code ? { code: error.code } : {}),
+      ...(error.unsupportedFeatures ? { unsupportedFeatures: error.unsupportedFeatures } : {}),
+    }, error.status || 400);
   }
 }
