@@ -6,6 +6,7 @@ import styles from "./SettingsManager.module.css";
 const statusLabels = {
   available: "Available",
   unavailable: "Unavailable",
+  unverified: "Unverified",
   connected: "Available",
   disabled: "Disabled",
   checking: "Checking…",
@@ -36,13 +37,18 @@ async function request(action, provider, refresh = false, extra = {}) {
   const body = await response.json();
   if (!response.ok) {
     const details = body.unsupportedFeatures?.map((item) => `${item.message} (${item.path})`).join(" ");
-    throw new Error([body.error || "Provider request failed.", details].filter(Boolean).join(" "));
+    throw Object.assign(new Error([body.error || "Provider request failed.", details].filter(Boolean).join(" ")), body);
   }
   return body;
 }
 
 function mediaLabel(mediaTypes) {
   return mediaTypes.map((type) => type === "TV" ? "TV Shows" : type).join(" & ");
+}
+
+function settingValues(settings) {
+  return Object.fromEntries(settings.filter((field) => !field.informational)
+    .map((field) => [field.name, field.value ?? field.default ?? (field.type === "checkbox" ? false : "")]));
 }
 
 function IndexerStatus({ status, message }) {
@@ -109,17 +115,38 @@ export default function TorrentIndexerManager({
       const data = await request(action, provider);
       if (action === "test") {
         setMessage(`Connected · ${data.capabilities.mediaTypes.join(" · ")}`);
+      } else if (action === "test-cardigann") {
+        setCustomProviders(data.providers);
+        setHealth((current) => ({
+          ...current,
+          [provider.id]: {
+            provider: provider.id,
+            status: data.verification.status === "verified" ? "connected" : "unavailable",
+            message: data.verification.message,
+            checkedAt: data.verification.checkedAt,
+          },
+        }));
+        setMessage(data.verification.status === "verified" ? "Indexer connection verified." : data.verification.message);
+        await onCustomChanged();
       } else {
+        const addedUnverified = action === "create-cardigann"
+          && data.providers.some((item) => item.verification?.status === "unverified");
         setCustomProviders(data.providers);
         setDraft(null);
         setImportDraft(null);
         setDialogOpen(false);
-        setMessage(action === "remove" ? "Indexer removed." : "Indexer saved.");
+        setMessage(action === "remove" ? "Indexer removed." : addedUnverified ? "Indexer added as unverified." : "Indexer saved.");
         await onCustomChanged();
-        await refreshCustom(true);
+        if (!addedUnverified) await refreshCustom(true);
       }
     } catch (actionError) {
-      setError(actionError.message);
+      if (action === "create-cardigann" && actionError.canAddUnverified) {
+        setImportDraft((current) => ({
+          ...current,
+          verificationFailure: actionError.verificationFailure,
+          confirmationToken: actionError.confirmationToken,
+        }));
+      } else setError(actionError.message);
     } finally {
       setBusy(false);
     }
@@ -134,7 +161,7 @@ export default function TorrentIndexerManager({
       setImportDraft({
         ...data,
         enabled: true,
-        values: Object.fromEntries(data.definition.settings.map((field) => [field.name, field.default ?? (field.type === "checkbox" ? false : "")])),
+        values: settingValues(data.definition.settings),
       });
     } catch (importError) {
       setError(importError.message);
@@ -143,8 +170,31 @@ export default function TorrentIndexerManager({
     }
   }
 
-  async function saveImported() {
-    await act("create-cardigann", { importId: importDraft.importId, settings: importDraft.values, enabled: importDraft.enabled });
+  async function saveImported(addUnverified = false) {
+    await act("create-cardigann", {
+      importId: importDraft.importId,
+      settings: importDraft.values,
+      enabled: importDraft.enabled,
+      ...(addUnverified ? { addUnverified: true, confirmationToken: importDraft.confirmationToken } : {}),
+    });
+  }
+
+  function updateImported(field, value) {
+    setImportDraft((current) => ({
+      ...current,
+      [field]: value,
+      verificationFailure: null,
+      confirmationToken: null,
+    }));
+  }
+
+  function updateImportedSetting(name, value) {
+    setImportDraft((current) => ({
+      ...current,
+      values: { ...current.values, [name]: value },
+      verificationFailure: null,
+      confirmationToken: null,
+    }));
   }
 
   const configuredCount = customProviders.length;
@@ -169,12 +219,12 @@ export default function TorrentIndexerManager({
             const currentHealth = health[provider.id];
             const status = !provider.enabled || !provider.active
               ? "disabled"
-              : currentHealth?.status || "checking";
+              : currentHealth?.status || provider.verification?.status || "checking";
             const statusMessage = !provider.enabled
               ? "Source is disabled."
               : !provider.active
                 ? "Source is excluded by the provider override."
-                : currentHealth?.message || "Checking source availability.";
+                : currentHealth?.message || provider.verification?.message || "Checking source availability.";
             return (
               <article className={styles.sourceCard} key={provider.id}>
                 <div className={styles.sourceCardHeading}>
@@ -183,10 +233,11 @@ export default function TorrentIndexerManager({
                     <div className={styles.sourceCardActions}>
                       <button className={styles.testButton} type="button" disabled={busy} onClick={() => {
                         if (provider.kind === "cardigann") {
-                          setImportDraft({ editId: provider.id, definition: { name: provider.name, settings: provider.settings }, enabled: provider.enabled, values: Object.fromEntries(provider.settings.map((field) => [field.name, field.value ?? (field.type === "checkbox" ? false : "")])) });
+                          setImportDraft({ editId: provider.id, definition: { name: provider.name, categories: provider.categories, settings: provider.settings }, enabled: provider.enabled, values: settingValues(provider.settings) });
                         } else setDraft({ ...provider, apiKey: "" });
                         setDialogOpen(true); setMessage(""); setError("");
                       }}>Edit</button>
+                      {provider.kind === "cardigann" ? <button className={styles.testButton} type="button" disabled={busy} onClick={() => void act("test-cardigann", { id: provider.id })}>Test</button> : null}
                       <button className={styles.testButton} type="button" disabled={busy} onClick={() => void act(provider.kind === "cardigann" ? "update-cardigann" : "update", { id: provider.id, enabled: !provider.enabled })}>{provider.enabled ? "Disable" : "Enable"}</button>
                       <button className={styles.removeButton} type="button" disabled={busy} onClick={() => { if (window.confirm(`Remove ${provider.name}?`)) void act(provider.kind === "cardigann" ? "remove-cardigann" : "remove", { id: provider.id }); }}>Remove</button>
                     </div>
@@ -232,7 +283,7 @@ export default function TorrentIndexerManager({
             {message ? <div className="notice success" role="status">{message}</div> : null}
 
             {importDraft ? (
-              <form onSubmit={(event) => { event.preventDefault(); void (importDraft.editId
+              <form onSubmit={(event) => { event.preventDefault(); if (importDraft.verificationFailure) return; void (importDraft.editId
                 ? act("update-cardigann", { id: importDraft.editId, settings: importDraft.values, enabled: importDraft.enabled })
                 : saveImported()); }}>
                 <div className={styles.definitionPreview}>
@@ -241,38 +292,52 @@ export default function TorrentIndexerManager({
                     <div><dt>Name</dt><dd>{importDraft.definition.name}</dd></div>
                     {importDraft.definition.access ? <div><dt>Access</dt><dd>{accessLabel(importDraft.definition.access)}</dd></div> : null}
                     {importDraft.definition.language ? <div><dt>Language</dt><dd>{languageLabel(importDraft.definition.language)}</dd></div> : null}
-                    {importDraft.definition.mediaTypes?.length ? <div><dt>Categories</dt><dd>{importDraft.definition.mediaTypes.join(", ")}</dd></div> : null}
+                    {importDraft.definition.categories?.length ? <div><dt>Categories</dt><dd>{importDraft.definition.categories.join(", ")}</dd></div> : null}
                     {importDraft.definition.website ? <div><dt>Website</dt><dd className={styles.definitionUrl}>{importDraft.definition.website}</dd></div> : null}
                     {importDraft.definition.sourceUrl ? <div><dt>Definition</dt><dd className={styles.definitionUrl}>{importDraft.definition.sourceUrl}</dd></div> : null}
                   </dl>
-                  {importDraft.definition.settings.length ? (
+                  {importDraft.definition.settings.some((field) => !field.informational) ? (
                     <p className={styles.definitionRequirement}>Configuration is required. Complete the fields below before adding this indexer.</p>
                   ) : (
                     <p className={`${styles.definitionRequirement} ${styles.definitionReady}`}>✓ No account configuration required</p>
                   )}
                 </div>
                 <div className={styles.providerForm}>
-                  {importDraft.definition.settings.length ? <h3>Configuration required</h3> : null}
+                  {importDraft.definition.settings.some((field) => !field.informational) ? <h3>Configuration required</h3> : null}
                   {importDraft.definition.settings.map((field) => (
-                    <div className={styles.field} key={field.name}>
+                    field.informational ? (
+                      <p className={styles.definitionRequirement} key={field.name}>{field.label}</p>
+                    ) : <div className={styles.field} key={field.name}>
                       <label htmlFor={`cardigann-${field.name}`}>{field.label}</label>
                       {field.type === "checkbox" ? (
-                        <label className={styles.checkboxLabel}><input id={`cardigann-${field.name}`} type="checkbox" checked={Boolean(importDraft.values[field.name])} disabled={busy} onChange={(event) => setImportDraft({ ...importDraft, values: { ...importDraft.values, [field.name]: event.target.checked } })} /> Enabled</label>
+                        <label className={styles.checkboxLabel}><input id={`cardigann-${field.name}`} type="checkbox" checked={Boolean(importDraft.values[field.name])} disabled={busy} onChange={(event) => updateImportedSetting(field.name, event.target.checked)} /> Enabled</label>
                       ) : field.type === "select" ? (
-                        <select id={`cardigann-${field.name}`} required={field.required} disabled={busy} value={importDraft.values[field.name] || ""} onChange={(event) => setImportDraft({ ...importDraft, values: { ...importDraft.values, [field.name]: event.target.value } })}>
+                        <select id={`cardigann-${field.name}`} required={field.required} disabled={busy} value={importDraft.values[field.name] || ""} onChange={(event) => updateImportedSetting(field.name, event.target.value)}>
                           {!field.required ? <option value="">Default</option> : null}
                           {Object.entries(field.options || {}).map(([value, label]) => <option value={value} key={value}>{label}</option>)}
                         </select>
                       ) : (
-                        <div className={styles.inputRow}><input id={`cardigann-${field.name}`} type={field.secret ? "password" : "text"} required={field.required && !field.configured} disabled={busy} value={importDraft.values[field.name] || ""} placeholder={field.configured ? "Leave blank to keep existing value" : ""} autoComplete={field.secret ? "new-password" : "off"} onChange={(event) => setImportDraft({ ...importDraft, values: { ...importDraft.values, [field.name]: event.target.value } })} /></div>
+                        <div className={styles.inputRow}><input id={`cardigann-${field.name}`} type={field.secret ? "password" : "text"} required={field.required && !field.configured} disabled={busy} value={importDraft.values[field.name] || ""} placeholder={field.configured ? "Leave blank to keep existing value" : ""} autoComplete={field.secret ? "new-password" : "off"} onChange={(event) => updateImportedSetting(field.name, event.target.value)} /></div>
                       )}
                     </div>
                   ))}
-                  <label className={styles.checkboxLabel}><input type="checkbox" checked={importDraft.enabled} disabled={busy} onChange={(event) => setImportDraft({ ...importDraft, enabled: event.target.checked })} /> Enabled</label>
-                  <div className={styles.sourceActions}>
-                    <button className={styles.saveButton} type="submit" disabled={busy}>{busy ? "Verifying…" : importDraft.editId ? "Verify and save" : "Add Indexer"}</button>
-                    <button className={styles.testButton} type="button" disabled={busy} onClick={() => importDraft.editId ? closeDialog() : setImportDraft(null)}>Cancel</button>
-                  </div>
+                  <label className={styles.checkboxLabel}><input type="checkbox" checked={importDraft.enabled} disabled={busy} onChange={(event) => updateImported("enabled", event.target.checked)} /> Enabled</label>
+                  {importDraft.verificationFailure ? (
+                    <div className={styles.verificationPrompt} role="alert">
+                      <strong>Could not verify the indexer connection.</strong>
+                      <p>The definition is valid and compatible with TorPlay, but the source could not currently be verified.</p>
+                      <p>{importDraft.verificationFailure.message}</p>
+                      <div className={styles.sourceActions}>
+                        <button className={styles.testButton} type="button" disabled={busy} onClick={() => updateImported("verificationFailure", null)}>Cancel</button>
+                        <button className={styles.saveButton} type="button" disabled={busy} onClick={() => void saveImported(true)}>{busy ? "Adding…" : "Add Anyway"}</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className={styles.sourceActions}>
+                      <button className={styles.saveButton} type="submit" disabled={busy}>{busy ? "Verifying…" : importDraft.editId ? "Verify and save" : "Add Indexer"}</button>
+                      <button className={styles.testButton} type="button" disabled={busy} onClick={() => importDraft.editId ? closeDialog() : setImportDraft(null)}>Cancel</button>
+                    </div>
+                  )}
                 </div>
               </form>
             ) : draft ? (

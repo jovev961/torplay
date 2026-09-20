@@ -189,7 +189,8 @@
   background: #5a4219;
 }
 
-.unavailable {
+.unavailable,
+.unverified {
   color: #ffe2a6;
   background: #5a4219;
 }
@@ -508,6 +509,22 @@
 
 .definitionReady {
   color: #b5f0cb;
+}
+
+.verificationPrompt {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid #765b2b;
+  border-radius: 10px;
+  color: #ffe2a6;
+  background: #261f13;
+}
+
+.verificationPrompt p {
+  margin: 0;
+  color: #d8c8a8;
+  font-size: 0.82rem;
 }
 
 .checkboxLabel {
