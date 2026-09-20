@@ -1,131 +1,118 @@
-# Windows Deployment
+# Windows Installation and First Run
 
-The recommended production deployment is the per-user TorPlay installer. It bundles the production Next.js application and Node.js runtime, starts TorPlay automatically at login, and opens locally at `http://localhost` without requiring npm, a source checkout, or environment-file setup. Household devices use `http://torplay.local` after setup.
+The recommended way to run TorPlay is the self-contained, per-user Windows installer. It includes the production application, Node.js runtime, SQLite native module, FFmpeg, FFprobe, tray controls, and runtime supervisor. Normal installation does not require developer tools, a source checkout, Docker Desktop, Jackett, or FlareSolverr.
 
 ## Requirements
 
 - Windows 10 or 11 x64
-- A private home network that permits device-to-device multicast traffic
-- A TMDB API Read Access Token
+- A private home network for access from other household devices
+- A free TMDB account and TMDB API Read Access Token
+- Permission to download and view the content you select
 
-Docker Desktop is not required. TorPlay does not install, start, stop, configure, or monitor external provider applications.
+## Download TorPlay
+
+1. Open the official [TorPlay Releases page](https://github.com/jovev961/torplay/releases).
+2. Open the newest release you want to install. Beta versions are marked **Pre-release**.
+3. Download both files:
+   - `TorPlay-Setup-<version>.exe`
+   - `TorPlay-Setup-<version>.exe.sha256`
+4. Keep the two files together until you have verified the installer.
+
+The checksum file lets you confirm that the installer was downloaded intact. In PowerShell, change to the download folder and run:
+
+```powershell
+(Get-FileHash -Algorithm SHA256 .\TorPlay-Setup-<version>.exe).Hash
+```
+
+Compare the displayed hash with the first value in the `.sha256` file. Do not run the installer if they differ.
+
+TorPlay beta installers may not yet be code-signed, so Windows SmartScreen can show an **Unknown publisher** warning. Continue only when the file came from the official TorPlay Releases page and its checksum matches.
 
 ## Install
 
-1. Run `TorPlay-Setup-<version>.exe` as the Windows account that should host TorPlay.
-2. Approve the administrator prompt that creates the Private-network firewall rules.
-3. Choose **Open TorPlay** from the Start menu, or open [http://localhost](http://localhost).
-4. Follow the setup screen to verify and save the TMDB credential.
-5. Open [http://torplay.local](http://torplay.local) on other household devices.
+1. Run `TorPlay-Setup-<version>.exe` as the Windows account that will host TorPlay.
+2. Choose the installation location or accept the per-user default.
+3. Approve the administrator prompt for the Private-network firewall rules. The application itself remains a per-user installation.
+4. Finish installation. TorPlay waits for its packaged runtime to become ready, starts the tray, and opens [http://localhost/setup](http://localhost/setup).
 
-Optional Torznab sources can be added from Settings.
+No command prompt, environment file, package manager, or manual service installation is required.
 
-## Optional Jackett Indexers
+## First-time setup
 
-TorPlay can use an independently operated **Jackett** instance alongside its built-in providers. Jackett requires its own configured indexers to contribute results and remains outside the TorPlay runtime lifecycle.
+TMDB supplies TorPlay's movie and TV catalog metadata. It is the only required external API service.
 
-If Jackett is available on the TorPlay computer, open its dashboard in your browser:
+### Get a TMDB API Read Access Token
 
-`http://localhost:9117`
+1. Create or sign in to a [TMDB account](https://www.themoviedb.org/signup).
+2. Read TMDB's official [API getting-started guide](https://developer.themoviedb.org/docs/getting-started).
+3. Open [TMDB API settings](https://www.themoviedb.org/settings/api) and complete TMDB's API registration if prompted.
+4. Copy the long **API Read Access Token** shown in the API settings page. Do not use the shorter v3 API key.
+5. Paste the token into TorPlay's setup page and choose **Verify and finish**. TorPlay verifies it before saving.
 
-### 1. Add authorized indexers
+The credential is stored only on the TorPlay computer. Provider settings can be changed only through `localhost`, not from another household device.
 
-In Jackett:
+### Add torrent sources
 
-1. Click **Add indexer**.
-2. Search for each indexer listed below.
-3. Click the **+** button to add it.
-4. Complete any configuration requested by Jackett.
-5. Use **Test** to verify that the indexer is working.
+After setup, open **Settings → Torrent Sources** and add one or more preconfigured providers. Knaben supports general, movie, and TV searches; YTS is movie-focused; EZTV is TV-focused. These built-in sources require no API keys and can be enabled or disabled independently.
 
-Examples commonly used for the listed media types include:
+Custom Torznab sources and an independently operated Jackett instance are optional. They are not installed or managed by TorPlay. See [Torrent providers](torrent-providers.md) when you intentionally want to connect one.
 
-**Movies**
+### Optional API services
 
-* YTS
-* LimeTorrents
-* TorrentDownload
-* TorrentDownloads
-* Knaben
-* The Pirate Bay
+These services enhance specific features but are not required for normal operation:
 
-**TV Shows**
+| Service | Purpose | Official setup |
+| --- | --- | --- |
+| OMDb | IMDb ratings on catalog cards | [OMDb API key](https://www.omdbapi.com/apikey.aspx) |
+| OpenSubtitles | Additional subtitle results | [OpenSubtitles API consumers](https://www.opensubtitles.com/en/consumers) |
+| SubDL | Additional subtitle results | [SubDL API panel](https://subdl.com/panel/api) |
+| Jackett | Optional external Torznab/indexer bridge | [Jackett project](https://github.com/Jackett/Jackett) |
 
-* EZTV
-* LimeTorrents
-* TorrentDownload
-* Knaben
-* KickAssTorrents.ws
-* The Pirate Bay
+Add optional credentials from [http://localhost/settings](http://localhost/settings). Torrent and embedded subtitles continue to work without external subtitle keys.
 
-Some indexers are used for both movies and TV shows, so they only need to be added to Jackett once.
+## Open TorPlay
 
-### 2. Verify the indexers
+- On the TorPlay computer: [http://localhost](http://localhost)
+- On another device connected to the same private household network: [http://torplay.local](http://torplay.local)
 
-The configured indexers should show as working in the Jackett dashboard. If an indexer fails its Jackett test, TorPlay may not be able to retrieve results from it.
+TorPlay starts automatically when the installing Windows account signs in. It runs in the background through the notification-area tray icon; no terminal window needs to remain open.
 
-Indexer availability can change over time. If one of the recommended indexers is unavailable in your region or stops working, TorPlay can continue using the other configured indexers.
+## System-tray controls
 
-### 3. Configure the Jackett API key
+Right-click the TorPlay tray icon:
 
-Jackett displays its API key in the Jackett dashboard.
+- **Open TorPlay** opens the local application.
+- **Open Logs** opens the runtime log or its folder.
+- **Start TorPlay** starts a stopped runtime.
+- **Restart TorPlay** performs a clean stop followed by a verified start.
+- **Retry TorPlay** appears after a persistent runtime error and performs a clean full restart.
+- **Stop TorPlay** cleanly stops the background runtime while leaving the tray available.
+- **Start with Windows** enables or disables automatic startup for the current account.
+- **Exit** cleanly stops TorPlay and closes the tray.
 
-Enter this key under Settings → Services → Jackett. The default Jackett address is `http://localhost:9117`. Use Test connection to verify it.
+The tray reports **Starting**, **Running**, **Recovering**, **Stopped**, or **Error**. The Start menu also contains **Open TorPlay**, **TorPlay Tray**, **TorPlay Status**, **Start or Restart TorPlay**, and **Stop TorPlay** shortcuts.
 
-### 4. TorPlay indexer configuration
+## Logs and basic troubleshooting
 
-TorPlay searches all configured Jackett indexers by default. Advanced owners can set `JACKETT_MOVIE_INDEXERS` and `JACKETT_SHOW_INDEXERS` in the configuration file to restrict each media type to comma-separated Jackett IDs.
-
-### Troubleshooting
-
-If Jackett validates in Settings but movies or TV shows return no torrent sources:
-
-1. Open `http://localhost:9117`.
-2. Confirm that your authorized indexers have been added.
-3. Run **Test** for the affected indexers.
-4. Confirm that `JACKETT_API_KEY` is correct.
-5. Confirm that the indexer names configured in `JACKETT_MOVIE_INDEXERS` and `JACKETT_SHOW_INDEXERS` match the indexers you have enabled.
-
-Only use TorPlay and configured indexers to access content you are authorized to access.
-
-
-## Startup behavior
-
-TorPlay registers a per-user Windows login entry rather than a Windows service:
+The main runtime log is:
 
 ```text
-Windows login
-    -> TorPlay tray application
-    -> existing TorPlay launcher
-    -> start the private Next.js server
-    -> expose port 80 to the private LAN
-    -> advertise torplay.local with mDNS
+%LOCALAPPDATA%\TorPlay\logs\torplay.log
 ```
 
-The tray is a lightweight Windows frontend for the existing supervisor. It does not host another web server or torrent runtime. The supervisor owns the application server, port 80 proxy, mDNS advertisement, runtime lock, and status/control files. Startup waits until that complete runtime reports ready, while restart always completes shutdown before starting a replacement. After startup, two consecutive health failures trigger automatic recovery of the affected component. Recovery is limited to three attempts per component in 60 seconds; persistent failures remain in an Error state instead of looping.
+Installer and uninstaller logs are copied into the same directory. The runtime log rotates at 5 MiB and retains three backups.
 
-## System tray
+Start with these checks:
 
-Right-click the TorPlay notification-area icon to see the current Running/Stopped state and use these commands:
+- If the tray shows **Error**, open Logs, correct the reported problem, and choose **Retry TorPlay**.
+- If setup reappears, confirm you entered the TMDB API Read Access Token rather than the shorter v3 key.
+- If `torplay.local` does not open, confirm the Windows network is **Private** and that guest Wi-Fi/client isolation is disabled.
+- If the firewall prompt was declined, rerun the installer and approve the Private-network rules.
+- If a torrent has no reachable peers, try another authorized source; TorPlay cannot repair a dead swarm.
 
-- **Open TorPlay** opens `http://localhost`.
-- **Open Logs** opens the current runtime log, or its folder before the first log is created.
-- **Start TorPlay** appears while stopped; **Restart TorPlay** appears while running or recovering; **Retry TorPlay** appears after a persistent error and performs a clean full restart.
-- **Stop TorPlay** gracefully stops the existing supervisor.
-- **Start with Windows** adds or removes the current user's login entry.
-- **Exit** cleanly stops the runtime before closing the tray.
+See [Troubleshooting](troubleshooting.md) for provider, LAN, port, playback, profile, and source-runtime diagnostics.
 
-The status is refreshed when the menu opens, so the tray does not continuously poll the runtime or health endpoint. Only one tray process is allowed per signed-in Windows session. Windows logout or shutdown uses the same stop path. The launcher also forwards termination signals to the supervisor, and the application server watches its supervisor so it does not remain orphaned if that supervisor is terminated unexpectedly.
-
-## Start menu
-
-- **Open TorPlay** opens the editable local owner address at `http://localhost`.
-- **TorPlay Tray** restores the notification-area frontend after it was closed with Exit.
-- **TorPlay Status** reports application, LAN proxy, and mDNS state, plus the last failure and important file paths.
-- **Start or Restart TorPlay** gracefully stops an existing runtime and launches it again.
-- **Stop TorPlay** requests a graceful shutdown and uses the recorded TorPlay process tree only as a fallback.
-
-## Installed files and data
+## Data locations
 
 Application files are replaceable:
 
@@ -133,98 +120,41 @@ Application files are replaceable:
 %LOCALAPPDATA%\Programs\TorPlay
 ```
 
-Writable state is separate and persistent:
+User data is separate:
 
 ```text
-Configuration  %LOCALAPPDATA%\TorPlay\config\torplay.env
-Database       %LOCALAPPDATA%\TorPlay\data\torplay.db
+Configuration  %LOCALAPPDATA%\TorPlay\config
+Profiles/data  %LOCALAPPDATA%\TorPlay\data
 Cache          %LOCALAPPDATA%\TorPlay\cache
 Runtime state  %LOCALAPPDATA%\TorPlay\runtime
 Logs           %LOCALAPPDATA%\TorPlay\logs
 ```
 
-The runtime log rotates at 5 MiB and retains three backups. Installer and uninstaller logs are copied into the same log directory. External provider applications manage their own configuration and data.
+TorPlay preserves the user-data directory during normal upgrades and uninstall.
 
-## Firewall and LAN access
+## Update or reinstall
 
-Setup creates only these inbound rules for the bundled Node executable:
+1. Download the newer installer and checksum from [TorPlay Releases](https://github.com/jovev961/torplay/releases).
+2. Verify the checksum.
+3. Run the newer installer normally.
 
-| Protocol | Port | Profile | Remote scope |
-| --- | ---: | --- | --- |
-| TCP | 80 | Private | Local subnet |
-| UDP | 5353 | Private | Local subnet |
-
-The internal Next.js port remains bound to loopback. The public proxy accepts only loopback and private-address clients. TorPlay does not disable Windows Firewall, configure port forwarding, or use UPnP.
-
-Windows must classify the home network as **Private**. Guest Wi-Fi or access-point isolation can prevent both LAN access and mDNS discovery.
-
-## Configuration changes
-
-Open [http://localhost/settings](http://localhost/settings) to update provider settings. TMDB and optional torrent-source changes activate immediately. Advanced runtime settings can be edited in `%LOCALAPPDATA%\TorPlay\config\torplay.env`; see [Configuration](configuration.md).
-
-## Upgrade and reinstall
-
-Run the newer installer normally. It stops the existing runtime, replaces application/runtime files, retains `%LOCALAPPDATA%\TorPlay`, and starts TorPlay again. The installer never overwrites an existing `torplay.env`.
-
-Older TorPlay versions may have created Jackett or FlareSolverr containers and volumes. Upgrades leave these legacy Docker artifacts untouched but no longer start, configure, or monitor them. Remove them manually in Docker Desktop only if you no longer need their data.
+Setup stops the existing tray and runtime, replaces application files, preserves `%LOCALAPPDATA%\TorPlay`, restarts TorPlay, and opens the application. Existing `torplay.env` settings are not overwritten.
 
 ## Uninstall
 
-Uninstall closes the tray, stops the runtime, and removes application/runtime files, login startup registration, Start-menu shortcuts, and TorPlay-created firewall rules.
+Open **Windows Settings → Apps → Installed apps**, find **TorPlay**, and choose **Uninstall**.
 
-It preserves `%LOCALAPPDATA%\TorPlay` by default. Delete it manually only if profiles, history, configuration, and logs are no longer wanted. Legacy Docker artifacts from older TorPlay versions remain independently managed and are not changed by uninstall.
+Uninstall closes the tray, stops the runtime, removes the application, login-startup entry, Start-menu shortcuts, and TorPlay-created firewall rules. Profiles, history, configuration, cache, and logs remain under `%LOCALAPPDATA%\TorPlay` so a later reinstall can reuse them. Delete that folder manually only when you intentionally want to remove all TorPlay user data.
 
-## Migrate from the source runtime
+## Existing source-runtime data
 
-1. Stop the old TorPlay runtime.
-2. Copy `persistent-data\torplay.db` and any `torplay.db-wal` or `torplay.db-shm` sidecars into `%LOCALAPPDATA%\TorPlay\data`.
-3. Copy provider values from `.env.local` into `%LOCALAPPDATA%\TorPlay\config\torplay.env`.
-4. Choose **Start or Restart TorPlay**.
+To migrate an existing source installation:
 
-## Build the installer
+1. Stop both TorPlay runtimes.
+2. Copy `persistent-data\torplay.db` and any `torplay.db-wal` or `torplay.db-shm` files into `%LOCALAPPDATA%\TorPlay\data`.
+3. Copy any provider values you still need from `.env.local` into `%LOCALAPPDATA%\TorPlay\config\torplay.env`.
+4. Start TorPlay from the tray or Start menu.
 
-Release builds must run on Windows x64 so SQLite, FFmpeg, and FFprobe native files match the target platform.
+## Developer and release builds
 
-### GitHub Actions
-
-The **Windows installer** workflow runs only manually: open GitHub Actions, select **Windows installer**, choose **Run workflow**, and select the branch to package. Pull requests and tags do not start installer builds. When manually running against a tag, its name must match `v<package-version>`.
-
-Before merging a pull request into `develop`, run relevant tests, the full test suite, lint, and a production build locally. GitHub Actions checks are not required for merging. Promotion to `main` also requires explicit release approval and manual testing.
-
-Each successful run retains one workflow artifact for 14 days containing the versioned installer and its SHA-256 file. The workflow verifies the checksum before upload. Download both files and compare the published digest before distributing the installer. This workflow does not create or modify a GitHub Release.
-
-### Local Windows build
-
-Requirements:
-
-- Node.js and npm for the release workstation only
-- Inno Setup 7.1.0
-- Network access to download the pinned Node.js runtime
-
-```powershell
-npm install
-npm run release:windows
-```
-
-If Inno Setup is installed in a custom location, set `INNO_SETUP_COMPILER` to the full `ISCC.exe` path. The release command runs tests and lint, creates the standalone production build, bundles the supervisor, verifies Node.js 24.21.0 with its pinned SHA-256, validates native runtime files, and writes:
-
-```text
-dist\windows\TorPlay-Setup-<version>.exe
-dist\windows\TorPlay-Setup-<version>.exe.sha256
-```
-
-The release command rejects non-Windows and non-x64 hosts instead of producing an incompatible installer.
-
-## Manual source runtime
-
-For development or owner diagnostics from a source checkout:
-
-```powershell
-npm run build
-npm run firewall:home
-npm run start:home
-```
-
-This path requires the development Node/npm installation and is not the normal household deployment. The installer is preferred.
-
-See [Troubleshooting](troubleshooting.md) when startup or LAN discovery fails.
+Building from source is not part of normal installation. Contributors and release maintainers should use [Development](development.md), which contains Node.js prerequisites, source commands, quality checks, and Windows installer build instructions.

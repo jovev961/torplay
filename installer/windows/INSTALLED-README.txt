@@ -1,8 +1,10 @@
-2TorPlay for Windows
+TorPlay for Windows
 ===================
 
-Open TorPlay at http://localhost after TorPlay finishes starting.
-The first launch guides you through TMDB setup without editing files.
+TorPlay opens http://localhost/setup after installation finishes starting.
+Get the required TMDB API Read Access Token from:
+  https://www.themoviedb.org/settings/api
+The first launch verifies and saves it without requiring an environment file.
 Household devices can use http://torplay.local after setup is complete.
 
 System tray:

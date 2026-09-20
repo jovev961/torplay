@@ -38,6 +38,28 @@ Setup requires only TMDB. Torrent sources are opt-in; add preconfigured native p
 | `npm test` | Run Node.js unit and integration tests |
 | `npm run lint` | Run ESLint |
 
+## Build the Windows installer
+
+Windows release builds must run on Windows x64 so SQLite, FFmpeg, and FFprobe native files match the target platform. The release workstation needs Node.js/npm, Inno Setup 7.1.0, and network access to download the pinned Node.js runtime.
+
+Run the **Windows installer** GitHub Actions workflow manually against the branch or tag to package. Pull requests and pushes do not trigger it. A tag build must use `v<package-version>`. Successful runs retain the versioned installer and SHA-256 file as one artifact for 14 days; the workflow does not create or update a GitHub Release automatically.
+
+For a local Windows x64 build:
+
+```powershell
+npm install
+npm run release:windows
+```
+
+Set `INNO_SETUP_COMPILER` to the full `ISCC.exe` path when Inno Setup is installed outside its standard locations. The release command runs tests and lint, builds standalone Next.js output, bundles the supervisor, verifies the pinned Node runtime, validates native files, and writes:
+
+```text
+dist\windows\TorPlay-Setup-<version>.exe
+dist\windows\TorPlay-Setup-<version>.exe.sha256
+```
+
+The command rejects non-Windows and non-x64 hosts rather than producing an incompatible installer. Release maintainers upload the verified files to [TorPlay Releases](https://github.com/jovev961/torplay/releases) for end users.
+
 ## Data during development
 
 | Path | Purpose | Persistence |
