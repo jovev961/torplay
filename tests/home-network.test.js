@@ -35,7 +35,7 @@ test("the public frontend accepts only loopback and private LAN addresses", () =
   ]) {
     assert.equal(isPrivateClientAddress(address), true, address);
   }
-  for (const address of ["8.8.8.8", "172.32.0.1", "203.0.113.4", "2001:4860:4860::8888", ""]) {
+  for (const address of ["8.8.8.8", "172.32.0.1", "203.0.113.4", "2001:4860:4860::8888", "fcorp.example", ""]) {
     assert.equal(isPrivateClientAddress(address), false, address);
   }
 });

@@ -5,7 +5,7 @@ import {
 } from "../../../lib/settings/config.js";
 import {
   assertSettingsMutationRequest,
-  isLoopbackSettingsRequest,
+  isLocalNetworkSettingsRequest,
 } from "../../../lib/settings/security.js";
 import { getSettingsSnapshot } from "../../_lib/settings-snapshot.js";
 import { clearSettingsValidation } from "../../../lib/settings/validation.js";
@@ -25,7 +25,7 @@ function errorResponse(error) {
 
 export async function GET(request) {
   try {
-    const snapshot = await getSettingsSnapshot({ canEdit: isLoopbackSettingsRequest(request) });
+    const snapshot = await getSettingsSnapshot({ canEdit: isLocalNetworkSettingsRequest(request) });
     return Response.json(snapshot, { headers: { "Cache-Control": "no-store" } });
   } catch {
     return Response.json(

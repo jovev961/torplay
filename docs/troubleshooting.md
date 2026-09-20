@@ -19,22 +19,22 @@ TorPlay automatically retries an application, LAN proxy, or mDNS component after
 - Confirm your independently operated Jackett instance is running.
 - Open [http://localhost:9117](http://localhost:9117).
 - Confirm at least one Jackett indexer is configured and working.
-- Open [http://localhost/settings](http://localhost/settings) and confirm the Jackett API key matches the value shown by Jackett.
+- Open [http://torplay.local/settings](http://torplay.local/settings) or Settings through the displayed LAN address and confirm the Jackett API key matches the value shown by Jackett.
 - Confirm explicitly listed movie/show indexer IDs exist in Jackett.
 - Jackett settings activate immediately after TorPlay verifies and saves them.
 - Indexers that require separate anti-bot tooling may fail, but they do not prevent TorPlay or other providers from operating.
 
 ## Metadata is unavailable
 
-Open [http://localhost/settings](http://localhost/settings) on the TorPlay computer and check TMDB's connection status. The token must be the TMDB API Read Access Token, not the 32-character v3 API key. Provider credentials can also be maintained in `.env.local` for development or `%LOCALAPPDATA%\TorPlay\config\torplay.env` for an installed runtime.
+Open [http://torplay.local/settings](http://torplay.local/settings), Settings through the displayed LAN address, or [http://localhost/settings](http://localhost/settings) on the TorPlay computer and check TMDB's connection status. The token must be the TMDB API Read Access Token, not the 32-character v3 API key. Provider credentials can also be maintained in `.env.local` for development or `%LOCALAPPDATA%\TorPlay\config\torplay.env` for an installed runtime.
 
 ## Setup keeps reopening
 
-Open [http://localhost/setup](http://localhost/setup) on the TorPlay computer. Setup requires a valid TMDB API Read Access Token rather than TMDB's v3 key. Built-in source search does not need Jackett or Docker. Test optional custom Torznab endpoints and API keys under Settings → Torrent Sources.
+Open [http://torplay.local/setup](http://torplay.local/setup), the displayed private LAN address, or [http://localhost/setup](http://localhost/setup) on the TorPlay computer. Setup requires a valid TMDB API Read Access Token rather than TMDB's v3 key. Built-in source search does not need Jackett or Docker. Test optional custom Torznab endpoints and API keys under Settings → Torrent Sources.
 
-## Settings are read-only
+## Settings cannot be changed
 
-Provider settings can be changed only from `localhost` on the TorPlay computer. This protects credentials from other household devices. Open [http://localhost/settings](http://localhost/settings), not `http://torplay.local/settings`, to edit them. Values supplied by the host environment are also read-only in the page and must be changed at their source.
+Provider settings can be changed from [http://torplay.local/settings](http://torplay.local/settings), the displayed private LAN address, or [http://localhost/settings](http://localhost/settings) on the TorPlay computer. Requests from outside the private local network and values supplied by the host environment remain read-only.
 
 Provider credential changes are used by new requests without a restart.
 
