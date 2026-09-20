@@ -21,7 +21,7 @@ Open TorPlay and complete the browser setup; a `.env.local` file and restart are
 - TorPlay: [http://localhost:3000](http://localhost:3000)
 - Jackett: [http://localhost:9117](http://localhost:9117)
 
-Setup requires only TMDB. Torrent sources are opt-in; add supported native providers or custom Torznab sources in Settings. The Jackett dashboard is available only when you start Jackett yourself or enable managed services.
+Setup requires only TMDB. Torrent sources are opt-in; add preconfigured native providers or custom Torznab sources in Settings. The Jackett dashboard is available only when you start Jackett yourself or enable managed services.
 
 ## Development runtime
 
