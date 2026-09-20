@@ -134,4 +134,6 @@ Public external response data uses a best-effort SQLite cache. TMDB search resul
 - `npm run start:home` adds the Windows supervisor, port 80, and mDNS to a source checkout.
 - The Windows installer packages a standalone Next.js build and bundled Node runtime around the same supervisor without Docker Desktop or containers.
 
+The Windows supervisor health-checks the application server, LAN proxy, and mDNS advertisement after startup. It restarts a failed component independently when safe, but permits only three recovery attempts per component in a 60-second window. A component that keeps failing is left in an explicit error state for manual retry instead of entering an uncontrolled restart loop.
+
 All variants preserve the same API, playback, profile, search, and persistence behavior.

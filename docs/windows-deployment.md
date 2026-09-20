@@ -102,7 +102,7 @@ Windows login
     -> advertise torplay.local with mDNS
 ```
 
-The tray is a lightweight Windows frontend for the existing supervisor. It does not host another web server or torrent runtime. The supervisor owns the application server, port 80 proxy, mDNS advertisement, runtime lock, and status/control files. Startup waits until that complete runtime reports ready, while restart always completes shutdown before starting a replacement.
+The tray is a lightweight Windows frontend for the existing supervisor. It does not host another web server or torrent runtime. The supervisor owns the application server, port 80 proxy, mDNS advertisement, runtime lock, and status/control files. Startup waits until that complete runtime reports ready, while restart always completes shutdown before starting a replacement. After startup, two consecutive health failures trigger automatic recovery of the affected component. Recovery is limited to three attempts per component in 60 seconds; persistent failures remain in an Error state instead of looping.
 
 ## System tray
 
@@ -110,7 +110,7 @@ Right-click the TorPlay notification-area icon to see the current Running/Stoppe
 
 - **Open TorPlay** opens `http://localhost`.
 - **Open Logs** opens the current runtime log, or its folder before the first log is created.
-- **Start TorPlay** appears while stopped; **Restart TorPlay** appears while running.
+- **Start TorPlay** appears while stopped; **Restart TorPlay** appears while running or recovering; **Retry TorPlay** appears after a persistent error and performs a clean full restart.
 - **Stop TorPlay** gracefully stops the existing supervisor.
 - **Start with Windows** adds or removes the current user's login entry.
 - **Exit** cleanly stops the runtime before closing the tray.
@@ -121,7 +121,7 @@ The status is refreshed when the menu opens, so the tray does not continuously p
 
 - **Open TorPlay** opens the editable local owner address at `http://localhost`.
 - **TorPlay Tray** restores the notification-area frontend after it was closed with Exit.
-- **TorPlay Status** reports TorPlay and mDNS state, plus the last failure and important file paths.
+- **TorPlay Status** reports application, LAN proxy, and mDNS state, plus the last failure and important file paths.
 - **Start or Restart TorPlay** gracefully stops an existing runtime and launches it again.
 - **Stop TorPlay** requests a graceful shutdown and uses the recorded TorPlay process tree only as a fallback.
 

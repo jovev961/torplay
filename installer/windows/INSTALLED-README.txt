@@ -8,6 +8,7 @@ Household devices can use http://torplay.local after setup is complete.
 System tray:
   Right-click the TorPlay notification-area icon to open TorPlay or its logs,
   start/restart/stop the runtime, and control whether the tray starts at login.
+  Persistent component failures show Error and can be retried with a clean restart.
   Exit cleanly stops the background runtime before closing the tray.
 
 Configuration:

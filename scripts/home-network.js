@@ -95,6 +95,9 @@ export async function startReverseProxy({
 
   return {
     server,
+    isHealthy() {
+      return server.listening;
+    },
     async stop() {
       await closeServer(server);
       proxy.removeAllListeners?.();
@@ -149,6 +152,9 @@ export async function startMdnsAdvertisement({
   let stopped = false;
   return {
     service,
+    isHealthy() {
+      return !stopped && (!service.serviceState || service.serviceState === "announced");
+    },
     async stop() {
       if (stopped) return;
       stopped = true;
