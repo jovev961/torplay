@@ -28,6 +28,21 @@ class FakeChild extends EventEmitter {
   }
 }
 
+test("native development starts and stops without invoking Docker", async () => {
+  const next = new FakeChild();
+  const calls = [];
+  const supervisor = await startDevelopment({
+    environment: {},
+    spawnProcess: (command, args) => { calls.push({ command, args }); return next; },
+    spawnSyncProcess: () => { throw new Error("Docker must not run"); },
+    configureJackettProcess: () => { throw new Error("Jackett must not be configured"); },
+  });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].args.at(-1), "dev");
+  supervisor.stop();
+  assert.equal(next.killed, true);
+});
+
 test("starts Docker services before Next and stops them without removing containers", async () => {
   const calls = [];
   const next = new FakeChild();
@@ -45,6 +60,7 @@ test("starts Docker services before Next and stops them without removing contain
   };
 
   const supervisor = await startDevelopment({
+    environment: { TORPLAY_MANAGED_JACKETT: "true" },
     spawnProcess,
     spawnSyncProcess,
     configureJackettProcess: () => ({ changed: false, hasOmdbKey: false }),
@@ -73,7 +89,7 @@ test("does not start Next and cleans up when Docker service startup fails", asyn
   };
 
   await assert.rejects(
-    () => startDevelopment({ spawnProcess, spawnSyncProcess, dockerCommand: "docker" }),
+    () => startDevelopment({ environment: { TORPLAY_MANAGED_JACKETT: "true" }, spawnProcess, spawnSyncProcess, dockerCommand: "docker" }),
     /Development services failed with exit code 1/,
   );
   assert.deepEqual(calls[1], { command: "docker", args: COMPOSE_STOP_ARGS });
@@ -93,6 +109,7 @@ test("cleans up Docker services when Jackett configuration fails", async () => {
 
   await assert.rejects(
     () => startDevelopment({
+      environment: { TORPLAY_MANAGED_JACKETT: "true" },
       spawnProcess,
       spawnSyncProcess,
       configureJackettProcess: () => {

@@ -60,6 +60,15 @@ test("setup validates both candidates before saving and returns no credentials",
     const source = await readFile(filename, "utf8");
     assert.match(source, /^TMDB_API_TOKEN=private-tmdb-token$/m);
     assert.match(source, /^JACKETT_API_KEY=private-jackett-key$/m);
+    delete process.env.JACKETT_API_KEY;
+    delete process.env.JACKETT_URL;
+    globalThis.fetch = async (url) => {
+      assert.match(String(url), /themoviedb/);
+      return new Response("{}");
+    };
+    const nativeSetup = await POST(setupRequest({ tmdb: {} }));
+    assert.equal(nativeSetup.status, 200);
+    assert.deepEqual((await nativeSetup.json()).results.map((item) => item.provider), ["tmdb"]);
   } finally {
     globalThis.fetch = previous.fetch;
     for (const [key, value] of [

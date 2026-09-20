@@ -18,7 +18,7 @@ test("setup readiness treats blanks and template placeholders as missing", async
   const missing = await getSetupStatus({
     environment: { TMDB_API_TOKEN: "replace-me", JACKETT_API_KEY: "" },
   });
-  assert.deepEqual(missing, { ready: false, missingProviderIds: ["tmdb", "jackett"] });
+  assert.deepEqual(missing, { ready: false, missingProviderIds: ["tmdb"] });
 
   const ready = await getSetupStatus({
     environment: {

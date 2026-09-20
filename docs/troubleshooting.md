@@ -44,7 +44,7 @@ Open [http://localhost/settings](http://localhost/settings) on the TorPlay compu
 
 ## Setup keeps reopening
 
-Open [http://localhost/setup](http://localhost/setup) on the TorPlay computer. TorPlay saves nothing until both TMDB and Jackett pass live validation. Check that Docker and Jackett are running, copy the API Read Access Token rather than TMDB's v3 key, and verify the Jackett API key. A Jackett indexer is not required to finish setup, but source searches need at least one authorized working indexer.
+Open [http://localhost/setup](http://localhost/setup) on the TorPlay computer. Setup requires a valid TMDB API Read Access Token rather than TMDB's v3 key. Built-in source search does not need Jackett or Docker. Test optional custom Torznab endpoints and API keys under Settings → Torrent Sources; managed Jackett additionally requires Docker and `TORPLAY_MANAGED_JACKETT=true`.
 
 ## Settings are read-only
 

@@ -57,35 +57,12 @@ Name: "{group}\Stop TorPlay"; Filename: "{sys}\wscript.exe"; Parameters: """{app
 [Run]
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\runtime\windows-firewall.ps1"" -NodePath ""{app}\runtime\node.exe"" -PublicPort 80"; Verb: runas; Flags: shellexec waituntilterminated; StatusMsg: "Configuring the Private-network firewall rules..."
 Filename: "{sys}\wscript.exe"; Parameters: """{app}\runtime\torplay-launcher.vbs"" start"; WorkingDir: "{app}"; Flags: nowait skipifsilent; StatusMsg: "Starting TorPlay..."
-Filename: "https://docs.docker.com/desktop/setup/install/windows-install/"; Description: "Download Docker Desktop (required by TorPlay)"; Flags: postinstall shellexec skipifsilent; Check: DockerMissing
 
 [UninstallRun]
 Filename: "{app}\runtime\node.exe"; Parameters: """{app}\runtime\windows-control.mjs"" stop"; WorkingDir: "{app}"; Flags: runhidden waituntilterminated skipifdoesntexist; RunOnceId: "StopTorPlay"
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\runtime\windows-firewall.ps1"" -Remove"; Verb: runas; Flags: shellexec waituntilterminated skipifdoesntexist; RunOnceId: "RemoveTorPlayFirewall"
 
 [Code]
-var
-  DockerWarningShown: Boolean;
-
-function DockerMissing: Boolean;
-begin
-  Result :=
-    (not FileExists(ExpandConstant('{localappdata}\Programs\DockerDesktop\Docker Desktop.exe'))) and
-    (not FileExists(ExpandConstant('{commonpf64}\Docker\Docker\Docker Desktop.exe')));
-end;
-
-function NextButtonClick(CurPageID: Integer): Boolean;
-begin
-  Result := True;
-  if (CurPageID = wpReady) and DockerMissing and (not DockerWarningShown) then begin
-    DockerWarningShown := True;
-    MsgBox(
-      'Docker Desktop was not found. TorPlay will be installed, but it cannot start Jackett or FlareSolverr until Docker Desktop is installed and opened once.' + #13#10 + #13#10 +
-      'Setup will offer the official Docker Desktop download when installation finishes.',
-      mbInformation, MB_OK);
-  end;
-end;
-
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
   ResultCode: Integer;

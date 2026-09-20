@@ -6,6 +6,7 @@ import { resolveDockerCommand } from "./docker-paths.js";
 import { controlEndpoint, sendControlCommand } from "./runtime-control.js";
 import { readRuntimeStatus } from "./runtime-status.js";
 import { installedEnvironment, installedPaths } from "./windows-paths.js";
+import { readLocalEnvironment } from "./jackett-config.js";
 
 function processIsRunning(pid) {
   if (!Number.isInteger(pid) || pid < 1) return false;
@@ -99,18 +100,22 @@ export async function runtimeStatus({
   const snapshot = readRuntimeStatus(paths.statusPath);
   const running = processIsRunning(snapshot?.pid);
   const dockerCommand = resolveDockerCommand({ platform: "win32", environment: installedEnv });
-  let docker = "ERROR";
-  try {
-    checkDockerStatus(dockerCommand, spawnSyncProcess, installedEnv);
-    docker = "OK";
-  } catch {
-    docker = "ERROR";
+  const configured = { ...readLocalEnvironment(installedEnv.TORPLAY_CONFIG_PATH), ...installedEnv };
+  const managed = configured.TORPLAY_MANAGED_JACKETT === "true";
+  let docker = managed ? "ERROR" : "DISABLED";
+  if (managed) {
+    try {
+      checkDockerStatus(dockerCommand, spawnSyncProcess, installedEnv);
+      docker = "OK";
+    } catch {
+      docker = "ERROR";
+    }
   }
 
   const components = {
     Docker: docker,
-    Jackett: "ERROR",
-    FlareSolverr: "ERROR",
+    Jackett: managed ? "ERROR" : "DISABLED",
+    FlareSolverr: managed ? "ERROR" : "DISABLED",
     TorPlay: "ERROR",
     "mDNS": running && snapshot?.components?.["mDNS"] === "OK" ? "OK" : "ERROR",
   };

@@ -4,7 +4,7 @@
 
 - Node.js 20.9 or newer
 - npm
-- Docker with the `docker compose` command
+- Docker with `docker compose` only when opting into managed Jackett
 - Permission to download and view the selected content
 
 TorPlay requires a persistent Node.js process. It is not designed for serverless or multi-instance deployment.
@@ -21,11 +21,11 @@ Open TorPlay and complete the browser setup; a `.env.local` file and restart are
 - TorPlay: [http://localhost:3000](http://localhost:3000)
 - Jackett: [http://localhost:9117](http://localhost:9117)
 
-Configure authorized Jackett indexers in its dashboard, then copy its API key into TorPlay's setup screen. Required provider changes activate immediately.
+Setup requires only TMDB. Built-in torrent sources work immediately; add optional Torznab sources in Settings. The Jackett dashboard is available only when you start Jackett yourself or enable managed services.
 
 ## Development runtime
 
-`npm run dev` performs the following work:
+`npm run dev` starts Next.js without Docker by default. With `TORPLAY_MANAGED_JACKETT=true` in `.env.local`, it performs the following work:
 
 1. Starts FlareSolverr and Jackett using the existing `docker-compose.yml`.
 2. Waits for both services to become healthy.
@@ -33,13 +33,13 @@ Configure authorized Jackett indexers in its dashboard, then copy its API key in
 4. Preserves an existing Jackett OMDb key unless `OMDB_API_KEY` is configured.
 5. Starts the Next.js development server.
 
-Press Ctrl+C to stop Next.js and the two Compose services. The containers and named volumes are retained; the script never uses `docker compose down -v`.
+Press Ctrl+C to stop Next.js and, when managed mode is enabled, the two Compose services. The containers and named volumes are retained; the script never uses `docker compose down -v`.
 
 ## Commands
 
 | Command | Purpose |
 | --- | --- |
-| `npm run dev` | Start Jackett, FlareSolverr, and Next.js development |
+| `npm run dev` | Start Next.js; Docker services are opt-in |
 | `npm run build` | Create the standard production build |
 | `npm start` | Run the standard production build |
 | `npm run start:home` | Run the manual Windows LAN supervisor after a build |

@@ -1,8 +1,8 @@
 2TorPlay for Windows
 ===================
 
-Open TorPlay at http://localhost after Docker Desktop and TorPlay finish starting.
-The first launch guides you through TMDB and Jackett setup without editing files.
+Open TorPlay at http://localhost after TorPlay finishes starting.
+The first launch guides you through TMDB setup without editing files.
 Household devices can use http://torplay.local after setup is complete.
 
 Configuration:
@@ -16,8 +16,9 @@ Runtime logs:
 Persistent profiles and watch history:
   %LOCALAPPDATA%\TorPlay\data\torplay.db
 
-Docker Desktop is required. If it was installed after TorPlay, start Docker Desktop,
-accept its agreement, then restart Windows or use Start/Restart TorPlay in the Start menu.
+Built-in sources need no Docker or Jackett. Add optional Torznab sources in Settings.
+For managed Jackett only, install Docker Desktop and set TORPLAY_MANAGED_JACKETT=true
+in torplay.env, then use Start or Restart TorPlay. Existing Jackett credentials are retained.
 
 Migration from the source-checkout runtime:
   1. Stop the old TorPlay runtime.

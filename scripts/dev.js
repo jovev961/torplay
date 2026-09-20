@@ -2,7 +2,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { configureJackett } from "./jackett-config.js";
+import { configureJackett, readLocalEnvironment } from "./jackett-config.js";
 import { MAC_DOCKER_PATH, resolveDockerCommand } from "./docker-paths.js";
 
 export {
@@ -59,19 +59,23 @@ export async function startDevelopment({
   spawnSyncProcess = spawnSync,
   configureJackettProcess = configureJackett,
   dockerCommand = resolveDockerCommand(),
+  environment = { ...readLocalEnvironment(), ...process.env },
 } = {}) {
   const composeOptions = dockerSpawnOptions(dockerCommand);
-  try {
-    const composeUp = spawnProcess(dockerCommand, COMPOSE_START_ARGS, composeOptions);
-    await waitForSuccess(composeUp, "Development services");
-    configureJackettProcess({
-      dockerCommand,
-      spawnSyncProcess,
-      processEnvironment: composeOptions.env ?? process.env,
-    });
-  } catch (error) {
-    spawnSyncProcess(dockerCommand, COMPOSE_STOP_ARGS, composeOptions);
-    throw error;
+  const managed = environment.TORPLAY_MANAGED_JACKETT === "true";
+  if (managed) {
+    try {
+      const composeUp = spawnProcess(dockerCommand, COMPOSE_START_ARGS, composeOptions);
+      await waitForSuccess(composeUp, "Development services");
+      configureJackettProcess({
+        dockerCommand,
+        spawnSyncProcess,
+        processEnvironment: composeOptions.env ?? process.env,
+      });
+    } catch (error) {
+      spawnSyncProcess(dockerCommand, COMPOSE_STOP_ARGS, composeOptions);
+      throw error;
+    }
   }
 
   const nextBin = require.resolve("next/dist/bin/next");
@@ -79,6 +83,7 @@ export async function startDevelopment({
   const nextProcess = spawnProcess(process.execPath, [nextBin, "dev"], {
     stdio: "inherit",
     detached: isolateNextProcess,
+    env: environment,
   });
   let stopped = false;
 
@@ -98,8 +103,10 @@ export async function startDevelopment({
       }
     }
 
-    const result = spawnSyncProcess(dockerCommand, COMPOSE_STOP_ARGS, composeOptions);
-    requireSuccessfulResult(result, "Development services shutdown");
+    if (managed) {
+      const result = spawnSyncProcess(dockerCommand, COMPOSE_STOP_ARGS, composeOptions);
+      requireSuccessfulResult(result, "Development services shutdown");
+    }
   }
 
   return { nextProcess, stop };

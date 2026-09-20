@@ -216,7 +216,7 @@ test("the supervisor starts in order and shuts down only services it started", a
   const runtime = await startHomeRuntime({
     platform: "win32",
     cwd: process.cwd(),
-    environment: { PATH: process.env.PATH },
+    environment: { PATH: process.env.PATH, TORPLAY_MANAGED_JACKETT: "true" },
     dockerCommand: "docker",
     spawnProcess,
     spawnSyncProcess,
@@ -255,4 +255,29 @@ test("the supervisor starts in order and shuts down only services it started", a
   ]);
   assert.deepEqual(next.signals, []);
   assert.equal(events.some((event) => event === "compose-stop:jackett"), false);
+});
+
+test("native Windows startup and shutdown do not invoke Docker", async () => {
+  const next = new FakeChild();
+  const calls = [];
+  const runtime = await startHomeRuntime({
+    platform: "win32", environment: {}, buildExists: () => true,
+    spawnProcess: (_command, args) => {
+      calls.push(args);
+      if (args.includes("/T")) {
+        queueMicrotask(() => { next.exitCode = 0; next.emit("exit", 0, null); });
+        return new FakeChild(0);
+      }
+      return next;
+    },
+    spawnSyncProcess: () => { throw new Error("Docker must not be called"); },
+    waitForDockerProcess: () => { throw new Error("Docker must not be started"); },
+    fetchProcess: async () => ({ ok: true }),
+    checkPortProcess: async () => {}, acquireLockProcess: async () => async () => {},
+    startProxyProcess: async () => ({ stop: async () => {} }),
+    startMdnsProcess: async () => ({ stop: async () => {} }),
+    statusReporter: { write() {} }, log() {},
+  });
+  await runtime.stop();
+  assert.equal(calls.some((args) => args.includes("compose")), false);
 });

@@ -494,55 +494,60 @@ export async function startHomeRuntime({
     await checkPortProcess(config.port, config.host);
     await checkPortProcess(config.publicPort, config.publicHost);
 
-    const waitSeconds = Number(environment.TORPLAY_DOCKER_WAIT_SECONDS || 0);
-    const dockerVersion = await waitForDockerProcess({
-      dockerCommand,
-      spawnSyncProcess,
-      spawnProcess,
-      environment,
-      timeoutMs: Number.isFinite(waitSeconds) && waitSeconds > 0 ? waitSeconds * 1_000 : 0,
-      dockerDesktopCommand,
-      delayProcess,
-      log,
-    });
-    reporter.write({ components: { Docker: "OK" } });
-    log(`[TorPlay] Docker OK (${dockerVersion}).`);
-    const runningBefore = runningComposeServices({ dockerCommand, spawnSyncProcess, environment });
-
-    try {
-      await runCommand(
-        spawnProcess,
+    if (environment.TORPLAY_MANAGED_JACKETT === "true") {
+      const waitSeconds = Number(environment.TORPLAY_DOCKER_WAIT_SECONDS || 0);
+      const dockerVersion = await waitForDockerProcess({
         dockerCommand,
-        COMPOSE_START_ARGS,
-        { stdio: "inherit", env: environment, windowsHide: true },
-        "Docker services",
-      );
-    } finally {
-      try {
-        const runningAfter = runningComposeServices({ dockerCommand, spawnSyncProcess, environment });
-        newlyStartedServices = REQUIRED_SERVICES.filter(
-          (service) => runningAfter.has(service) && !runningBefore.has(service),
-        );
-      } catch {
-        newlyStartedServices = REQUIRED_SERVICES.filter((service) => !runningBefore.has(service));
-      }
-    }
-
-    configureJackettProcess({
-      dockerCommand,
-      spawnSyncProcess,
-      environment,
-      processEnvironment: environment,
-    });
-    for (const service of REQUIRED_SERVICES) {
-      const health = composeServiceHealth(service, { dockerCommand, spawnSyncProcess, environment });
-      if (health !== "healthy" && health !== "running") {
-        throw new Error(`${service} is ${health || "not healthy"}.`);
-      }
-      reporter.write({
-        components: { [service === "jackett" ? "Jackett" : "FlareSolverr"]: "OK" },
+        spawnSyncProcess,
+        spawnProcess,
+        environment,
+        timeoutMs: Number.isFinite(waitSeconds) && waitSeconds > 0 ? waitSeconds * 1_000 : 0,
+        dockerDesktopCommand,
+        delayProcess,
+        log,
       });
-      log(`[TorPlay] ${service === "jackett" ? "Jackett" : "FlareSolverr"} ready.`);
+      reporter.write({ components: { Docker: "OK" } });
+      log(`[TorPlay] Docker OK (${dockerVersion}).`);
+      const runningBefore = runningComposeServices({ dockerCommand, spawnSyncProcess, environment });
+
+      try {
+        await runCommand(
+          spawnProcess,
+          dockerCommand,
+          COMPOSE_START_ARGS,
+          { stdio: "inherit", env: environment, windowsHide: true },
+          "Docker services",
+        );
+      } finally {
+        try {
+          const runningAfter = runningComposeServices({ dockerCommand, spawnSyncProcess, environment });
+          newlyStartedServices = REQUIRED_SERVICES.filter(
+            (service) => runningAfter.has(service) && !runningBefore.has(service),
+          );
+        } catch {
+          newlyStartedServices = REQUIRED_SERVICES.filter((service) => !runningBefore.has(service));
+        }
+      }
+
+      configureJackettProcess({
+        dockerCommand,
+        spawnSyncProcess,
+        environment,
+        processEnvironment: environment,
+      });
+      for (const service of REQUIRED_SERVICES) {
+        const health = composeServiceHealth(service, { dockerCommand, spawnSyncProcess, environment });
+        if (health !== "healthy" && health !== "running") {
+          throw new Error(`${service} is ${health || "not healthy"}.`);
+        }
+        reporter.write({
+          components: { [service === "jackett" ? "Jackett" : "FlareSolverr"]: "OK" },
+        });
+        log(`[TorPlay] ${service === "jackett" ? "Jackett" : "FlareSolverr"} ready.`);
+      }
+
+    } else {
+      reporter.write({ components: { Docker: "DISABLED", Jackett: "DISABLED", FlareSolverr: "DISABLED" } });
     }
 
     const server = serverStart(environment, config);
@@ -601,8 +606,10 @@ export async function startHomeRuntime({
     const networkUrl = formatHttpUrl(config.publicHostname, config.publicPort);
     log("");
     log("TorPlay       OK");
-    log("Jackett       OK");
-    log("FlareSolverr  OK");
+    if (environment.TORPLAY_MANAGED_JACKETT === "true") {
+      log("Jackett       OK");
+      log("FlareSolverr  OK");
+    }
     log(`Port ${String(config.publicPort).padEnd(9)}OK`);
     log("mDNS          OK");
     log("");

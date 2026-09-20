@@ -36,7 +36,7 @@ and hasMagnet. Requested playback context is stored separately from release meta
 Knaben, YTS, and EZTV are enabled by default and can be enabled or disabled from
 **Settings → Torrent Sources**. Their selection is stored as the comma-separated
 `TORPLAY_NATIVE_PROVIDERS` value. At least one native provider must remain enabled
-unless Jackett is configured. Jackett is included separately when its URL and
+unless a custom source or Jackett is active. Jackett is included separately when its URL and
 non-placeholder API key are configured.
 
 `TORPLAY_SEARCH_PROVIDERS` remains an advanced full-provider override. Set it to
@@ -74,4 +74,10 @@ JSON remain isolated by the shared provider runner.
 No mirror discovery or automatic anti-bot workaround is attempted.
 Only search/download content you are authorized to access.
 
-Additional indexers, Prowlarr setup, and ranking improvements remain separate work.
+## Custom Torznab providers
+
+Use Settings → Torrent Sources → Add Torznab Provider. Enter a name, the complete API endpoint (for example `http://localhost:9696/1/api`), and its API key if required. Do not include query parameters or credentials in the URL. Capabilities determine Movies/TV support, and a minimal search verifies access before connection settings are saved. Empty search results are valid.
+
+Custom providers can be edited, enabled, disabled, or removed. Health is checked on load and refreshed manually. Disabled providers make no requests. Credentials and endpoint URLs remain server-side, except that localhost editors can see the configured endpoint. Redirects are rejected to prevent credential forwarding.
+
+Enabled custom providers join the existing provider runner and share filtering, deduplication, ranking, and failure isolation. A full `TORPLAY_SEARCH_PROVIDERS` override includes a custom provider only when its stable `custom-...` ID is listed. The ID is stored in the private configuration file. Capabilities constrain the search modes and parameters used.

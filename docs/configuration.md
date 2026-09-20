@@ -7,7 +7,7 @@ TorPlay configuration is server-only. Never expose provider keys, Jackett downlo
 - Development and source runtime: `.env.local` when advanced manual configuration is desired
 - Installed Windows runtime: `%LOCALAPPDATA%\TorPlay\config\torplay.env`
 
-On a fresh launch, TorPlay redirects provider-dependent pages to **Setup**. Setup validates TMDB and Jackett and saves both together before opening the catalog; no configuration file or restart is required. Afterwards, open **Settings** to manage native torrent sources, TMDB, Jackett, OMDb, OpenSubtitles, and SubDL. Changes are permitted only through `localhost` on the TorPlay computer; household/LAN browsers can see secret-free provider health but cannot edit settings. A blank secret input keeps the configured value, while **Remove** explicitly deletes it.
+On a fresh launch, TorPlay redirects provider-dependent pages to **Setup** to validate and save TMDB. Built-in torrent sources need no external indexer service. Afterwards, open **Settings** to manage built-in and custom Torznab sources, optional Jackett, metadata, and subtitles. Changes are permitted only through `localhost` on the TorPlay computer; household/LAN browsers can see safe provider health but cannot edit settings. A blank secret input keeps the configured value, while **Remove** explicitly deletes it.
 
 TorPlay stores Settings changes atomically in the runtime's configuration file and restricts its permissions where the operating system supports that. Credentials supplied by the host environment remain read-only. Most provider changes take effect immediately. Updating OMDb requires **Start or Restart TorPlay** so Jackett can receive the new value. Do not commit real credentials.
 
@@ -16,8 +16,8 @@ TorPlay stores Settings changes atomically in the runtime's configuration file a
 | Variable | Required | Default | Description |
 | --- | --- | --- | --- |
 | `TMDB_API_TOKEN` | Yes | None | TMDB API Read Access Token used for metadata. A v3 API key is not accepted here. |
-| `JACKETT_URL` | Yes for source search | `http://localhost:9117` in templates | Jackett base URL. Must use HTTP or HTTPS. |
-| `JACKETT_API_KEY` | Yes for source search | None | API key shown in the Jackett dashboard. |
+| `JACKETT_URL` | Only for optional Jackett | `http://localhost:9117` in templates | Jackett base URL. Must use HTTP or HTTPS. |
+| `JACKETT_API_KEY` | Only for optional Jackett | None | API key shown in the Jackett dashboard. |
 
 ## Search and Jackett
 
@@ -26,8 +26,11 @@ TorPlay stores Settings changes atomically in the runtime's configuration file a
 | `JACKETT_MOVIE_INDEXERS` | Empty | Comma-separated Jackett IDs used for movies. Empty searches all configured indexers. |
 | `JACKETT_SHOW_INDEXERS` | Empty | Comma-separated Jackett IDs used for shows. Empty searches all configured indexers. |
 | `OMDB_API_KEY` | Unset | Optional server-side OMDb key used for IMDb ratings on catalog cards and copied into Jackett for IMDb-only aggregate-search fallback. Ratings are omitted when absent; TorPlay preserves Jackett's existing key. |
-| `TORPLAY_NATIVE_PROVIDERS` | `knaben,yts,eztv` | Native providers enabled for search. Managed by Settings; an empty value is accepted only when Jackett is active. |
-| `TORPLAY_SEARCH_PROVIDERS` | Unset | Advanced full-provider override using IDs from `knaben,yts,eztv,jackett`. When set, native controls are read-only. |
+| `TORPLAY_NATIVE_PROVIDERS` | `knaben,yts,eztv` | Built-in providers enabled for search. All may be disabled if an enabled custom source or Jackett remains active. |
+| `TORPLAY_SEARCH_PROVIDERS` | Unset | Full-provider override using built-in IDs, `jackett`, and stable `custom-...` IDs. Native controls become read-only; unlisted custom sources are excluded. |
+| `TORPLAY_MANAGED_JACKETT` | `false` | Set exactly `true` to opt into managed Docker/Jackett/FlareSolverr startup. Restart the launcher after changing. |
+
+Custom Torznab sources are stored in `torrent-providers.json` beside `.env.local` or the installed `torplay.env`. This private file contains API keys; keep it out of source control and include it only in private backups. Settings writes it atomically with restrictive file permissions where supported. New endpoints and changed credentials must pass capabilities and search validation before saving; edits take effect immediately. Existing Jackett credentials are not migrated or duplicated.
 
 Every explicitly named Jackett indexer must already be enabled and configured in Jackett. TorPlay queries providers independently and retains results from healthy sources when another fails. Native-provider availability checks use lightweight API requests, are cached for one minute, and can be refreshed from Settings.
 

@@ -120,7 +120,7 @@ export default function SetupManager() {
         );
       })}
       <div className={styles.finishRow}>
-        <p>TorPlay will test both services, save them together, and open the catalog.</p>
+        <p>TorPlay will verify TMDB and open the catalog. Built-in torrent sources are ready to use; optional sources can be added in Settings.</p>
         <button type="submit" disabled={busy}>{busy ? "Verifying connections…" : "Verify and finish"}</button>
       </div>
     </form>

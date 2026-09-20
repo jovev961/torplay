@@ -10,3 +10,4 @@ dist/
 npm-debug.log*
 docs/tasks
 .DS_Store
+torrent-providers.json
