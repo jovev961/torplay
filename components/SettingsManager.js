@@ -8,6 +8,7 @@ import {
   settingsValidationRequest,
 } from "../lib/settings/navigation.js";
 import styles from "./SettingsManager.module.css";
+import NetworkAccess from "./NetworkAccess.js";
 import TorrentIndexerManager from "./TorrentIndexerManager.js";
 
 const statusLabels = {
@@ -372,6 +373,7 @@ export default function SettingsManager() {
             </dl>
             <RuntimeStatus components={snapshot.runtime.components} />
           </div>
+          <NetworkAccess />
         </section> : null}
 
         {selectedSection === "services" ? <section className={styles.settingsSection} id="services">

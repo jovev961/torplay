@@ -53,6 +53,8 @@ If necessary, set `TORPLAY_MDNS_INTERFACE` to the Windows interface name or loca
 
 Ordinary browser hostname navigation does not use the DNS-SD service port. A custom `TORPLAY_PUBLIC_PORT` therefore requires the port in the URL; the installer is designed for port 80.
 
+If a TV or mobile device cannot resolve `torplay.local`, open **Settings → General → Network Access** on the TorPlay computer and use the displayed LAN IPv4 URL or scan its QR code. The address is detected dynamically and may change after switching Wi-Fi, Ethernet, or DHCP networks.
+
 ## Firewall or LAN access fails
 
 The installer creates Private-profile rules for TCP 80 and UDP 5353, scoped to the bundled Node executable and local subnet. Re-run the installer if those rules were declined or removed.

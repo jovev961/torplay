@@ -107,7 +107,9 @@ Profile responses include `subtitlePreferences`. Update them with `PUT /api/prof
 
 ## Settings
 
-The Settings page separates General, Services, Torrent Sources, Subtitles, Playback, and About information. It explains each external provider, links to its official credential instructions, and checks configured services or enabled native torrent sources only when their relevant section is viewed.
+The Settings page separates General, Services, Torrent Sources, Subtitles, Playback, and About information. General shows the current `torplay.local` and detected private-LAN URLs with copy actions and a QR code for devices that cannot resolve mDNS. It explains each external provider, links to its official credential instructions, and checks configured services or enabled native torrent sources only when their relevant section is viewed.
+
+- `GET /api/network-access` dynamically reports the current preferred hostname and usable LAN IPv4 URL without persisting the detected address.
 
 - `GET /api/settings` returns secret-free configuration and runtime status. Non-secret editable values are returned only to a localhost request.
 - `PATCH /api/settings` updates one service or the enabled native-provider IDs from a same-origin JSON request on localhost only.
