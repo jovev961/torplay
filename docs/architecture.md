@@ -12,7 +12,9 @@ Next.js pages and API routes
         |
         +--> TMDB metadata and catalog discovery
         +--> SQLite profiles, history, and progress
-        +--> Torrent search service --> Jackett adapter --> indexers / FlareSolverr
+        +--> Torrent search service --> native JSON providers
+        |                          +--> custom Torznab providers
+        |                          +--> optional Jackett adapter
         +--> WebTorrent session manager --> torrent swarm
         +--> subtitle providers and torrent sidecars
         +--> native Range stream or FFmpeg-prepared playback
@@ -28,8 +30,8 @@ This boundary keeps the reusable APIs suitable for another trusted client, such 
 | Styling | Plain CSS |
 | Persistence | SQLite through `better-sqlite3` |
 | Metadata | TMDB API |
-| Source search | Jackett Torznab API, Fast XML Parser |
-| Search support | Docker Compose, Jackett, FlareSolverr, optional OMDb |
+| Source search | Provider-independent adapters, native JSON APIs, Torznab XML through Fast XML Parser |
+| Search support | Native providers, optional custom Torznab/Jackett, optional managed Docker/FlareSolverr, optional OMDb |
 | Torrent runtime | WebTorrent and `parse-torrent` |
 | Playback | HTML5 video, HTTP Range, HLS.js |
 | Conversion | FFmpeg and FFprobe static packages |
@@ -60,9 +62,9 @@ The browser-facing application never imports or controls the torrent client dire
 
 ## Search flow
 
-TMDB provides title metadata and discovery. Selecting a movie or episode calls the server-side torrent search service. Provider selection is isolated in `lib/search/provider.js`; Jackett remains the active adapter, owning its configuration, Torznab HTTP requests, XML parsing, and partial indexer failures.
+TMDB provides title metadata and discovery. Selecting a movie or episode calls the server-side torrent search service. Provider selection is isolated in `lib/search/provider.js`. It selects configured adapters for the native YTS, Knaben, and EZTV providers, generic custom Torznab sources, and optional Jackett integration.
 
-Adapters implement the [common provider contract](torrent-providers.md), with normalized candidates and independent failure handling. Shared processing validates search context, filters titles and episodes, deduplicates, and ranks candidates using the existing rules. The service allocates expiring result IDs and validates streamability before returning an explicit public projection. Magnets and credential-bearing download URLs remain in the server-side result store. Search routes and automatic next-episode playback use the same service without importing adapters. Native providers remain separate follow-up work.
+Adapters implement the [common provider contract](torrent-providers.md) and execute concurrently. Their candidates are normalized while individual provider failures remain isolated. Shared processing validates search context, filters titles and episodes, deduplicates, and ranks candidates using the existing rules. The service allocates expiring result IDs and validates streamability before returning an explicit public projection. Magnets and credential-bearing download URLs remain in the server-side result store. Search routes and automatic next-episode playback use the same service without importing adapters. When no provider is available, the application directs the user to provider settings instead of requiring Jackett.
 
 ## Torrent lifecycle
 
@@ -88,13 +90,13 @@ Subtitles may come from torrent sidecars, embedded streams, OpenSubtitles, or Su
 
 SQLite stores local profiles, progress, history, and stale-writer protection. Media identity is based on profile plus TMDB title/episode identity rather than torrent identity. Writer tokens and monotonically increasing sequences prevent older players or delayed requests from overwriting current progress.
 
-Temporary torrent files, subtitle caches, and conversion outputs are separate from persistent data. Docker named volumes retain Jackett and FlareSolverr configuration.
+Temporary torrent files, subtitle caches, and conversion outputs are separate from persistent data. Custom Torznab configuration stays in a private server-side file. When managed Jackett is explicitly enabled, Docker named volumes retain Jackett and FlareSolverr configuration.
 
 ## Runtime variants
 
-- `npm run dev` starts Compose dependencies and the Next.js development server.
+- `npm run dev` starts the Next.js development server without Docker by default. Setting `TORPLAY_MANAGED_JACKETT=true` also starts the managed Compose services.
 - `npm start` starts a conventional production Next.js build.
-- `npm run start:home` adds the Windows supervisor, Docker orchestration, port 80, and mDNS to a source checkout.
-- The Windows installer packages a standalone Next.js build and bundled Node runtime around the same supervisor and Compose architecture.
+- `npm run start:home` adds the Windows supervisor, port 80, and mDNS to a source checkout. Managed Compose services start only when `TORPLAY_MANAGED_JACKETT=true`.
+- The Windows installer packages a standalone Next.js build and bundled Node runtime around the same native-first supervisor; managed Jackett remains an explicit option.
 
 All variants preserve the same API, playback, profile, search, and persistence behavior.
