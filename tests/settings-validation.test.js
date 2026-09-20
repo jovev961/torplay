@@ -98,7 +98,7 @@ test("checks native provider availability with lightweight documented API reques
   clearSettingsValidation();
   const requests = [];
   const results = await validateSettingsProviders(["knaben", "yts", "eztv"], {
-    environment: {},
+    environment: { TORPLAY_NATIVE_PROVIDERS: "knaben,yts,eztv" },
     fetchImpl: async (url, options) => {
       const address = new URL(url);
       requests.push({ address, options });
@@ -152,11 +152,15 @@ test("reports malformed or failed native health responses as unavailable", async
     async () => response({}, { status: 503 }),
     async () => { throw new Error("offline"); },
   ]) {
-    const [health] = await validateSettingsProviders(["knaben"], { fetchImpl, useCache: false });
+    const [health] = await validateSettingsProviders(["knaben"], {
+      environment: { TORPLAY_NATIVE_PROVIDERS: "knaben" },
+      fetchImpl,
+      useCache: false,
+    });
     assert.equal(health.status, "unavailable");
   }
   const [invalidEndpoint] = await validateSettingsProviders(["knaben"], {
-    environment: { KNABEN_API_URL: "file:///not-http" },
+    environment: { KNABEN_API_URL: "file:///not-http", TORPLAY_NATIVE_PROVIDERS: "knaben" },
     fetchImpl: async () => response({ hits: [] }),
     useCache: false,
   });

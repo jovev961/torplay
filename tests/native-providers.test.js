@@ -121,6 +121,7 @@ test("native-only movie and TV discovery never contacts Jackett", async () => {
 });
 
 test("native provider settings select a subset while the advanced override remains authoritative", () => {
+  assert.deepEqual(configuredProviders({}).map((item) => item.id), []);
   assert.deepEqual(
     configuredProviders({ TORPLAY_NATIVE_PROVIDERS: "yts,eztv" }).map((item) => item.id),
     ["yts", "eztv"],

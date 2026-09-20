@@ -33,11 +33,11 @@ and hasMagnet. Requested playback context is stored separately from release meta
 
 ## Native providers
 
-Knaben, YTS, and EZTV are enabled by default and can be enabled or disabled from
-**Settings → Torrent Sources**. Their selection is stored as the comma-separated
-`TORPLAY_NATIVE_PROVIDERS` value. At least one native provider must remain enabled
-unless a custom source or Jackett is active. Jackett is included separately when its URL and
-non-placeholder API key are configured.
+Knaben, YTS, and EZTV are available through **Settings → Torrent Sources → Add
+Supported Indexer**. None is enabled by default. Adding or removing a supported
+indexer updates the comma-separated `TORPLAY_NATIVE_PROVIDERS` value. An empty
+selection is valid. Jackett is included separately when its URL and non-placeholder
+API key are configured.
 
 `TORPLAY_SEARCH_PROVIDERS` remains an advanced full-provider override. Set it to
 a comma-separated allowlist of `knaben,yts,eztv,jackett`; while present, the
@@ -76,7 +76,7 @@ Only search/download content you are authorized to access.
 
 ## Custom Torznab providers
 
-Use Settings → Torrent Sources → Add Torznab Provider. Enter a name, the complete API endpoint (for example `http://localhost:9696/1/api`), and its API key if required. Do not include query parameters or credentials in the URL. Capabilities determine Movies/TV support, and a minimal search verifies access before connection settings are saved. Empty search results are valid.
+Use Settings → Torrent Sources → Add Custom Indexer. Enter a name, the complete Torznab API endpoint (for example `http://localhost:9696/1/api`), and its API key if required. Do not include query parameters or credentials in the URL. Capabilities determine Movies/TV support, and a minimal search verifies access before connection settings are saved. Empty search results are valid.
 
 Custom providers can be edited, enabled, disabled, or removed. Health is checked on load and refreshed manually. Disabled providers make no requests. Credentials and endpoint URLs remain server-side, except that localhost editors can see the configured endpoint. Redirects are rejected to prevent credential forwarding.
 

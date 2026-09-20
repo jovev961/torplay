@@ -42,18 +42,24 @@ test("custom provider changes persist atomically, redact secrets, and preserve k
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
-test("custom providers count toward the last effective source and health is cached", async () => {
+test("custom providers may be the only source, may be disabled, and cache health", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "torplay-custom-"));
   const environment = { TORPLAY_CONFIG_PATH: path.join(directory, "config.env"), TORPLAY_NATIVE_PROVIDERS: "" };
   try {
     const [created] = await changeCustomProvider("create", values, { environment, fetchImpl });
-    await assert.rejects(changeCustomProvider("remove", { id: created.id }, { environment }), /at least one/);
-    await assert.rejects(changeCustomProvider("update", { id: created.id, enabled: false }, { environment }), /at least one/);
+    await changeCustomProvider("update", { id: created.id, enabled: false }, { environment });
+    assert.equal(readCustomProviders(environment)[0].enabled, false);
+    let disabledCalls = 0;
+    assert.equal((await customProviderHealth({ environment, fetchImpl: async () => { disabledCalls++; } }))[0].status, "disabled");
+    assert.equal(disabledCalls, 0);
+    await changeCustomProvider("update", { id: created.id, enabled: true }, { environment });
     let calls = 0;
     const options = { environment, fetchImpl: async (...args) => { calls++; return fetchImpl(...args); } };
     assert.equal((await customProviderHealth(options))[0].status, "connected");
     await customProviderHealth(options); assert.equal(calls, 2);
     await customProviderHealth({ ...options, refresh: true }); assert.equal(calls, 4);
+    await changeCustomProvider("remove", { id: created.id }, { environment });
+    assert.deepEqual(readCustomProviders(environment), []);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 

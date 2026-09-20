@@ -35,6 +35,6 @@ export async function GET(request) {
   } catch (error) {
     const message = error.message || "Search failed.";
     const status = Number.isInteger(error.status) ? error.status : 502;
-    return Response.json({ error: message }, { status });
+    return Response.json({ error: message, ...(error.code ? { code: error.code } : {}) }, { status });
   }
 }

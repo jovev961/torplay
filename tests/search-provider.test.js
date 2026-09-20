@@ -60,7 +60,9 @@ test("deadlines abort a hung provider without losing successful empty responses"
   await assert.rejects(searchConfiguredProvider(context, { ...quiet, timeoutMs: 5, providers: [hung] }), (error) => error.status === 504);
   await assert.rejects(searchConfiguredProvider(context, { ...quiet, providers: [provider("bad", () => { throw new Error("secret"); })] }),
     (error) => error.status === 502 && !error.message.includes("secret"));
-  await assert.rejects(searchConfiguredProvider(context, { providers: [] }), (error) => error.status === 503);
+  await assert.rejects(searchConfiguredProvider(context, { providers: [] }), (error) => (
+    error.status === 503 && error.code === "NO_TORRENT_SOURCES"
+  ));
 });
 
 test("service exposes safe optional metadata and supports providers without consumer changes", async () => {

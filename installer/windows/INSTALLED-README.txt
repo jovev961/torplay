@@ -16,7 +16,7 @@ Runtime logs:
 Persistent profiles and watch history:
   %LOCALAPPDATA%\TorPlay\data\torplay.db
 
-Built-in sources need no Docker or Jackett. Add optional Torznab sources in Settings.
+Torrent sources are opt-in. Add supported or custom indexers in Settings.
 For managed Jackett only, install Docker Desktop and set TORPLAY_MANAGED_JACKETT=true
 in torplay.env, then use Start or Restart TorPlay. Existing Jackett credentials are retained.
 
