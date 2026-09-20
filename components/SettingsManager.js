@@ -2,17 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { SETTINGS_SECTIONS, settingsSectionFromHash } from "../lib/settings/navigation.js";
 import styles from "./SettingsManager.module.css";
-import CustomTorrentProviders from "./CustomTorrentProviders.js";
-
-const sections = [
-  ["general", "General"],
-  ["services", "Services"],
-  ["torrent-sources", "Torrent Sources"],
-  ["subtitles", "Subtitles"],
-  ["playback", "Playback"],
-  ["about", "About"],
-];
+import TorrentIndexerManager from "./TorrentIndexerManager.js";
 
 const statusLabels = {
   valid: "Valid",
@@ -74,21 +66,8 @@ function RuntimeStatus({ components }) {
   );
 }
 
-function TorrentSourceStatus({ source, validation }) {
-  const current = source.enabled
-    ? validation || { status: "checking", message: "Checking source availability." }
-    : { status: "disabled", message: "Source is disabled." };
-  return (
-    <div className={styles.providerStatus}>
-      <span className={`${styles.statusBadge} ${styles[current.status] || ""}`}>
-        {statusLabels[current.status] || "Unknown"}
-      </span>
-      <span>{current.message}</span>
-    </div>
-  );
-}
-
 export default function SettingsManager() {
+  const [selectedSection, setSelectedSection] = useState("general");
   const [snapshot, setSnapshot] = useState(null);
   const [drafts, setDrafts] = useState({});
   const [secrets, setSecrets] = useState({});
@@ -96,12 +75,18 @@ export default function SettingsManager() {
   const [validations, setValidations] = useState({});
   const [nativeDraft, setNativeDraft] = useState([]);
   const [configuredNative, setConfiguredNative] = useState([]);
-  const [supportedPickerOpen, setSupportedPickerOpen] = useState(false);
-  const [supportedSelection, setSupportedSelection] = useState([]);
-  const [customAddOpen, setCustomAddOpen] = useState(false);
   const [saving, setSaving] = useState("");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    function selectHashSection() {
+      setSelectedSection(settingsSectionFromHash(window.location.hash));
+    }
+    selectHashSection();
+    window.addEventListener("hashchange", selectHashSection);
+    return () => window.removeEventListener("hashchange", selectHashSection);
+  }, []);
 
   async function validateProviders(providerIds, { refresh = false, native = false } = {}) {
     if (!providerIds.length) return;
@@ -237,13 +222,12 @@ export default function SettingsManager() {
     }
   }
 
-  async function addSupportedProviders() {
-    const enabled = [...new Set([...nativeDraft, ...supportedSelection])];
-    const configured = [...new Set([...configuredNative, ...supportedSelection])];
-    if (await saveNativeProviders(enabled, configured, "Preconfigured indexers added.")) {
-      setSupportedSelection([]);
-      setSupportedPickerOpen(false);
-    }
+  async function addSupportedProvider(source) {
+    return saveNativeProviders(
+      [...new Set([...nativeDraft, source.id])],
+      [...new Set([...configuredNative, source.id])],
+      `${source.name} added.`,
+    );
   }
 
   async function removeSupportedProvider(source) {
@@ -356,7 +340,17 @@ export default function SettingsManager() {
   return (
     <div className={styles.settingsLayout}>
       <nav className={styles.settingsNav} aria-label="Settings sections">
-        {sections.map(([id, label]) => <a href={`#${id}`} key={id}>{label}</a>)}
+        {SETTINGS_SECTIONS.map(([id, label]) => (
+          <a
+            className={selectedSection === id ? styles.activeNavItem : ""}
+            href={`#${id}`}
+            aria-current={selectedSection === id ? "page" : undefined}
+            key={id}
+            onClick={() => setSelectedSection(id)}
+          >
+            {label}
+          </a>
+        ))}
       </nav>
       <div className={styles.settingsContent}>
         {!snapshot.canEdit ? (
@@ -367,7 +361,7 @@ export default function SettingsManager() {
         {notice ? <div className="notice success" role="status">{notice}</div> : null}
         {error ? <div className="notice error" role="alert">{error}</div> : null}
 
-        <section className={styles.settingsSection} id="general">
+        {selectedSection === "general" ? <section className={styles.settingsSection} id="general">
           <div className={styles.sectionHeading}><span>01</span><div><h2>General</h2><p>Runtime and local configuration health.</p></div></div>
           <div className={styles.summaryCard}>
             <dl>
@@ -377,118 +371,46 @@ export default function SettingsManager() {
             </dl>
             <RuntimeStatus components={snapshot.runtime.components} />
           </div>
-        </section>
+        </section> : null}
 
-        <section className={styles.settingsSection} id="services">
+        {selectedSection === "services" ? <section className={styles.settingsSection} id="services">
           <div className={styles.sectionHeading}><span>02</span><div><h2>Services</h2><p>Metadata, source discovery, and external search integrations.</p></div></div>
           <div className={styles.providerGrid}>{serviceProviders.map(providerCard)}</div>
-        </section>
+        </section> : null}
 
-        <section className={styles.settingsSection} id="torrent-sources">
+        {selectedSection === "torrent-sources" ? <section className={styles.settingsSection} id="torrent-sources">
           <div className={styles.sectionHeading}><span>03</span><div><h2>Torrent Sources</h2><p>Choose the third-party sources TorPlay may use for movie and TV searches.</p></div></div>
           <div className={styles.sourceNotice}>
             TorPlay does not host or provide media files. Content and torrent metadata are obtained from third-party sources selected by the user. Users are responsible for ensuring that their use of TorPlay and configured sources complies with applicable laws and the rights of content owners.
           </div>
-          {snapshot.canEdit && !snapshot.torrentSources.managedExternally ? (
-            <div className={styles.sourceActions}>
-              <button
-                className={styles.saveButton}
-                type="button"
-                disabled={saving === "nativeProviders"}
-                onClick={() => { setSupportedPickerOpen((open) => !open); setSupportedSelection([]); }}
-              >
-                Add Preconfigured Indexer
-              </button>
-              <button
-                className={styles.testButton}
-                type="button"
-                disabled={customAddOpen}
-                onClick={() => setCustomAddOpen(true)}
-              >
-                Add Custom Indexer
-              </button>
-            </div>
-          ) : null}
-          {supportedPickerOpen ? (
-            <div className={styles.supportedPicker}>
-              <div><h3>Add Preconfigured Indexer</h3><p>Choose the torrent sources you want TorPlay to use.</p></div>
-              {snapshot.torrentSources.providers.map((source) => {
-                const added = configuredNative.includes(source.id);
-                const checked = added || supportedSelection.includes(source.id);
-                return (
-                  <label className={styles.supportedChoice} key={source.id}>
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      disabled={added || saving === "nativeProviders"}
-                      onChange={(event) => setSupportedSelection((current) => (
-                        event.target.checked ? [...current, source.id] : current.filter((id) => id !== source.id)
-                      ))}
-                    />
-                    <span><strong>{source.name}</strong><small>{source.mediaTypes.join(" & ")}</small></span>
-                    {added ? <em>Added</em> : null}
-                  </label>
-                );
-              })}
-              <div className={styles.sourceActions}>
-                <button className={styles.saveButton} type="button" disabled={!supportedSelection.length || saving === "nativeProviders"} onClick={() => void addSupportedProviders()}>
-                  {saving === "nativeProviders" ? "Adding…" : "Add Selected"}
-                </button>
-                <button className={styles.testButton} type="button" disabled={saving === "nativeProviders"} onClick={() => { setSupportedPickerOpen(false); setSupportedSelection([]); }}>Cancel</button>
-              </div>
-            </div>
-          ) : null}
-          <h3 className={styles.sourceSubheading}>Preconfigured Indexers</h3>
-          <div className={styles.sourceGrid}>
-            {snapshot.torrentSources.providers.filter((source) => configuredNative.includes(source.id)).map((source) => {
-              return (
-                <article className={styles.sourceCard} key={source.id}>
-                  <div className={styles.sourceCardHeading}>
-                    <span>
-                      <strong>{source.name}</strong>
-                      <small>{source.mediaTypes.join(" & ")}</small>
-                    </span>
-                    {snapshot.canEdit && !snapshot.torrentSources.managedExternally ? <div className={styles.sourceCardActions}>
-                      <button className={styles.testButton} type="button" disabled={saving === "nativeProviders"} onClick={() => void toggleSupportedProvider(source)}>{source.enabled ? "Disable" : "Enable"}</button>
-                      <button className={styles.removeButton} type="button" disabled={saving === "nativeProviders"} onClick={() => void removeSupportedProvider(source)}>Remove</button>
-                    </div> : null}
-                  </div>
-                  <p>{source.description}</p>
-                  <TorrentSourceStatus source={source} validation={validations[source.id]} />
-                </article>
-              );
-            })}
-          </div>
-          {!configuredNative.length ? <p className={styles.emptySources}>No preconfigured indexers have been added.</p> : null}
-          {snapshot.torrentSources.overrideActive ? (
-            <p className={styles.sectionNote}>Native sources are read-only because TORPLAY_SEARCH_PROVIDERS controls the complete provider list.</p>
-          ) : snapshot.torrentSources.managedExternally ? (
-            <p className={styles.sectionNote}>Native sources are managed by the host environment and read-only here.</p>
-          ) : null}
+          <TorrentIndexerManager
+            nativeProviders={snapshot.torrentSources.providers}
+            configuredNativeIds={configuredNative}
+            initialCustomProviders={snapshot.customProviders}
+            nativeValidations={validations}
+            canEdit={snapshot.canEdit}
+            nativeManagedExternally={snapshot.torrentSources.managedExternally}
+            nativeOverrideActive={snapshot.torrentSources.overrideActive}
+            nativeBusy={saving === "nativeProviders"}
+            onAddNative={addSupportedProvider}
+            onToggleNative={toggleSupportedProvider}
+            onRemoveNative={removeSupportedProvider}
+            onRefreshNative={() => validateProviders(nativeDraft, { refresh: true, native: true })}
+            onCustomChanged={async () => {
+              const data = await readJson(await fetch("/api/settings", { cache: "no-store" }));
+              setSnapshot(data);
+            }}
+          />
           {!hasEffectiveSource ? <p className={styles.sourceWarning}>No torrent source is configured. Browsing still works, and source searches will guide you back here.</p> : null}
-          <div className={styles.sourceActions}>
-            <button
-              className={styles.testButton}
-              type="button"
-              disabled={!nativeDraft.length || saving === "nativeProviders"}
-              onClick={() => validateProviders(nativeDraft, { refresh: true, native: true })}
-            >
-              Refresh availability
-            </button>
-          </div>
-          <CustomTorrentProviders initialProviders={snapshot.customProviders} canEdit={snapshot.canEdit} addOpen={customAddOpen} onAddClosed={() => setCustomAddOpen(false)} onChanged={async () => {
-            const data = await readJson(await fetch("/api/settings", { cache: "no-store" }));
-            setSnapshot(data);
-          }} />
-        </section>
+        </section> : null}
 
-        <section className={styles.settingsSection} id="subtitles">
+        {selectedSection === "subtitles" ? <section className={styles.settingsSection} id="subtitles">
           <div className={styles.sectionHeading}><span>04</span><div><h2>Subtitles</h2><p>Optional external subtitle providers.</p></div></div>
           <div className={styles.providerGrid}>{subtitleProviders.map(providerCard)}</div>
           <p className={styles.sectionNote}>Preferred subtitle languages remain profile-specific. <Link href="/profiles">Manage profile languages →</Link></p>
-        </section>
+        </section> : null}
 
-        <section className={styles.settingsSection} id="playback">
+        {selectedSection === "playback" ? <section className={styles.settingsSection} id="playback">
           <div className={styles.sectionHeading}><span>05</span><div><h2>Playback</h2><p>Current playback capabilities and safe runtime defaults.</p></div></div>
           <div className={styles.capabilityGrid}>
             <div><span>Native formats</span><strong>{snapshot.playback.nativeFormats.join(" · ")}</strong></div>
@@ -498,9 +420,9 @@ export default function SettingsManager() {
             <div><span>Subtitle cache</span><strong>{snapshot.playback.subtitleCacheDays} days</strong></div>
           </div>
           <p className={styles.sectionNote}>Network ports, storage paths, trackers, and executable overrides remain owner-managed runtime configuration.</p>
-        </section>
+        </section> : null}
 
-        <section className={styles.settingsSection} id="about">
+        {selectedSection === "about" ? <section className={styles.settingsSection} id="about">
           <div className={styles.sectionHeading}><span>06</span><div><h2>About</h2><p>Build and project information.</p></div></div>
           <div className={styles.summaryCard}>
             <dl>
@@ -510,7 +432,7 @@ export default function SettingsManager() {
             </dl>
             <p className={styles.muted}>Metadata by TMDB. IMDb-compatible ratings and lookups may use OMDb. Subtitle results may use OpenSubtitles or SubDL when configured.</p>
           </div>
-        </section>
+        </section> : null}
       </div>
     </div>
   );
