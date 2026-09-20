@@ -2,7 +2,7 @@
 
 TorPlay is a self-hosted web app for discovering and streaming public-domain, Creative Commons, or otherwise authorized torrent video. Search, torrent traffic, media conversion, provider credentials, profiles, and watch history remain on the TorPlay computer; browsers connect only to the web app.
 
-TorPlay includes movie and TV discovery, built-in torrent sources and optional Torznab providers, server-side WebTorrent streaming, profiles and Continue Watching, subtitles, autoplay, native HTTP Range playback, and FFmpeg-backed playback for additional video formats.
+TorPlay includes movie and TV discovery, built-in torrent sources and optional Torznab providers, server-side WebTorrent streaming, profiles and Continue Watching, subtitles, autoplay, Google Cast and AirPlay controls, native HTTP Range playback, and FFmpeg-backed playback for additional video formats.
 
 > Use TorPlay only with content you are legally permitted to download and view.
 

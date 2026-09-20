@@ -77,6 +77,11 @@ The custom player includes keyboard controls, playback speed, picture-in-picture
 
 Native MP4, M4V, and WebM support HTTP Range seeking. Recognized non-native containers—including MKV, AVI, MOV, MPEG, transport streams, VOB, OGM/OGV, 3GP, DIVX, WMV, and FLV—use FFmpeg preparation when possible.
 
+The remote-playback menu supports Google Cast receivers (including Cast-enabled Google TV devices) and AirPlay when the current browser exposes it. A selected receiver requests the native stream or prepared HLS media directly from TorPlay over the local network; torrent traffic and provider credentials remain on the server. The receiver must be able to resolve and reach the TorPlay LAN address, normally `http://torplay.local`.
+
+- `GET /api/playback/remote` returns the receiver-safe TorPlay origin.
+- Stream, HLS, and subtitle routes support receiver CORS, preflight, `HEAD`, and Range requests where applicable.
+
 ## Subtitles
 
 Torrent `.srt` and `.vtt` sidecars are downloaded by the server and delivered as WebVTT. TorPlay can also expose embedded tracks and configured OpenSubtitles/SubDL results.
