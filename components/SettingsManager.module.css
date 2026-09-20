@@ -455,6 +455,125 @@
   justify-self: start;
 }
 
+.definitionHelp {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--muted);
+  background: #101419;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.definitionHelp > strong,
+.definitionHelp li strong,
+.definitionExample strong {
+  color: var(--text);
+}
+
+.definitionHelp p,
+.definitionHelp ol {
+  margin: 0;
+}
+
+.definitionHelp ol {
+  display: grid;
+  gap: 4px;
+  padding-left: 22px;
+}
+
+.definitionBrowse {
+  justify-self: start;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  background: #161b21;
+  text-decoration: none;
+  font-weight: 700;
+}
+
+.definitionBrowse:hover,
+.definitionBrowse:focus-visible {
+  border-color: #606b77;
+  outline: none;
+  background: #1a2027;
+}
+
+.definitionExample {
+  display: grid;
+  gap: 7px;
+  padding: 12px;
+  border-radius: 8px;
+  background: #0b0f13;
+}
+
+.definitionExample code,
+.definitionUrl {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.definitionExample code {
+  color: #dce4ec;
+  font-size: 0.75rem;
+}
+
+.definitionExample span {
+  font-size: 0.75rem;
+}
+
+.definitionPreview {
+  display: grid;
+  gap: 14px;
+  padding: 17px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #101419;
+}
+
+.definitionPreview h3,
+.definitionRequirement {
+  margin: 0;
+}
+
+.definitionDetails {
+  display: grid;
+  gap: 9px;
+  margin: 0;
+}
+
+.definitionDetails > div {
+  display: grid;
+  grid-template-columns: minmax(90px, 0.32fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.definitionDetails dt {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.definitionDetails dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--text);
+  font-size: 0.86rem;
+}
+
+.definitionRequirement {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.definitionReady {
+  color: #b5f0cb;
+}
+
 .checkboxLabel {
   display: flex;
   align-items: center;
@@ -490,6 +609,10 @@
   margin-top: 18px;
   padding-top: 18px;
   border-top: 1px solid var(--border);
+}
+
+.providerForm h3 {
+  margin: 0;
 }
 
 .field {
@@ -818,6 +941,11 @@
 
   .inputRow input {
     flex-basis: 100%;
+  }
+
+  .definitionDetails > div {
+    grid-template-columns: 1fr;
+    gap: 3px;
   }
 
   .inlineButton,
