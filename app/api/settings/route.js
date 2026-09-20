@@ -51,7 +51,7 @@ export async function PATCH(request) {
       throw new SettingsError("A settings provider is required.");
     }
     const change = body.provider === "nativeProviders"
-      ? await updateNativeProviderSettings(body.enabled)
+      ? await updateNativeProviderSettings(body.enabled, { configuredIds: body.configured })
       : await updateProviderSettings(body.provider, body);
     if (body.provider === "nativeProviders") clearSettingsValidation();
     else clearSettingsValidation(body.provider);

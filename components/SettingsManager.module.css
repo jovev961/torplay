@@ -287,6 +287,13 @@
   min-height: 34px;
 }
 
+.sourceCardActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .emptySources {
   margin: 12px 2px;
   color: var(--muted);

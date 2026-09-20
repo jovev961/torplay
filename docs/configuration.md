@@ -26,7 +26,8 @@ TorPlay stores Settings changes atomically in the runtime's configuration file a
 | `JACKETT_MOVIE_INDEXERS` | Empty | Comma-separated Jackett IDs used for movies. Empty searches all configured indexers. |
 | `JACKETT_SHOW_INDEXERS` | Empty | Comma-separated Jackett IDs used for shows. Empty searches all configured indexers. |
 | `OMDB_API_KEY` | Unset | Optional server-side OMDb key used for IMDb ratings on catalog cards and copied into Jackett for IMDb-only aggregate-search fallback. Ratings are omitted when absent; TorPlay preserves Jackett's existing key. |
-| `TORPLAY_NATIVE_PROVIDERS` | Empty | Opt-in preconfigured providers enabled for search. Available IDs are `knaben`, `yts`, and `eztv`. |
+| `TORPLAY_NATIVE_PROVIDERS` | Empty | Preconfigured providers currently enabled for search. Available IDs are `knaben`, `yts`, and `eztv`. |
+| `TORPLAY_CONFIGURED_NATIVE_PROVIDERS` | Falls back to enabled providers | Preconfigured providers added in Settings, including currently disabled entries. |
 | `TORPLAY_SEARCH_PROVIDERS` | Unset | Full-provider override using built-in IDs, `jackett`, and stable `custom-...` IDs. Native controls become read-only; unlisted custom sources are excluded. |
 | `TORPLAY_MANAGED_JACKETT` | `false` | Set exactly `true` to opt into managed Docker/Jackett/FlareSolverr startup. Restart the launcher after changing. |
 

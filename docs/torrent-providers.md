@@ -35,9 +35,11 @@ and hasMagnet. Requested playback context is stored separately from release meta
 
 Knaben, YTS, and EZTV are available through **Settings → Torrent Sources → Add
 Preconfigured Indexer**. None is enabled by default. Adding or removing a preconfigured
-indexer updates the comma-separated `TORPLAY_NATIVE_PROVIDERS` value. An empty
-selection is valid. Jackett is included separately when its URL and non-placeholder
-API key are configured.
+indexer updates `TORPLAY_CONFIGURED_NATIVE_PROVIDERS`; enabling or disabling it
+updates `TORPLAY_NATIVE_PROVIDERS`, which is the active search list. Existing
+configurations without the configured-provider value treat enabled providers as
+configured. Empty configured and enabled selections are valid. Jackett is included
+separately when its URL and non-placeholder API key are configured.
 
 `TORPLAY_SEARCH_PROVIDERS` remains an advanced full-provider override. Set it to
 a comma-separated allowlist of `knaben,yts,eztv,jackett`; while present, the
