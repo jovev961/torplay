@@ -1,18 +1,24 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import pngToIco from "png-to-ico";
 import sharp from "sharp";
 
 export const WINDOWS_ICON_SIZES = [16, 24, 32, 48, 64, 128, 256];
+export const BROWSER_ICON_SIZE = 256;
+export const APPLE_ICON_SIZE = 180;
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 export const iconPaths = {
   source: path.join(projectRoot, "public", "torplay-logo.png"),
-  favicon: path.join(projectRoot, "app", "favicon.ico"),
-  appIcon: path.join(projectRoot, "app", "icon.png"),
+  browserIcon: path.join(projectRoot, "public", "torplay-browser-icon-v1.png"),
+  appleIcon: path.join(projectRoot, "public", "torplay-apple-icon-v1.png"),
   windowsIcon: path.join(projectRoot, "installer", "windows", "torplay.ico"),
+  legacyBrowserIcons: [
+    path.join(projectRoot, "app", "favicon.ico"),
+    path.join(projectRoot, "app", "icon.png"),
+  ],
 };
 
 export function readIcoSizes(buffer) {
@@ -54,21 +60,32 @@ export async function generateIcons(paths = iconPaths) {
       .png()
       .toBuffer()
   )));
+  const browserIcon = variants[WINDOWS_ICON_SIZES.indexOf(BROWSER_ICON_SIZE)];
   const ico = await pngToIco(variants);
+  const appleIcon = await sharp(paths.source)
+    .resize(APPLE_ICON_SIZE, APPLE_ICON_SIZE, {
+      fit: "contain",
+      kernel: sharp.kernel.lanczos3,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    })
+    .sharpen()
+    .png()
+    .toBuffer();
   const sizes = readIcoSizes(ico).sort((left, right) => left - right);
   if (sizes.join(",") !== WINDOWS_ICON_SIZES.join(",")) {
     throw new Error(`Generated ICO sizes are invalid: ${sizes.join(", ")}.`);
   }
 
   await Promise.all([
-    mkdir(path.dirname(paths.favicon), { recursive: true }),
-    mkdir(path.dirname(paths.appIcon), { recursive: true }),
+    mkdir(path.dirname(paths.browserIcon), { recursive: true }),
+    mkdir(path.dirname(paths.appleIcon), { recursive: true }),
     mkdir(path.dirname(paths.windowsIcon), { recursive: true }),
   ]);
   await Promise.all([
-    writeFile(paths.favicon, ico),
+    writeFile(paths.browserIcon, browserIcon),
+    writeFile(paths.appleIcon, appleIcon),
     writeFile(paths.windowsIcon, ico),
-    writeFile(paths.appIcon, variants.at(-1)),
+    ...(paths.legacyBrowserIcons || []).map((legacyIcon) => rm(legacyIcon, { force: true })),
   ]);
   return { sizes, source: metadata, icoBytes: ico.length };
 }
