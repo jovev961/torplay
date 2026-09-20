@@ -47,8 +47,8 @@ Settings controls are read-only. Unknown IDs are rejected. An empty list produce
 a configuration error.
 
 Run `npm run dev:native` to start Next.js with only `knaben,yts,eztv`, even if
-Jackett credentials exist. This command does not start, stop, or configure Docker,
-Jackett, or FlareSolverr. The existing development and Windows launchers are unchanged.
+Jackett credentials exist. This command does not start, stop, or configure Docker
+or Jackett. The existing development and Windows launchers are unchanged.
 
 Native adapters use JSON APIs, with no scraping or anti-bot dependency:
 
@@ -74,6 +74,8 @@ providers on load and on request. Results are cached briefly, contain no torrent
 results, and never expose provider URLs or credentials. Provider outages or invalid
 JSON remain isolated by the shared provider runner.
 No mirror discovery or automatic anti-bot workaround is attempted.
+Providers that require additional anti-bot handling fail independently without
+preventing other providers or TorPlay itself from operating.
 Only search/download content you are authorized to access.
 
 ## Custom Torznab providers

@@ -29,7 +29,7 @@ TorPlay stores Settings changes atomically in the runtime's configuration file a
 | `TORPLAY_NATIVE_PROVIDERS` | Empty | Preconfigured providers currently enabled for search. Available IDs are `knaben`, `yts`, and `eztv`. |
 | `TORPLAY_CONFIGURED_NATIVE_PROVIDERS` | Falls back to enabled providers | Preconfigured providers added in Settings, including currently disabled entries. |
 | `TORPLAY_SEARCH_PROVIDERS` | Unset | Full-provider override using built-in IDs, `jackett`, and stable `custom-...` IDs. Native controls become read-only; unlisted custom sources are excluded. |
-| `TORPLAY_MANAGED_JACKETT` | `false` | Set exactly `true` to opt into managed Docker/Jackett/FlareSolverr startup. Restart the launcher after changing. |
+| `TORPLAY_MANAGED_JACKETT` | `false` | Set exactly `true` to opt into managed Docker/Jackett startup. Restart the launcher after changing. |
 
 Custom Torznab sources are stored in `torrent-providers.json` beside `.env.local` or the installed `torplay.env`. This private file contains API keys; keep it out of source control and include it only in private backups. Settings writes it atomically with restrictive file permissions where supported. New endpoints and changed credentials must pass capabilities and search validation before saving; edits take effect immediately. Existing Jackett credentials are not migrated or duplicated.
 

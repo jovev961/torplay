@@ -21,10 +21,9 @@ export const COMPOSE_START_ARGS = [
   "--wait",
   "--wait-timeout",
   "120",
-  "flaresolverr",
   "jackett",
 ];
-export const COMPOSE_STOP_ARGS = ["compose", "stop", "jackett", "flaresolverr"];
+export const COMPOSE_STOP_ARGS = ["compose", "stop", "jackett"];
 
 function dockerSpawnOptions(dockerCommand) {
   const options = { stdio: "inherit" };

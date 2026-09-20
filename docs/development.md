@@ -27,13 +27,12 @@ Setup requires only TMDB. Torrent sources are opt-in; add preconfigured native p
 
 `npm run dev` starts Next.js without Docker by default. With `TORPLAY_MANAGED_JACKETT=true` in `.env.local`, it performs the following work:
 
-1. Starts FlareSolverr and Jackett using the existing `docker-compose.yml`.
-2. Waits for both services to become healthy.
-3. Configures Jackett to use FlareSolverr at `http://flaresolverr:8191`.
-4. Preserves an existing Jackett OMDb key unless `OMDB_API_KEY` is configured.
-5. Starts the Next.js development server.
+1. Starts Jackett using the existing `docker-compose.yml`.
+2. Waits for Jackett to become healthy.
+3. Preserves an existing Jackett OMDb key unless `OMDB_API_KEY` is configured.
+4. Starts the Next.js development server.
 
-Press Ctrl+C to stop Next.js and, when managed mode is enabled, the two Compose services. The containers and named volumes are retained; the script never uses `docker compose down -v`.
+Press Ctrl+C to stop Next.js and, when managed mode is enabled, Jackett. The container and named volumes are retained; the script never uses `docker compose down -v`.
 
 ## Commands
 
@@ -56,7 +55,7 @@ Press Ctrl+C to stop Next.js and, when managed mode is enabled, the two Compose 
 | `.data/torrents` | Managed torrent session files | Temporary, gitignored |
 | `.data/subtitles` | Subtitle cache | Re-creatable, gitignored, automatically expires after the configured retention period |
 | OS temporary directory | HLS and subtitle-conversion jobs | Temporary |
-| Docker named volumes | Jackett and FlareSolverr configuration | Persistent |
+| Docker named volumes | Jackett configuration and downloads | Persistent |
 
 Do not point `TORRENT_DOWNLOAD_PATH` at a directory containing personal files. TorPlay owns and cleans info-hash directories under that path.
 
@@ -79,6 +78,6 @@ Tests that open loopback ports or start WebTorrent may require a normal local sh
 - Preserve the separation between `app/`, `components/`, and `lib/` described in [Architecture](architecture.md).
 - Keep generated data outside source control.
 - Do not add authentication, databases beyond the existing SQLite store, or alternative streaming stacks without an explicit task.
-- Do not replace the Jackett/FlareSolverr Compose setup.
+- Keep managed Jackett optional; native and custom providers must remain independent of Docker.
 
 The root `AGENTS.md` contains the complete repository-specific implementation rules.

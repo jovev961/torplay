@@ -115,18 +115,15 @@ export async function runtimeStatus({
   const components = {
     Docker: docker,
     Jackett: managed ? "ERROR" : "DISABLED",
-    FlareSolverr: managed ? "ERROR" : "DISABLED",
     TorPlay: "ERROR",
     "mDNS": running && snapshot?.components?.["mDNS"] === "OK" ? "OK" : "ERROR",
   };
   if (docker === "OK") {
-    for (const [service, label] of [["jackett", "Jackett"], ["flaresolverr", "FlareSolverr"]]) {
-      try {
-        const health = serviceHealth(service, dockerCommand, spawnSyncProcess, installedEnv);
-        components[label] = new Set(["healthy", "running"]).has(health) ? "OK" : "ERROR";
-      } catch {
-        components[label] = "ERROR";
-      }
+    try {
+      const health = serviceHealth("jackett", dockerCommand, spawnSyncProcess, installedEnv);
+      components.Jackett = new Set(["healthy", "running"]).has(health) ? "OK" : "ERROR";
+    } catch {
+      components.Jackett = "ERROR";
     }
   }
   try {

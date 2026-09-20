@@ -6,7 +6,7 @@ Use these guides for the current application. Files under [`tasks/`](tasks/) are
 
 - [Windows deployment](windows-deployment.md) — install, configure, start automatically, upgrade, uninstall, and build releases.
 - [Configuration](configuration.md) — provider credentials, storage, playback, subtitles, search, and network settings.
-- [Troubleshooting](troubleshooting.md) — Docker, Jackett, `torplay.local`, firewall, ports, playback, and logs.
+- [Troubleshooting](troubleshooting.md) — optional Docker/Jackett, `torplay.local`, firewall, ports, playback, and logs.
 
 ## Contributors
 

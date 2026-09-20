@@ -2,7 +2,7 @@
 
 ## Start with status and logs
 
-On an installed Windows host, open **TorPlay Status** from the Start menu. It reports Docker, Jackett, FlareSolverr, TorPlay, and mDNS health and shows the last startup failure.
+On an installed Windows host, open **TorPlay Status** from the Start menu. It reports Docker, Jackett, TorPlay, and mDNS health and shows the last startup failure.
 
 Runtime logs are stored at:
 
@@ -27,7 +27,7 @@ The installed runtime attempts to start Docker Desktop and waits for up to ten m
 3. Confirm WSL 2 or the selected Docker backend is healthy.
 4. Choose **Start or Restart TorPlay** after Docker reports that it is running.
 
-## Jackett or FlareSolverr fails
+## Jackett fails
 
 - Confirm Docker is healthy.
 - Open [http://localhost:9117](http://localhost:9117).
@@ -35,8 +35,7 @@ The installed runtime attempts to start Docker Desktop and waits for up to ten m
 - Open [http://localhost/settings](http://localhost/settings) and confirm the Jackett API key matches the value shown by Jackett.
 - Confirm explicitly listed movie/show indexer IDs exist in Jackett.
 - Required Jackett settings activate immediately after TorPlay verifies and saves them.
-
-TorPlay configures Jackett's FlareSolverr URL internally as `http://flaresolverr:8191`; port 8191 is intentionally not published to Windows.
+- Indexers that require separate anti-bot tooling may fail, but they do not prevent TorPlay or other providers from operating.
 
 ## Metadata is unavailable
 
