@@ -32,7 +32,12 @@ UninstallLogging=yes
 OutputDir={#OutputDir}
 OutputBaseFilename=TorPlay-Setup-{#AppVersion}
 UninstallDisplayName=TorPlay
+UninstallDisplayIcon={app}\runtime\torplay.ico
 VersionInfoVersion={#VersionInfoVersion}
+SetupIconFile=torplay.ico
+
+[Tasks]
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Dirs]
 Name: "{localappdata}\TorPlay\config"; Flags: uninsneveruninstall
@@ -48,12 +53,17 @@ Source: "{#StageDir}\config\torplay.env"; DestDir: "{localappdata}\TorPlay\confi
 [Registry]
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "TorPlay"; ValueData: """{sys}\wscript.exe"" ""{app}\runtime\torplay-tray.vbs"""; Flags: uninsdeletevalue
 
+[InstallDelete]
+Type: files; Name: "{group}\Open TorPlay.url"
+Type: files; Name: "{group}\Open TorPlay.lnk"
+Type: files; Name: "{group}\TorPlay Tray.lnk"
+Type: files; Name: "{group}\TorPlay Status.lnk"
+Type: files; Name: "{group}\Start or Restart TorPlay.lnk"
+Type: files; Name: "{group}\Stop TorPlay.lnk"
+
 [Icons]
-Name: "{group}\Open TorPlay"; Filename: "http://localhost"
-Name: "{group}\TorPlay Tray"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\runtime\torplay-tray.vbs"""; WorkingDir: "{app}"
-Name: "{group}\TorPlay Status"; Filename: "{app}\runtime\torplay-status.cmd"; WorkingDir: "{app}"
-Name: "{group}\Start or Restart TorPlay"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\runtime\torplay-launcher.vbs"" restart"; WorkingDir: "{app}"
-Name: "{group}\Stop TorPlay"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\runtime\torplay-launcher.vbs"" stop"; WorkingDir: "{app}"
+Name: "{group}\TorPlay"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\runtime\torplay-launcher.vbs"""; WorkingDir: "{app}"; IconFilename: "{app}\runtime\torplay.ico"
+Name: "{userdesktop}\TorPlay"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\runtime\torplay-launcher.vbs"""; WorkingDir: "{app}"; IconFilename: "{app}\runtime\torplay.ico"; Tasks: desktopicon
 
 [Run]
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\runtime\windows-firewall.ps1"" -NodePath ""{app}\runtime\node.exe"" -PublicPort 80"; Verb: runas; Flags: shellexec waituntilterminated; StatusMsg: "Configuring the Private-network firewall rules..."

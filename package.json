@@ -5,8 +5,12 @@
   "type": "module",
   "license": "AGPL-3.0-only",
   "scripts": {
+    "icons:generate": "node scripts/generate-icons.js",
+    "predev": "npm run icons:generate",
     "dev": "exec node scripts/dev.js",
+    "predev:native": "npm run icons:generate",
     "dev:native": "node scripts/dev-native.js",
+    "prebuild": "npm run icons:generate",
     "build": "next build",
     "start": "next start",
     "start:home": "node scripts/home.js",
@@ -33,6 +37,8 @@
   "devDependencies": {
     "esbuild": "^0.25.12",
     "eslint": "^9.39.5",
-    "eslint-config-next": "^16.3.5"
+    "eslint-config-next": "^16.3.5",
+    "png-to-ico": "^3.0.2",
+    "sharp": "^0.35.4"
   }
 }

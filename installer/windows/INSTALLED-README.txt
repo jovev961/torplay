@@ -7,6 +7,11 @@ Get the required TMDB API Read Access Token from:
 The first launch verifies and saves it without requiring an environment file.
 Household devices can use http://torplay.local after setup is complete.
 
+Launcher:
+  Open TorPlay from the Start menu or optional desktop shortcut. The launcher
+  starts a stopped runtime and opens the browser, or only opens the browser when
+  TorPlay is already running.
+
 System tray:
   Right-click the TorPlay notification-area icon to open TorPlay or its logs,
   start/restart/stop the runtime, and control whether the tray starts at login.

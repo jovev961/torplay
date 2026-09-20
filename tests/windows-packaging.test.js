@@ -4,6 +4,13 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
+import sharp from "sharp";
+import {
+  generateIcons,
+  readIcoSizes,
+  WINDOWS_ICON_SIZES,
+} from "../scripts/generate-icons.js";
 import {
   INNO_VERSION,
   NODE_VERSION,
@@ -27,6 +34,34 @@ test("Windows file versions are numeric and preserve beta build numbers", () => 
   assert.equal(windowsFileVersion("1.2.3"), "1.2.3.0");
   assert.throws(() => windowsFileVersion("1.2.3-rc.1"), /Unsupported/);
   assert.throws(() => windowsFileVersion("1.2.65536"), /out of range/);
+});
+
+test("canonical artwork generates matching browser and Windows icon assets", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "torplay-icons-"));
+  const favicon = path.join(directory, "app", "favicon.ico");
+  const appIcon = path.join(directory, "app", "icon.png");
+  const windowsIcon = path.join(directory, "installer", "torplay.ico");
+  try {
+    const result = await generateIcons({
+      source: fileURLToPath(new URL("../public/torplay-logo.png", import.meta.url)),
+      favicon,
+      appIcon,
+      windowsIcon,
+    });
+    const [faviconBytes, windowsBytes, appMetadata] = await Promise.all([
+      readFile(favicon),
+      readFile(windowsIcon),
+      sharp(appIcon).metadata(),
+    ]);
+    assert.deepEqual(result.sizes, WINDOWS_ICON_SIZES);
+    assert.deepEqual(readIcoSizes(faviconBytes).sort((left, right) => left - right), WINDOWS_ICON_SIZES);
+    assert.deepEqual(faviconBytes, windowsBytes);
+    assert.equal(appMetadata.width, 256);
+    assert.equal(appMetadata.height, 256);
+    assert.equal(appMetadata.hasAlpha, true);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test("installed paths are writable-data based and remain configurable", () => {
@@ -212,6 +247,7 @@ test("release validation requires the packaged runtime and Windows native tools"
       "runtime/torplay-first-launch.vbs",
       "runtime/torplay-tray.ps1",
       "runtime/torplay-tray.vbs",
+      "runtime/torplay.ico",
       "app/server.js",
       "app/node_modules/better-sqlite3/build/Release/better_sqlite3.node",
       "app/node_modules/ffmpeg-static/ffmpeg.exe",
@@ -242,15 +278,29 @@ test("installer declares durable data, login startup, shortcuts, and firewall cl
     new URL("../installer/windows/torplay-first-launch.vbs", import.meta.url),
     "utf8",
   );
+  const launcher = await readFile(
+    new URL("../installer/windows/torplay-launcher.vbs", import.meta.url),
+    "utf8",
+  );
+  const iconsSection = installer.match(/\[Icons\]\s+([\s\S]*?)(?=\n\[)/)?.[1] || "";
   assert.match(installer, /PrivilegesRequired=lowest/);
   assert.match(installer, /Software\\Microsoft\\Windows\\CurrentVersion\\Run/);
   assert.match(installer, /ValueData: """\{sys\}\\wscript\.exe"" ""\{app\}\\runtime\\torplay-tray\.vbs"""/);
-  assert.match(installer, /Open TorPlay/);
-  assert.match(installer, /Open TorPlay"; Filename: "http:\/\/localhost"/);
-  assert.match(installer, /Name: "\{group\}\\TorPlay Tray"/);
-  assert.match(installer, /TorPlay Status/);
-  assert.match(installer, /Start or Restart TorPlay/);
-  assert.match(installer, /Stop TorPlay/);
+  assert.match(installer, /SetupIconFile=torplay\.ico/);
+  assert.match(installer, /UninstallDisplayIcon=\{app\}\\runtime\\torplay\.ico/);
+  assert.match(installer, /Name: "desktopicon";[^\n]+Flags: unchecked/);
+  assert.match(iconsSection, /Name: "\{group\}\\TorPlay";[^\n]+torplay-launcher\.vbs[^\n]+IconFilename: "\{app\}\\runtime\\torplay\.ico"/);
+  assert.match(iconsSection, /Name: "\{userdesktop\}\\TorPlay";[^\n]+Tasks: desktopicon/);
+  assert.doesNotMatch(iconsSection, /Open TorPlay|TorPlay Tray|TorPlay Status|Start or Restart TorPlay|Stop TorPlay/);
+  for (const obsoleteShortcut of [
+    "Open TorPlay.url",
+    "TorPlay Tray.lnk",
+    "TorPlay Status.lnk",
+    "Start or Restart TorPlay.lnk",
+    "Stop TorPlay.lnk",
+  ]) {
+    assert.ok(installer.includes(`Name: "{group}\\${obsoleteShortcut}"`));
+  }
   assert.match(installer, /windows-firewall\.ps1"" -Remove/);
   assert.match(installer, /torplay-tray\.ps1"" -StopExisting/);
   assert.match(installer, /uninsneveruninstall/);
@@ -265,6 +315,14 @@ test("installer declares durable data, login startup, shortcuts, and firewall cl
   assert.match(firstLaunch, /http:\/\/localhost\/setup/);
   assert.ok(firstLaunch.indexOf("windows-control.mjs") < firstLaunch.indexOf("torplay-tray.vbs"));
   assert.ok(firstLaunch.indexOf("torplay-tray.vbs") < firstLaunch.indexOf("http://localhost/setup"));
+  assert.match(launcher, /If verb = "start" Then/);
+  assert.match(launcher, /windows-runner\.mjs/);
+  assert.match(launcher, /windows-control\.mjs/);
+  assert.match(launcher, /exitCode = shell\.Run\(command, 0, True\)/);
+  assert.match(launcher, /torplay-tray\.vbs/);
+  assert.match(launcher, /If exitCode = 0 Then/);
+  assert.match(launcher, /http:\/\/localhost/);
+  assert.ok(launcher.indexOf("exitCode = shell.Run") < launcher.indexOf("http://localhost"));
 });
 
 test("Windows tray controls the existing runtime without starting a second backend", async () => {
@@ -284,6 +342,9 @@ test("Windows tray controls the existing runtime without starting a second backe
   assert.match(tray, /Start with Windows/);
   assert.match(tray, /windows-control\.mjs/);
   assert.match(tray, /CurrentVersion\\Run/);
+  assert.match(tray, /torplay\.ico/);
+  assert.match(tray, /\[Drawing\.Icon\]::new\(\$iconPath, 32, 32\)/);
+  assert.doesNotMatch(tray, /TorPlayNativeIcon|FillEllipse|FillPolygon/);
   assert.match(tray, /Local\\TorPlayTray/);
   assert.match(tray, /Stop-TorPlayAndExit/);
   assert.match(tray, /Invoke-TorPlayControl "stop"/);
@@ -292,6 +353,7 @@ test("Windows tray controls the existing runtime without starting a second backe
   assert.match(launcher, /torplay-tray\.ps1/);
   assert.match(releaseScript, /installer\/windows\/torplay-tray\.ps1/);
   assert.match(releaseScript, /installer\/windows\/torplay-tray\.vbs/);
+  assert.match(releaseScript, /installer\/windows\/torplay\.ico/);
   assert.match(releaseScript, /runtime-watchdog\.js/);
 });
 
