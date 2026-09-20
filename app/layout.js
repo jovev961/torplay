@@ -5,9 +5,13 @@ export const metadata = {
   title: "TorPlay · Movies and Shows",
   description: "Browse movie and show metadata and stream authorized video sources.",
   icons: {
-    icon: [{ url: "/torplay-browser-icon-v1.png", type: "image/png", sizes: "256x256" }],
-    shortcut: ["/torplay-browser-icon-v1.png"],
-    apple: [{ url: "/torplay-apple-icon-v1.png", type: "image/png", sizes: "180x180" }],
+    icon: [{
+      url: "/torplay-favicon-v2.ico",
+      type: "image/x-icon",
+      sizes: "16x16 24x24 32x32 48x48 64x64 128x128 256x256",
+    }],
+    shortcut: ["/torplay-favicon-v2.ico"],
+    apple: [{ url: "/torplay-apple-icon-v2.png", type: "image/png", sizes: "180x180" }],
   },
 };
 

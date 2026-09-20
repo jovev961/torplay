@@ -5,19 +5,20 @@ import pngToIco from "png-to-ico";
 import sharp from "sharp";
 
 export const WINDOWS_ICON_SIZES = [16, 24, 32, 48, 64, 128, 256];
-export const BROWSER_ICON_SIZE = 256;
 export const APPLE_ICON_SIZE = 180;
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 export const iconPaths = {
   source: path.join(projectRoot, "public", "torplay-logo.png"),
-  browserIcon: path.join(projectRoot, "public", "torplay-browser-icon-v1.png"),
-  appleIcon: path.join(projectRoot, "public", "torplay-apple-icon-v1.png"),
+  browserIcon: path.join(projectRoot, "public", "torplay-favicon-v2.ico"),
+  appleIcon: path.join(projectRoot, "public", "torplay-apple-icon-v2.png"),
   windowsIcon: path.join(projectRoot, "installer", "windows", "torplay.ico"),
   legacyBrowserIcons: [
     path.join(projectRoot, "app", "favicon.ico"),
     path.join(projectRoot, "app", "icon.png"),
+    path.join(projectRoot, "public", "torplay-browser-icon-v1.png"),
+    path.join(projectRoot, "public", "torplay-apple-icon-v1.png"),
   ],
 };
 
@@ -60,7 +61,6 @@ export async function generateIcons(paths = iconPaths) {
       .png()
       .toBuffer()
   )));
-  const browserIcon = variants[WINDOWS_ICON_SIZES.indexOf(BROWSER_ICON_SIZE)];
   const ico = await pngToIco(variants);
   const appleIcon = await sharp(paths.source)
     .resize(APPLE_ICON_SIZE, APPLE_ICON_SIZE, {
@@ -82,7 +82,7 @@ export async function generateIcons(paths = iconPaths) {
     mkdir(path.dirname(paths.windowsIcon), { recursive: true }),
   ]);
   await Promise.all([
-    writeFile(paths.browserIcon, browserIcon),
+    writeFile(paths.browserIcon, ico),
     writeFile(paths.appleIcon, appleIcon),
     writeFile(paths.windowsIcon, ico),
     ...(paths.legacyBrowserIcons || []).map((legacyIcon) => rm(legacyIcon, { force: true })),
