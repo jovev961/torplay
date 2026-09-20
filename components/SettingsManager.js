@@ -357,7 +357,7 @@ export default function SettingsManager() {
       <div className={styles.settingsContent}>
         {!snapshot.canEdit ? (
           <div className="notice" role="status">
-            Sensitive settings are read-only over the network. Open <strong>http://localhost/settings</strong> on the TorPlay computer to make changes.
+            Settings can be changed only through TorPlay on your private local network.
           </div>
         ) : null}
         {notice ? <div className="notice success" role="status">{notice}</div> : null}
@@ -369,7 +369,7 @@ export default function SettingsManager() {
             <dl>
               <div><dt>Runtime</dt><dd>{snapshot.runtime.mode}</dd></div>
               <div><dt>Configuration</dt><dd>{snapshot.runtime.configurationWritable ? "Writable" : "Unavailable"}</dd></div>
-              <div><dt>Editing</dt><dd>{snapshot.canEdit ? "Local host enabled" : "Read-only on this device"}</dd></div>
+              <div><dt>Editing</dt><dd>{snapshot.canEdit ? "Local network enabled" : "Unavailable outside the local network"}</dd></div>
             </dl>
             <RuntimeStatus components={snapshot.runtime.components} />
           </div>

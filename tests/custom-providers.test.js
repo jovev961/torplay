@@ -103,15 +103,25 @@ test("custom adapter supports movie and TV season variants and isolated failures
   } finally { globalThis.fetch = old; }
 });
 
-test("custom provider route denies LAN mutations and cross-origin tests", async () => {
-  for (const headers of [
-    { host: "torplay.local", origin: "http://torplay.local" },
-    { host: "localhost", origin: "http://evil.example" },
-  ]) {
-    const response = await POST(new Request("http://localhost/api/settings/torrent-providers", {
-      method: "POST", headers: { ...headers, "content-type": "application/json" }, body: JSON.stringify({ action: "test", provider: values }),
+test("custom provider route allows LAN mutations and denies cross-origin tests", async () => {
+  const previous = globalThis.fetch;
+  globalThis.fetch = fetchImpl;
+  try {
+    const allowed = await POST(new Request("http://torplay.local/api/settings/torrent-providers", {
+      method: "POST",
+      headers: { host: "torplay.local", origin: "http://torplay.local", "content-type": "application/json" },
+      body: JSON.stringify({ action: "test", provider: values }),
     }));
-    assert.equal(response.status, 403);
+    assert.equal(allowed.status, 200);
+
+    const denied = await POST(new Request("http://localhost/api/settings/torrent-providers", {
+      method: "POST",
+      headers: { host: "localhost", origin: "http://evil.example", "content-type": "application/json" },
+      body: JSON.stringify({ action: "test", provider: values }),
+    }));
+    assert.equal(denied.status, 403);
+  } finally {
+    globalThis.fetch = previous;
   }
 });
 

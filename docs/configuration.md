@@ -7,7 +7,7 @@ TorPlay configuration is server-only. Never expose provider keys, Jackett downlo
 - Development and source runtime: `.env.local` when advanced manual configuration is desired
 - Installed Windows runtime: `%LOCALAPPDATA%\TorPlay\config\torplay.env`
 
-On a fresh launch, TorPlay redirects provider-dependent pages to **Setup** to validate and save TMDB. No torrent source is enabled automatically. Afterwards, open **Settings** to add preconfigured native providers or custom Torznab sources and to manage optional Jackett, metadata, and subtitles. Changes are permitted only through `localhost` on the TorPlay computer; household/LAN browsers can see safe provider health but cannot edit settings. A blank secret input keeps the configured value, while **Remove** explicitly deletes it.
+On a fresh launch, TorPlay redirects provider-dependent pages to **Setup** to validate and save TMDB. No torrent source is enabled automatically. Afterwards, open **Settings** to add preconfigured native providers or custom Torznab sources and to manage optional Jackett, metadata, and subtitles. Setup and Settings can be changed through `localhost`, the configured `.local` hostname, or a private LAN address. A blank secret input keeps the configured value, while **Remove** explicitly deletes it.
 
 TorPlay stores Settings changes atomically in the runtime's configuration file and restricts its permissions where the operating system supports that. Credentials supplied by the host environment remain read-only. Provider changes take effect immediately. Do not commit real credentials.
 

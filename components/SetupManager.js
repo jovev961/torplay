@@ -77,7 +77,7 @@ export default function SetupManager() {
   if (error && !snapshot) return <div className="notice error" role="alert">{error}</div>;
   if (!snapshot) return <div className="notice">Loading setup…</div>;
   if (!snapshot.canEdit) {
-    return <div className="notice" role="status">Setup is available only on the TorPlay computer. Open <strong>http://localhost/setup</strong> there to continue.</div>;
+    return <div className="notice" role="status">Setup is available only through TorPlay on your private local network.</div>;
   }
   const providers = snapshot.providers.filter((provider) => provider.required);
 

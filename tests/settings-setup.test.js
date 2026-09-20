@@ -5,12 +5,12 @@ import path from "node:path";
 import test from "node:test";
 import { POST } from "../app/api/setup/route.js";
 
-function setupRequest(providers) {
-  return new Request("http://localhost:3000/api/setup", {
+function setupRequest(providers, host = "localhost:3000") {
+  return new Request(`http://${host}/api/setup`, {
     method: "POST",
     headers: {
-      host: "localhost:3000",
-      origin: "http://localhost:3000",
+      host,
+      origin: `http://${host}`,
       "content-type": "application/json",
     },
     body: JSON.stringify({ providers }),
@@ -50,7 +50,7 @@ test("setup validates both candidates before saving and returns no credentials",
     globalThis.fetch = async (url) => String(url).includes("localhost:9117")
       ? new Response("<caps></caps>")
       : new Response("{}");
-    const accepted = await POST(setupRequest(providers));
+    const accepted = await POST(setupRequest(providers, "torplay.local"));
     const acceptedText = await accepted.text();
     const acceptedBody = JSON.parse(acceptedText);
     assert.equal(accepted.status, 200);

@@ -17,7 +17,7 @@ Use these guides for the current application.
 ## Quick links
 
 - Installer downloads: [TorPlay Releases](https://github.com/jovev961/torplay/releases)
-- Installed TorPlay owner/setup: [http://localhost](http://localhost)
-- Installed TorPlay settings: [http://localhost/settings](http://localhost/settings)
+- Installed TorPlay owner/setup: [http://torplay.local](http://torplay.local)
+- Installed TorPlay settings: [http://torplay.local/settings](http://torplay.local/settings)
 - Installed TorPlay household access: [http://torplay.local](http://torplay.local)
 - Development server: [http://localhost:3000](http://localhost:3000)

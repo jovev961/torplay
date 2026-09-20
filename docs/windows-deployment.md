@@ -49,7 +49,7 @@ TMDB supplies TorPlay's movie and TV catalog metadata. It is the only required e
 4. Copy the long **API Read Access Token** shown in the API settings page. Do not use the shorter v3 API key.
 5. Paste the token into TorPlay's setup page and choose **Verify and finish**. TorPlay verifies it before saving.
 
-The credential is stored only on the TorPlay computer. Provider settings can be changed only through `localhost`, not from another household device.
+The credential is stored only on the TorPlay computer. Provider settings can be changed through `localhost`, `torplay.local`, or the displayed private LAN address.
 
 ### Add torrent sources
 
@@ -68,7 +68,7 @@ These services enhance specific features but are not required for normal operati
 | SubDL | Additional subtitle results | [SubDL API panel](https://subdl.com/panel/api) |
 | Jackett | Optional external Torznab/indexer bridge | [Jackett project](https://github.com/Jackett/Jackett) |
 
-Add optional credentials from [http://localhost/settings](http://localhost/settings). Torrent and embedded subtitles continue to work without external subtitle keys.
+Add optional credentials from [http://torplay.local/settings](http://torplay.local/settings), the displayed LAN address, or `http://localhost/settings` on the TorPlay computer. Torrent and embedded subtitles continue to work without external subtitle keys.
 
 ## Open TorPlay
 
