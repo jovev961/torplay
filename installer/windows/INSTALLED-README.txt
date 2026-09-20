@@ -8,7 +8,7 @@ Household devices can use http://torplay.local after setup is complete.
 System tray:
   Right-click the TorPlay notification-area icon to open TorPlay or its logs,
   start/restart/stop the runtime, and control whether the tray starts at login.
-  Exit closes the tray only; choose Stop TorPlay to stop the background runtime.
+  Exit cleanly stops the background runtime before closing the tray.
 
 Configuration:
   Open http://localhost/settings on the TorPlay computer to manage provider keys.

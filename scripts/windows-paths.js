@@ -19,6 +19,7 @@ export function installedPaths({
     logPath: path.join(resolvedData, "logs", "torplay.log"),
     serverEntry: path.join(resolvedInstall, "app", "server.js"),
     homeEntry: path.join(resolvedInstall, "runtime", "home.mjs"),
+    watchdogEntry: path.join(resolvedInstall, "runtime", "runtime-watchdog.mjs"),
     runnerEntry: path.join(resolvedInstall, "runtime", "windows-runner.mjs"),
     controlEntry: path.join(resolvedInstall, "runtime", "windows-control.mjs"),
     launcherPath: path.join(resolvedInstall, "runtime", "torplay-launcher.vbs"),
@@ -43,5 +44,6 @@ export function installedEnvironment(paths, environment = process.env) {
     TORPLAY_STATUS_PATH: environment.TORPLAY_STATUS_PATH || paths.statusPath,
     TORPLAY_LOG_PATH: environment.TORPLAY_LOG_PATH || paths.logPath,
     TORPLAY_SERVER_ENTRY: environment.TORPLAY_SERVER_ENTRY || paths.serverEntry,
+    TORPLAY_WATCHDOG_ENTRY: environment.TORPLAY_WATCHDOG_ENTRY || paths.watchdogEntry,
   };
 }

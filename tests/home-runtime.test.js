@@ -12,6 +12,10 @@ import {
   serverStart,
   startHomeRuntime,
 } from "../scripts/home.js";
+import {
+  exitIfSupervisorStopped,
+  supervisorIsRunning,
+} from "../scripts/runtime-watchdog.js";
 
 class FakeChild extends EventEmitter {
   constructor(autoExit) {
@@ -60,13 +64,34 @@ test("home configuration uses safe defaults and validates public settings", () =
   );
 });
 
-test("installed startup uses the standalone server without the Next CLI", () => {
+test("installed startup uses the standalone server with supervisor ownership", () => {
   const config = parseHomeConfig({ TORPLAY_PORT: "3456" });
-  const server = serverStart({ TORPLAY_SERVER_ENTRY: "C:\\TorPlay\\app\\server.js" }, config);
+  const server = serverStart({
+    TORPLAY_SERVER_ENTRY: "C:\\TorPlay\\app\\server.js",
+    TORPLAY_WATCHDOG_ENTRY: "C:\\TorPlay\\runtime\\runtime-watchdog.mjs",
+    NODE_OPTIONS: "--trace-warnings",
+  }, config);
   assert.deepEqual(server.args, ["C:\\TorPlay\\app\\server.js"]);
   assert.equal(server.environment.HOSTNAME, "127.0.0.1");
   assert.equal(server.environment.PORT, "3456");
   assert.equal(server.environment.NODE_ENV, "production");
+  assert.equal(server.environment.TORPLAY_SUPERVISOR_PID, String(process.pid));
+  assert.match(server.environment.NODE_OPTIONS, /^--trace-warnings --import=file:/);
+  assert.match(server.environment.NODE_OPTIONS, /runtime-watchdog\.mjs$/);
+});
+
+test("the server watchdog exits only after its supervisor disappears", () => {
+  const running = () => {};
+  const missing = () => { throw Object.assign(new Error("missing"), { code: "ESRCH" }); };
+  const denied = () => { throw Object.assign(new Error("denied"), { code: "EPERM" }); };
+  let exits = 0;
+
+  assert.equal(supervisorIsRunning(42, running), true);
+  assert.equal(supervisorIsRunning(42, denied), true);
+  assert.equal(supervisorIsRunning(42, missing), false);
+  assert.equal(exitIfSupervisorStopped({ supervisorPid: 42, killProcess: running, exitProcess: () => { exits += 1; } }), false);
+  assert.equal(exitIfSupervisorStopped({ supervisorPid: 42, killProcess: missing, exitProcess: () => { exits += 1; } }), true);
+  assert.equal(exits, 1);
 });
 
 test("installed configuration keeps process overrides and uses its explicit config file", async () => {
@@ -120,6 +145,8 @@ test("runtime locks reject a live duplicate and release cleanly", async () => {
 test("Windows startup ignores obsolete managed-service settings and does not invoke Docker", async () => {
   const next = new FakeChild();
   const calls = [];
+  let proxyStops = 0;
+  let mdnsStops = 0;
   const runtime = await startHomeRuntime({
     platform: "win32", environment: { TORPLAY_MANAGED_JACKETT: "true" }, buildExists: () => true,
     spawnProcess: (_command, args) => {
@@ -133,10 +160,13 @@ test("Windows startup ignores obsolete managed-service settings and does not inv
     spawnSyncProcess: () => { throw new Error("Docker must not be called"); },
     fetchProcess: async () => ({ ok: true }),
     checkPortProcess: async () => {}, acquireLockProcess: async () => async () => {},
-    startProxyProcess: async () => ({ stop: async () => {} }),
-    startMdnsProcess: async () => ({ stop: async () => {} }),
+    startProxyProcess: async () => ({ stop: async () => { proxyStops += 1; } }),
+    startMdnsProcess: async () => ({ stop: async () => { mdnsStops += 1; } }),
     statusReporter: { write() {} }, log() {},
   });
   await runtime.stop();
+  await runtime.stop();
   assert.equal(calls.some((args) => args.includes("compose")), false);
+  assert.equal(proxyStops, 1);
+  assert.equal(mdnsStops, 1);
 });

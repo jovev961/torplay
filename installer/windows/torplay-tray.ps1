@@ -192,6 +192,22 @@ function Update-TrayStatus {
   $notifyIcon.Text = if ($running) { "TorPlay - Running" } else { "TorPlay - Stopped" }
 }
 
+$script:exitStarted = $false
+function Stop-TorPlayAndExit([bool]$ShowError) {
+  if ($script:exitStarted) {
+    return
+  }
+  $script:exitStarted = $true
+  try {
+    Invoke-TorPlayControl "stop"
+  } catch {
+    if ($ShowError) {
+      Show-TrayError $_.Exception.Message
+    }
+  }
+  [Windows.Forms.Application]::Exit()
+}
+
 $menu.add_Opening({ Update-TrayStatus })
 $openItem.add_Click({ Start-Process "http://localhost" })
 $notifyIcon.add_DoubleClick({ Start-Process "http://localhost" })
@@ -237,7 +253,12 @@ $startupItem.add_Click({
   }
   Update-TrayStatus
 })
-$exitItem.add_Click({ [Windows.Forms.Application]::Exit() })
+$exitItem.add_Click({ Stop-TorPlayAndExit $true })
+$sessionEndingHandler = [Microsoft.Win32.SessionEndingEventHandler]{
+  param($sender, $eventArgs)
+  Stop-TorPlayAndExit $false
+}
+[Microsoft.Win32.SystemEvents]::add_SessionEnding($sessionEndingHandler)
 
 try {
   if (-not (Test-TorPlayRunning)) {
@@ -250,6 +271,7 @@ try {
   Update-TrayStatus
   [Windows.Forms.Application]::Run()
 } finally {
+  [Microsoft.Win32.SystemEvents]::remove_SessionEnding($sessionEndingHandler)
   $notifyIcon.Visible = $false
   $notifyIcon.Dispose()
   $menu.Dispose()

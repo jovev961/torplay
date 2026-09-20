@@ -13,7 +13,14 @@ import {
 import { sendControlCommand, startControlServer } from "../scripts/runtime-control.js";
 import { createStatusReporter, readRuntimeStatus } from "../platform/runtime/status.js";
 import { installedEnvironment, installedPaths } from "../scripts/windows-paths.js";
-import { createRotatingLog } from "../scripts/windows-runner.js";
+import {
+  restartInstalledRuntime,
+  startInstalledRuntime,
+  stopInstalledRuntime,
+  waitForInstalledRuntime,
+} from "../scripts/windows-control.js";
+import { attachInstalledRuntimeLifecycle, createRotatingLog } from "../scripts/windows-runner.js";
+import { EventEmitter } from "node:events";
 
 test("Windows file versions are numeric and preserve beta build numbers", () => {
   assert.equal(windowsFileVersion("0.1.0-beta.2"), "0.1.0.2");
@@ -29,6 +36,7 @@ test("installed paths are writable-data based and remain configurable", () => {
   assert.equal(environment.TORPLAY_DEFAULT_DATABASE_PATH, path.join("D:\\TorPlayData", "data", "torplay.db"));
   assert.equal(environment.TORPLAY_CONFIG_PATH, path.join("D:\\TorPlayData", "config", "torplay.env"));
   assert.equal(environment.TORPLAY_SERVER_ENTRY, path.join("C:\\Apps\\TorPlay", "app", "server.js"));
+  assert.equal(environment.TORPLAY_WATCHDOG_ENTRY, path.join("C:\\Apps\\TorPlay", "runtime", "runtime-watchdog.mjs"));
   assert.equal(paths.trayScriptPath, path.join("C:\\Apps\\TorPlay", "runtime", "torplay-tray.ps1"));
   assert.equal(paths.trayLauncherPath, path.join("C:\\Apps\\TorPlay", "runtime", "torplay-tray.vbs"));
   assert.equal(paths.trayPidPath, path.join("D:\\TorPlayData", "runtime", "tray.pid"));
@@ -84,12 +92,121 @@ test("runtime logs rotate at a bounded size", async () => {
   }
 });
 
+test("installed startup waits for a new healthy supervisor", async () => {
+  const child = new EventEmitter();
+  child.unref = () => {};
+  let spawned = 0;
+  let readinessOptions;
+  const result = await startInstalledRuntime({
+    paths: { statusPath: "status.json", launcherPath: "launcher.vbs", installDir: "C:\\TorPlay" },
+    spawnProcess: () => { spawned += 1; return child; },
+    readStatus: () => ({ pid: 10, startedAt: "old", state: "stopped" }),
+    isRunning: () => false,
+    waitForReady: async (options) => {
+      readinessOptions = options;
+      return { pid: 20, startedAt: "new", state: "ready" };
+    },
+  });
+  assert.equal(spawned, 1);
+  assert.equal(readinessOptions.previousStartedAt, "old");
+  assert.equal(result.started, true);
+  assert.equal(result.snapshot.pid, 20);
+});
+
+test("installed startup reuses an existing healthy runtime", async () => {
+  const existing = { pid: 10, startedAt: "existing", state: "ready" };
+  const result = await startInstalledRuntime({
+    paths: { statusPath: "status.json" },
+    spawnProcess: () => { throw new Error("must not spawn"); },
+    fetchProcess: async () => ({ ok: true }),
+    readStatus: () => existing,
+    isRunning: () => true,
+  });
+  assert.deepEqual(result, { started: false, snapshot: existing });
+});
+
+test("installed readiness reports startup failures and accepts healthy state", async () => {
+  const states = [
+    { pid: 20, startedAt: "new", state: "starting" },
+    { pid: 20, startedAt: "new", state: "ready" },
+  ];
+  const snapshot = await waitForInstalledRuntime({
+    paths: { statusPath: "status.json" },
+    previousStartedAt: "old",
+    readStatus: () => states.shift() || states.at(-1),
+    isRunning: () => true,
+    fetchProcess: async () => ({ ok: true }),
+    waitProcess: async () => {},
+    now: (() => { let value = 0; return () => value += 10; })(),
+    timeoutMs: 100,
+  });
+  assert.equal(snapshot.state, "ready");
+
+  await assert.rejects(
+    () => waitForInstalledRuntime({
+      paths: { statusPath: "status.json" },
+      previousStartedAt: "old",
+      readStatus: () => ({ pid: 30, startedAt: "failed", state: "error", lastError: "Port unavailable" }),
+      waitProcess: async () => {},
+    }),
+    /Port unavailable/,
+  );
+});
+
+test("installed stop is idempotent and restart finishes stop before start", async () => {
+  assert.deepEqual(await stopInstalledRuntime({
+    paths: { statusPath: "status.json" },
+    readStatus: () => null,
+    isRunning: () => false,
+  }), { stopped: false, forced: false });
+
+  let runningChecks = 0;
+  let controlRequests = 0;
+  assert.deepEqual(await stopInstalledRuntime({
+    paths: { statusPath: "status.json", dataDir: "C:\\TorPlayData" },
+    readStatus: () => ({ pid: 42 }),
+    isRunning: () => runningChecks++ < 2,
+    sendControl: async () => { controlRequests += 1; },
+    waitProcess: async () => {},
+  }), { stopped: true, forced: false });
+  assert.equal(controlRequests, 1);
+
+  const order = [];
+  await restartInstalledRuntime({
+    stopRuntime: async () => { order.push("stop"); },
+    startRuntime: async () => { order.push("start"); },
+  });
+  assert.deepEqual(order, ["stop", "start"]);
+});
+
+test("the Windows runner forwards termination once and detaches after exit", async () => {
+  const processRef = new EventEmitter();
+  processRef.exitCode = 0;
+  const child = new EventEmitter();
+  child.exitCode = null;
+  let kills = 0;
+  child.kill = () => { kills += 1; };
+  let stops = 0;
+  attachInstalledRuntimeLifecycle(child, {
+    paths: {}, environment: {}, processRef,
+    stopRuntime: async () => { stops += 1; return { stopped: true }; },
+  });
+  processRef.emit("SIGTERM");
+  processRef.emit("SIGINT");
+  await Promise.resolve();
+  assert.equal(stops, 1);
+  assert.equal(kills, 0);
+  child.emit("exit", 0, null);
+  assert.equal(processRef.listenerCount("SIGHUP"), 0);
+});
+
 test("release validation requires the packaged runtime and Windows native tools", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "torplay-stage-"));
   try {
     const files = [
       "runtime/node.exe",
       "runtime/home.mjs",
+      "runtime/runtime-watchdog.mjs",
       "runtime/windows-runner.mjs",
       "runtime/windows-control.mjs",
       "runtime/torplay-tray.ps1",
@@ -151,10 +268,14 @@ test("Windows tray controls the existing runtime without starting a second backe
   assert.match(tray, /windows-control\.mjs/);
   assert.match(tray, /CurrentVersion\\Run/);
   assert.match(tray, /Local\\TorPlayTray/);
+  assert.match(tray, /Stop-TorPlayAndExit/);
+  assert.match(tray, /Invoke-TorPlayControl "stop"/);
+  assert.match(tray, /SystemEvents\]::add_SessionEnding/);
   assert.doesNotMatch(tray, /next start|server\.js|WebTorrent/);
   assert.match(launcher, /torplay-tray\.ps1/);
   assert.match(releaseScript, /installer\/windows\/torplay-tray\.ps1/);
   assert.match(releaseScript, /installer\/windows\/torplay-tray\.vbs/);
+  assert.match(releaseScript, /runtime-watchdog\.js/);
 });
 
 test("fresh Windows configuration leaves required provider credentials for browser setup", async () => {
