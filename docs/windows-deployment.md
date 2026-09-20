@@ -176,7 +176,9 @@ Release builds must run on Windows x64 so SQLite, FFmpeg, and FFprobe native fil
 
 ### GitHub Actions
 
-The **Windows installer** workflow is the standard hosted build path. It runs for pull requests targeting `main`, version tags matching `v*`, and manual dispatches from the GitHub Actions page. Tag names must exactly match `v<package-version>` or the build fails.
+The **Windows installer** workflow runs only manually: open GitHub Actions, select **Windows installer**, choose **Run workflow**, and select the branch to package. Pull requests and tags do not start installer builds. When manually running against a tag, its name must match `v<package-version>`.
+
+Pull requests targeting `main` or `develop` run the separate **CI** workflow. Its required **Test, lint, and build** job verifies the application on Windows without packaging an installer.
 
 Each successful run retains one workflow artifact for 14 days containing the versioned installer and its SHA-256 file. The workflow verifies the checksum before upload. Download both files and compare the published digest before distributing the installer. This workflow does not create or modify a GitHub Release.
 
