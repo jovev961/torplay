@@ -48,7 +48,7 @@ See [Development](docs/development.md) and [Configuration](docs/configuration.md
 | Command | Purpose |
 | --- | --- |
 | `npm install` | Install project dependencies |
-| `npm run dev` | Start the development server with built-in sources |
+| `npm run dev` | Start the development server; add torrent sources in Settings |
 | `npm run build` | Create a production Next.js build |
 | `npm start` | Start the standard production Next.js server |
 | `npm run start:home` | Start the manual Windows home/LAN runtime |

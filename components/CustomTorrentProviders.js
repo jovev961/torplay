@@ -12,7 +12,7 @@ async function request(action, provider, refresh = false) {
   if (!response.ok) throw new Error(body.error || "Provider request failed.");
   return body;
 }
-export default function CustomTorrentProviders({ initialProviders, canEdit, onChanged }) {
+export default function CustomTorrentProviders({ initialProviders, canEdit, onChanged, addOpen = false, onAddClosed }) {
   const [providers, setProviders] = useState(initialProviders);
   const [draft, setDraft] = useState(null);
   const [health, setHealth] = useState({});
@@ -32,13 +32,14 @@ export default function CustomTorrentProviders({ initialProviders, canEdit, onCh
     }).catch((err) => { if (!cancelled) setError(err.message); });
     return () => { cancelled = true; };
   }, []);
+  const activeDraft = draft || (addOpen ? { name: "", endpoint: "", apiKey: "", enabled: true } : null);
   async function act(action, provider) {
     setBusy(true); setError(""); setMessage("");
     try {
       const data = await request(action, provider);
       if (action === "test") setMessage(`Connected · ${data.capabilities.mediaTypes.join(" · ")}`);
       else {
-        setProviders(data.providers); setDraft(null);
+        setProviders(data.providers); setDraft(null); onAddClosed?.();
         setMessage(action === "remove" ? "Provider removed." : "Provider saved.");
         await onChanged();
         await refresh(true);
@@ -63,27 +64,26 @@ export default function CustomTorrentProviders({ initialProviders, canEdit, onCh
       ))}
       {error ? <div className="notice error" role="alert">{error}</div> : null}
       {message ? <div className="notice" role="status">{message}</div> : null}
-      {draft && canEdit ? <form className={styles.providerCard} onSubmit={(event) => { event.preventDefault(); void act(draft.id ? "update" : "create", draft); }}>
-        <h3>{draft.id ? "Edit Torznab provider" : "Add Torznab provider"}</h3>
+      {activeDraft && canEdit ? <form className={styles.providerCard} onSubmit={(event) => { event.preventDefault(); void act(activeDraft.id ? "update" : "create", activeDraft); }}>
+        <h3>{activeDraft.id ? "Edit Torznab provider" : "Add Custom Indexer"}</h3>
         <div className={styles.providerForm}>
           {[["name", "Display name", "text"], ["endpoint", "Full Torznab API endpoint", "url"], ["apiKey", "API key (optional)", "password"]].map(([id, label, type]) => (
             <div className={styles.field} key={id}>
               <label htmlFor={`custom-${id}`}>{label}</label>
-              <div className={styles.inputRow}><input id={`custom-${id}`} type={type} required={id !== "apiKey"} disabled={busy} value={draft[id] || ""} autoComplete={id === "apiKey" ? "new-password" : "off"} placeholder={id === "apiKey" && draft.apiKeyConfigured ? "Leave blank to keep existing key" : ""} onChange={(event) => setDraft({ ...draft, [id]: event.target.value })} /></div>
+              <div className={styles.inputRow}><input id={`custom-${id}`} type={type} required={id !== "apiKey"} disabled={busy} value={activeDraft[id] || ""} autoComplete={id === "apiKey" ? "new-password" : "off"} placeholder={id === "apiKey" && activeDraft.apiKeyConfigured ? "Leave blank to keep existing key" : ""} onChange={(event) => setDraft({ ...activeDraft, [id]: event.target.value })} /></div>
             </div>
           ))}
-          {draft.apiKeyConfigured ? <label><input type="checkbox" checked={Boolean(draft.clearApiKey)} disabled={busy} onChange={(event) => setDraft({ ...draft, clearApiKey: event.target.checked })} /> Remove stored API key</label> : null}
-          <label><input type="checkbox" checked={draft.enabled} disabled={busy} onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })} /> Enabled</label>
+          {activeDraft.apiKeyConfigured ? <label><input type="checkbox" checked={Boolean(activeDraft.clearApiKey)} disabled={busy} onChange={(event) => setDraft({ ...activeDraft, clearApiKey: event.target.checked })} /> Remove stored API key</label> : null}
+          <label><input type="checkbox" checked={activeDraft.enabled} disabled={busy} onChange={(event) => setDraft({ ...activeDraft, enabled: event.target.checked })} /> Enabled</label>
           <p className={styles.sectionNote}>Use the API URL supplied by your indexer, without query parameters. Connection changes must pass verification before saving.</p>
           <div className={styles.sourceActions}>
-            <button className={styles.testButton} type="button" disabled={busy} onClick={() => act("test", draft)}>Test connection</button>
+            <button className={styles.testButton} type="button" disabled={busy} onClick={() => act("test", activeDraft)}>Test connection</button>
             <button className={styles.saveButton} type="submit" disabled={busy}>{busy ? "Working…" : "Verify and save"}</button>
-            <button className={styles.testButton} type="button" disabled={busy} onClick={() => setDraft(null)}>Cancel</button>
+            <button className={styles.testButton} type="button" disabled={busy} onClick={() => { setDraft(null); onAddClosed?.(); }}>Cancel</button>
           </div>
         </div>
       </form> : null}
       <div className={styles.sourceActions}>
-        {canEdit && !draft ? <button type="button" className={styles.saveButton} onClick={() => { setDraft({ name: "", endpoint: "", apiKey: "", enabled: true }); setMessage(""); }}>+ Add Torznab Provider</button> : null}
         <button type="button" className={styles.testButton} disabled={busy || !providers.length} onClick={() => refresh(true)}>Refresh custom providers</button>
       </div>
     </div>

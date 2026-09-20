@@ -8,7 +8,11 @@ async function readJson(response) {
     throw new Error(`The server returned an unexpected response (${response.status}).`);
   }
   const data = await response.json();
-  if (!response.ok) throw new Error(data.error || "The request failed.");
+  if (!response.ok) {
+    const error = new Error(data.error || "The request failed.");
+    error.code = data.code || null;
+    throw error;
+  }
   return data;
 }
 
@@ -44,6 +48,7 @@ export function useSourceLookup() {
   const [session, setSession] = useState(null);
   const [selectedFileId, setSelectedFileId] = useState(null);
   const [error, setError] = useState("");
+  const [errorCode, setErrorCode] = useState("");
   const pendingRequests = useRef(new Set());
   const releasedSessionIds = useRef(new Set());
 
@@ -85,7 +90,10 @@ export function useSourceLookup() {
         const next = await readJson(response);
         if (!cancelled) setSession(next);
       } catch (pollError) {
-        if (!cancelled) setError(pollError.message);
+        if (!cancelled) {
+          setError(pollError.message);
+          setErrorCode(pollError.code || "");
+        }
       }
     }, 1000);
 
@@ -123,6 +131,7 @@ export function useSourceLookup() {
       await releaseSession(session.id, { explicit: true });
     } catch (stopError) {
       setError(stopError.message);
+      setErrorCode(stopError.code || "");
     } finally {
       setSession(null);
       setSelectedFileId(null);
@@ -134,6 +143,7 @@ export function useSourceLookup() {
     setSearching(true);
     setHasSearched(true);
     setError("");
+    setErrorCode("");
     setResults([]);
     setSelectedFileId(null);
 
@@ -149,7 +159,10 @@ export function useSourceLookup() {
       const data = await readJson(response);
       setResults(data.results);
     } catch (searchError) {
-      if (searchError.name !== "AbortError") setError(searchError.message);
+      if (searchError.name !== "AbortError") {
+        setError(searchError.message);
+        setErrorCode(searchError.code || "");
+      }
     } finally {
       setSearching(false);
     }
@@ -158,6 +171,7 @@ export function useSourceLookup() {
   async function start(resultId) {
     setStartingId(resultId);
     setError("");
+    setErrorCode("");
     setSelectedFileId(null);
     try {
       const response = await request("/api/torrents", {
@@ -167,7 +181,10 @@ export function useSourceLookup() {
       });
       setSession(await readJson(response));
     } catch (startError) {
-      if (startError.name !== "AbortError") setError(startError.message);
+      if (startError.name !== "AbortError") {
+        setError(startError.message);
+        setErrorCode(startError.code || "");
+      }
     } finally {
       setStartingId(null);
     }
@@ -175,6 +192,7 @@ export function useSourceLookup() {
 
   function adoptSession(nextSession, fileId = null) {
     setError("");
+    setErrorCode("");
     setResults([]);
     setHasSearched(true);
     setSession(nextSession);
@@ -183,6 +201,7 @@ export function useSourceLookup() {
 
   return {
     error,
+    errorCode,
     hasSearched,
     results,
     searching,

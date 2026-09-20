@@ -172,7 +172,7 @@ test("persists native provider selection and reports safe source metadata", asyn
   try {
     const before = await settingsState({ environment, includeValues: true });
     assert.deepEqual(before.torrentSources.providers.map(({ id, enabled }) => [id, enabled]), [
-      ["knaben", true], ["yts", true], ["eztv", true],
+      ["knaben", false], ["yts", false], ["eztv", false],
     ]);
     assert.equal(before.torrentSources.jackettActive, true);
     assert.equal(JSON.stringify(before.torrentSources).includes("secret"), false);
@@ -187,13 +187,13 @@ test("persists native provider selection and reports safe source metadata", asyn
   }
 });
 
-test("protects externally managed native settings and requires an effective search source", async () => {
+test("protects externally managed native settings and permits an empty source selection", async () => {
   const { directory, filename } = await fixture("");
   try {
-    await assert.rejects(
-      updateNativeProviderSettings([], { environment: {}, configPath: filename }),
-      /Enable at least one native provider or configure Jackett/,
-    );
+    const environment = {};
+    await updateNativeProviderSettings([], { environment, configPath: filename });
+    assert.equal(environment.TORPLAY_NATIVE_PROVIDERS, "");
+    assert.match(await readFile(filename, "utf8"), /^TORPLAY_NATIVE_PROVIDERS=''$/m);
     await assert.rejects(
       updateNativeProviderSettings(["unknown"], { environment: {}, configPath: filename }),
       /unknown provider/,

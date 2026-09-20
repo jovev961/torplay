@@ -205,6 +205,94 @@
   gap: 14px;
 }
 
+.sourceNotice,
+.supportedPicker {
+  margin: 14px 0;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  color: var(--muted);
+  background: #101419;
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
+.supportedPicker {
+  display: grid;
+  gap: 10px;
+}
+
+.supportedPicker h3,
+.supportedPicker p {
+  margin: 0;
+}
+
+.supportedPicker p {
+  color: var(--muted);
+}
+
+.supportedChoice {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  background: var(--panel);
+  cursor: pointer;
+}
+
+.supportedChoice input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.supportedChoice span,
+.sourceCardHeading span {
+  display: grid;
+  gap: 3px;
+}
+
+.supportedChoice small,
+.sourceCardHeading small {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.supportedChoice em {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-style: normal;
+}
+
+.sourceSubheading {
+  margin-top: 24px;
+}
+
+.sourceCardHeading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sourceCardHeading .removeButton {
+  min-height: 34px;
+}
+
+.emptySources {
+  margin: 12px 2px;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
 .sourceCard {
   padding: 18px;
   border: 1px solid var(--border);
@@ -265,7 +353,7 @@
 
 .sourceWarning {
   margin: 12px 2px 0;
-  color: #ffb7b7;
+  color: var(--muted);
   font-size: 0.8rem;
 }
 
