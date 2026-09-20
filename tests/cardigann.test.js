@@ -12,7 +12,7 @@ import {
   validateDefinitionSettings,
 } from "../lib/search/cardigann/definition.js";
 import { applyFilters } from "../lib/search/cardigann/filters.js";
-import { resolvePublicAddress, safeRequest } from "../lib/search/cardigann/http.js";
+import { pinnedLookup, resolvePublicAddress, safeRequest } from "../lib/search/cardigann/http.js";
 import { renderTemplate } from "../lib/search/cardigann/template.js";
 import { createCardigannProvider, publicCustomProviders, readCustomProviders, updateCardigannProvider } from "../lib/settings/torrent-providers.js";
 
@@ -52,11 +52,17 @@ function response(url, body, status = 200, headers = {}) {
 
 test("definition URLs accept public YAML and normalize GitHub blob pages", () => {
   assert.equal(
-    normalizeDefinitionUrl("https://github.com/Prowlarr/Indexers/blob/master/definitions/v11/example.yml#readme"),
-    "https://raw.githubusercontent.com/Prowlarr/Indexers/master/definitions/v11/example.yml",
+    normalizeDefinitionUrl("https://github.com/Prowlarr/Indexers/blob/master/definitions/v11/yts.yml#readme"),
+    "https://raw.githubusercontent.com/Prowlarr/Indexers/master/definitions/v11/yts.yml",
+  );
+  assert.equal(
+    normalizeDefinitionUrl("https://raw.githubusercontent.com/Prowlarr/Indexers/master/definitions/v11/yts.yml"),
+    "https://raw.githubusercontent.com/Prowlarr/Indexers/master/definitions/v11/yts.yml",
   );
   assert.equal(normalizeDefinitionUrl("https://definitions.example/index.yaml"), "https://definitions.example/index.yaml");
   assert.throws(() => normalizeDefinitionUrl("http://definitions.example/index.yml"), /public HTTPS/);
+  assert.throws(() => normalizeDefinitionUrl("https://user:secret@definitions.example/index.yml"), /without embedded credentials/);
+  assert.throws(() => normalizeDefinitionUrl("not a URL"), (error) => error.code === "CARDIGANN_URL_INVALID");
   assert.throws(() => normalizeDefinitionUrl("https://github.com/Prowlarr/Indexers/tree/master/definitions"), /individual/);
   assert.throws(() => normalizeDefinitionUrl("https://definitions.example/index.json"), /\.yml or \.yaml/);
 });
@@ -99,10 +105,45 @@ test("Cardigann templates and filters render supported expressions without evalu
   assert.throws(() => renderTemplate("{{ dangerous .Query }}", {}), /Unsupported Cardigann template function/);
 });
 
-test("network guard rejects private resolution and validates every redirect", async () => {
-  await assert.rejects(resolvePublicAddress("private.example", (_host, _options, callback) => callback(null, [{ address: "127.0.0.1", family: 4 }])), /public internet/);
+test("pinned DNS lookup supports Node single-address and all-address callback contracts", async () => {
+  const lookup = pinnedLookup({ address: "93.184.216.34", family: 4 });
+  const single = await new Promise((resolve, reject) => lookup("public.example", {}, (error, address, family) => error ? reject(error) : resolve({ address, family })));
+  const all = await new Promise((resolve, reject) => lookup("public.example", { all: true }, (error, addresses) => error ? reject(error) : resolve(addresses)));
+  assert.deepEqual(single, { address: "93.184.216.34", family: 4 });
+  assert.deepEqual(all, [{ address: "93.184.216.34", family: 4 }]);
+});
+
+test("network guard rejects unsafe DNS and reports DNS failures safely", async () => {
+  await assert.rejects(
+    resolvePublicAddress("private.example", (_host, _options, callback) => callback(null, [{ address: "127.0.0.1", family: 4 }])),
+    (error) => error.code === "REMOTE_DESTINATION_BLOCKED" && /blocked/.test(error.message),
+  );
+  await assert.rejects(
+    resolvePublicAddress("mixed.example", (_host, _options, callback) => callback(null, [
+      { address: "93.184.216.34", family: 4 }, { address: "169.254.1.1", family: 4 },
+    ])),
+    (error) => error.code === "REMOTE_DESTINATION_BLOCKED",
+  );
+  await assert.rejects(
+    resolvePublicAddress("missing.example", (_host, _options, callback) => callback(Object.assign(new Error("internal resolver detail"), { code: "ENOTFOUND" }))),
+    (error) => error.code === "REMOTE_DNS_FAILED" && error.message === "The destination hostname could not be resolved.",
+  );
   const resolved = await resolvePublicAddress("public.example", (_host, _options, callback) => callback(null, [{ address: "93.184.216.34", family: 4 }]));
   assert.equal(resolved.address, "93.184.216.34");
+});
+
+test("safe requests follow HTTPS redirects and block unsafe redirects", async () => {
+  const followed = [];
+  const redirected = await safeRequest("https://public.example/start", {
+    requestImpl: async (url) => {
+      followed.push(url.toString());
+      return followed.length === 1
+        ? response(url, "", 302, { location: "https://cdn.example/definition.yml" })
+        : response(url, "definition", 200);
+    },
+  });
+  assert.equal(redirected.status, 200);
+  assert.deepEqual(followed, ["https://public.example/start", "https://cdn.example/definition.yml"]);
   const seen = [];
   await assert.rejects(safeRequest("https://public.example/start", {
     requestImpl: async (url) => {
@@ -110,12 +151,57 @@ test("network guard rejects private resolution and validates every redirect", as
       if (seen.length === 1) return response(url, "", 302, { location: "http://127.0.0.1/private" });
       throw new Error("must not request redirected private target");
     },
-  }), /unsupported URL/);
+  }), (error) => error.code === "REMOTE_REDIRECT_BLOCKED");
   assert.deepEqual(seen, ["https://public.example/start"]);
   await assert.rejects(safeRequest("https://public.example/start", {
     protocols: ["http:", "https:"],
     requestImpl: async (url) => response(url, "", 302, { location: "http://public.example/insecure" }),
-  }), /unsupported URL/);
+  }), (error) => error.code === "REMOTE_REDIRECT_BLOCKED");
+  await assert.rejects(safeRequest("https://public.example/start", {
+    requestImpl: async (url) => response(url, "", 302, { location: "https://[invalid" }),
+  }), (error) => error.code === "REMOTE_REDIRECT_INVALID");
+});
+
+test("safe requests classify connection and timeout failures without leaking details", async () => {
+  await assert.rejects(safeRequest("not a URL"), (error) => error.code === "REMOTE_URL_INVALID");
+  await assert.rejects(safeRequest("https://user:secret@public.example/index.yml"), (error) => error.code === "REMOTE_URL_UNSUPPORTED");
+  await assert.rejects(safeRequest("https://public.example/index.yml", {
+    requestImpl: async () => { throw Object.assign(new Error("connect ECONNREFUSED 10.0.0.2:443"), { code: "ECONNREFUSED" }); },
+  }), (error) => error.code === "REMOTE_CONNECTION_FAILED" && !error.message.includes("10.0.0.2"));
+  await assert.rejects(safeRequest("https://public.example/index.yml", {
+    requestImpl: async () => { throw Object.assign(new Error("socket detail"), { code: "ETIMEDOUT" }); },
+  }), (error) => error.code === "REMOTE_REQUEST_TIMEOUT" && error.status === 504);
+  await assert.rejects(safeRequest("https://public.example/index.yml", {
+    requestImpl: async () => { throw Object.assign(new Error("sensitive upstream detail"), { status: 500 }); },
+  }), (error) => error.code === "REMOTE_CONNECTION_FAILED" && !error.message.includes("sensitive"));
+});
+
+test("GitHub blob and raw URLs both enter the complete definition pipeline", async () => {
+  const blobUrl = "https://github.com/Prowlarr/Indexers/blob/master/definitions/v11/yts.yml";
+  const rawUrl = "https://raw.githubusercontent.com/Prowlarr/Indexers/master/definitions/v11/yts.yml";
+  const requested = [];
+  for (const url of [blobUrl, rawUrl]) {
+    const imported = await importDefinition(url, {
+      request: async (resolvedUrl) => {
+        requested.push(String(resolvedUrl));
+        return response(resolvedUrl, stringify({ ...definition, id: "download-regression" }));
+      },
+    });
+    assert.equal(imported.definition.id, "download-regression");
+    assert.equal(imported.compatibility.schemaVersion, 11);
+  }
+  assert.deepEqual(requested, [rawUrl, rawUrl]);
+});
+
+test("definition imports report HTTP and YAML failures at their actual stage", async () => {
+  for (const status of [403, 404]) {
+    await assert.rejects(importDefinition(`https://definitions.example/status-${status}.yml`, {
+      request: async (url) => response(url, "", status),
+    }), (error) => error.code === "CARDIGANN_DOWNLOAD_HTTP" && error.message === `The definition server returned HTTP ${status}.`);
+  }
+  await assert.rejects(importDefinition("https://definitions.example/invalid.yml", {
+    request: async (url) => response(url, "not: [valid"),
+  }), (error) => error.code === "CARDIGANN_INVALID" && /invalid YAML/.test(error.message));
 });
 
 test("Cardigann adapter searches HTML and keeps magnets server-side", async () => {
