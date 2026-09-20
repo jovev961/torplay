@@ -8,6 +8,10 @@ import {
 } from "../../../../../../../../lib/torrent/manager.js";
 import { parseByteRange } from "../../../../../../../../lib/video/range.js";
 import { hlsAssetExists } from "../../../../../../../../lib/video/transcode.js";
+import {
+  remoteMediaOptionsResponse,
+  withRemoteMediaCors,
+} from "../../../../../../../../lib/remote-playback/cors.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -80,10 +84,14 @@ async function respond(request, context, includeBody) {
   return new Response(Readable.toWeb(stream), { status, headers });
 }
 
-export function GET(request, context) {
-  return respond(request, context, true);
+export async function GET(request, context) {
+  return withRemoteMediaCors(await respond(request, context, true));
 }
 
-export function HEAD(request, context) {
-  return respond(request, context, false);
+export async function HEAD(request, context) {
+  return withRemoteMediaCors(await respond(request, context, false));
+}
+
+export function OPTIONS() {
+  return remoteMediaOptionsResponse();
 }

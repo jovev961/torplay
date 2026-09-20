@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { isRemotePlaybackSessionActive } from "../lib/remote-playback/client-state.js";
 
 async function readJson(response) {
   const contentType = response.headers.get("content-type") || "";
@@ -112,6 +113,7 @@ export function useSourceLookup() {
     if (!sessionId) return undefined;
 
     const onPageHide = () => {
+      if (isRemotePlaybackSessionActive(sessionId)) return;
       void releaseSession(sessionId, { preferBeacon: true }).catch(() => {});
     };
     const onPageShow = (event) => {
@@ -125,7 +127,9 @@ export function useSourceLookup() {
     return () => {
       window.removeEventListener("pagehide", onPageHide);
       window.removeEventListener("pageshow", onPageShow);
-      void releaseSession(sessionId).catch(() => {});
+      if (!isRemotePlaybackSessionActive(sessionId)) {
+        void releaseSession(sessionId).catch(() => {});
+      }
     };
   }, [releaseSession, session?.id]);
 

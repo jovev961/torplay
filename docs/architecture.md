@@ -18,6 +18,7 @@ Next.js pages and API routes
         +--> WebTorrent session manager --> torrent swarm
         +--> subtitle providers and torrent sidecars
         +--> native Range stream or FFmpeg-prepared playback
+        +--> Cast / AirPlay receiver --> TorPlay HTTP media and subtitle routes
 ```
 
 This boundary keeps the reusable APIs suitable for another trusted client, such as a future Android TV application, without moving torrent or provider secrets into that client.
@@ -118,6 +119,8 @@ Native MP4, M4V, and WebM files are served with correct full and partial HTTP re
 Other recognized containers are probed with FFprobe and remuxed or transcoded to H.264/AAC playback when needed. Conversion starts only when playback is requested, consumes more CPU, and does not currently provide arbitrary seeking.
 
 Subtitles may come from torrent sidecars, embedded streams, OpenSubtitles, or SubDL. Server code converts supported text to WebVTT and exposes tracks through opaque application routes.
+
+Remote playback is transport-neutral at the media boundary. The player builds a receiver-safe source descriptor containing only absolute TorPlay media and subtitle URLs, then a browser adapter loads it on Google Cast or invokes the native AirPlay picker. Receivers fetch media directly from the LAN server; they never receive magnets, provider credentials, or a torrent client. Active receiver sessions keep the associated torrent and conversion resources available until playback stops or normal server expiry applies.
 
 ## Persistence
 

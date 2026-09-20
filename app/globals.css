@@ -2393,6 +2393,31 @@ a {
   min-width: min(330px, calc(100vw - 36px));
 }
 
+.remotePlaybackMenu {
+  width: min(280px, calc(100vw - 36px));
+}
+
+.remoteDeviceStatus {
+  display: grid;
+  gap: 2px;
+  padding: 9px 10px;
+}
+
+.remoteDeviceStatus small,
+.remotePlaybackNote {
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.remotePlaybackNote {
+  padding: 8px 10px 6px;
+  line-height: 1.45;
+}
+
+.playerMenu .remoteStopButton {
+  color: #ffb3b8;
+}
+
 .captionLanguage {
   display: grid;
   gap: 3px;

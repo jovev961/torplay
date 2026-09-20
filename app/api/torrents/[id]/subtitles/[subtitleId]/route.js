@@ -7,11 +7,15 @@ import {
   SubtitleError,
   subtitleToWebVtt,
 } from "../../../../../../lib/video/subtitles.js";
+import {
+  remoteMediaOptionsResponse,
+  withRemoteMediaCors,
+} from "../../../../../../lib/remote-playback/cors.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(request, context) {
+async function respond(request, context) {
   const { id, subtitleId } = await context.params;
   const match = getSubtitleFile(id, subtitleId);
   if (!match) {
@@ -69,4 +73,16 @@ export async function GET(request, context) {
     request.signal.removeEventListener("abort", abort);
     finish();
   }
+}
+
+export async function GET(request, context) {
+  return withRemoteMediaCors(await respond(request, context));
+}
+
+export async function HEAD(request, context) {
+  return withRemoteMediaCors(await respond(request, context), { includeBody: false });
+}
+
+export function OPTIONS() {
+  return remoteMediaOptionsResponse();
 }
