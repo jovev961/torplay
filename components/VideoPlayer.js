@@ -23,6 +23,7 @@ import {
   supportsFullscreen,
   toggleBrowserFullscreen,
 } from "../lib/video/fullscreen.js";
+import { closesPlayerMenu, nextMenuIndex } from "../lib/video/menu-navigation.js";
 import { useRemotePlayback } from "./useRemotePlayback.js";
 
 async function responseJson(response) {
@@ -107,6 +108,8 @@ export default function VideoPlayer({
 }) {
   const playerRef = useRef(null);
   const videoRef = useRef(null);
+  const captionMenuRef = useRef(null);
+  const captionButtonRef = useRef(null);
   const hlsRef = useRef(null);
   const abortRef = useRef(null);
   const pollRef = useRef(null);
@@ -635,6 +638,7 @@ export default function VideoPlayer({
   }
 
   function selectSubtitle(id, manual = true) {
+    const returnFocus = menu === "captions";
     if (manual) {
       subtitleSelectionModeRef.current = "user";
     }
@@ -642,7 +646,38 @@ export default function VideoPlayer({
     setActiveSubtitleId(id);
     setSubtitleError("");
     setMenu(null);
+    if (returnFocus) captionButtonRef.current?.focus({ preventScroll: true });
     revealControls(playing);
+  }
+
+  function closeCaptionMenu() {
+    setMenu(null);
+    captionButtonRef.current?.focus({ preventScroll: true });
+    revealControls(playing);
+  }
+
+  function captionMenuItems() {
+    return Array.from(captionMenuRef.current?.querySelectorAll("[data-player-menu-item]:not(:disabled)") || []);
+  }
+
+  function focusCaptionMenuItem(item) {
+    item?.focus({ preventScroll: true });
+    item?.scrollIntoView({ block: "nearest" });
+  }
+
+  function handleCaptionMenuKeyDown(event) {
+    if (closesPlayerMenu(event.key)) {
+      event.preventDefault();
+      event.stopPropagation();
+      closeCaptionMenu();
+      return;
+    }
+    const items = captionMenuItems();
+    const nextIndex = nextMenuIndex(items.indexOf(document.activeElement), items.length, event.key);
+    if (nextIndex < 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    focusCaptionMenuItem(items[nextIndex]);
   }
 
   function toggleCaptions() {
@@ -772,6 +807,14 @@ export default function VideoPlayer({
       tracks: subtitles.filter((subtitle) => subtitle.language === language),
     }))
     .filter((group) => group.tracks.length > 0);
+
+  useEffect(() => {
+    if (menu !== "captions") return;
+    const items = captionMenuItems();
+    const active = items.find((item) => item.getAttribute("aria-checked") === "true");
+    focusCaptionMenuItem(active || items[0]);
+  }, [activeSubtitleId, menu, subtitles.length]);
+
   const conversionLabel = playbackDetails
     ? `${playbackDetails.strategy === "remux" ? "Remuxing without video conversion" : "Converting to H.264 + AAC"} · ${playbackDetails.media.videoCodec}${playbackDetails.media.audioCodec ? ` / ${playbackDetails.media.audioCodec}` : ""}`
     : playbackState === "preparing"
@@ -908,48 +951,72 @@ export default function VideoPlayer({
 
         <div className="playerBottomBar">
           {menu === "captions" ? (
-            <div className="playerMenu captionMenu" role="menu" aria-label="Subtitles">
-              <span>Subtitles</span>
-              <button className={activeSubtitleId === null ? "active" : ""} type="button" onClick={() => selectSubtitle(null)}>Off</button>
-              {subtitleGroups.map((group) => (
-                <div className="captionLanguage" key={group.language}>
-                  <strong>{group.tracks[0].label}</strong>
-                  {group.tracks.map((subtitle) => (
-                    <button
-                      className={activeSubtitleId === subtitle.id ? "active" : ""}
-                      type="button"
-                      role="menuitemradio"
-                      aria-checked={activeSubtitleId === subtitle.id}
-                      key={subtitle.id}
-                      onClick={() => selectSubtitle(subtitle.id)}
-                    >
-                      <span>{activeSubtitleId === subtitle.id ? "✓ " : ""}{subtitle.source}</span>
-                      <small>{subtitle.releaseName || subtitle.sources.join(" + ")}</small>
-                    </button>
-                  ))}
-                </div>
-              ))}
-              {subtitleDiscovery.state === "loading" ? <small className="subtitleLoading">Searching subtitle providers…</small> : null}
-              <div className="subtitleDelay">
-                <span>Subtitle delay</span>
-                <div>
-                  <button type="button" onClick={() => setSubtitleDelay((value) => Math.max(-10, value - 0.5))}>−0.5s</button>
-                  <output>{subtitleDelay > 0 ? "+" : ""}{subtitleDelay.toFixed(1)}s</output>
-                  <button type="button" onClick={() => setSubtitleDelay((value) => Math.min(10, value + 0.5))}>+0.5s</button>
-                </div>
-                {subtitleDelay !== 0 ? <button type="button" onClick={() => setSubtitleDelay(0)}>Reset delay</button> : null}
+            <div
+              className="playerMenu captionMenu"
+              id="subtitle-menu"
+              role="menu"
+              aria-label="Subtitles"
+              ref={captionMenuRef}
+              onKeyDown={handleCaptionMenuKeyDown}
+            >
+              <div className="captionMenuHeader">
+                <span>Subtitles</span>
+                <button
+                  className={activeSubtitleId === null ? "active" : ""}
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={activeSubtitleId === null}
+                  data-player-menu-item
+                  onClick={() => selectSubtitle(null)}
+                >
+                  {activeSubtitleId === null ? "✓ " : ""}Off
+                </button>
               </div>
-              <button
-                className="subtitleAppearanceLink"
-                type="button"
-                onClick={() => setMenu("subtitleAppearance")}
-              >
-                Subtitle appearance <span aria-hidden="true">→</span>
-              </button>
+              <div className="captionTrackList">
+                {subtitleGroups.map((group) => (
+                  <div className="captionLanguage" role="group" aria-label={group.tracks[0].label} key={group.language}>
+                    <strong>{group.tracks[0].label}</strong>
+                    {group.tracks.map((subtitle) => (
+                      <button
+                        className={activeSubtitleId === subtitle.id ? "active" : ""}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={activeSubtitleId === subtitle.id}
+                        data-player-menu-item
+                        key={subtitle.id}
+                        onClick={() => selectSubtitle(subtitle.id)}
+                      >
+                        <span>{activeSubtitleId === subtitle.id ? "✓ " : ""}{subtitle.source}</span>
+                        <small>{subtitle.releaseName || subtitle.sources.join(" + ")}</small>
+                      </button>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <div className="captionMenuFooter">
+                {subtitleDiscovery.state === "loading" ? <small className="subtitleLoading">Searching subtitle providers…</small> : null}
+                <div className="subtitleDelay">
+                  <span>Subtitle delay</span>
+                  <div>
+                    <button data-player-menu-item type="button" onClick={() => setSubtitleDelay((value) => Math.max(-10, value - 0.5))}>−0.5s</button>
+                    <output>{subtitleDelay > 0 ? "+" : ""}{subtitleDelay.toFixed(1)}s</output>
+                    <button data-player-menu-item type="button" onClick={() => setSubtitleDelay((value) => Math.min(10, value + 0.5))}>+0.5s</button>
+                  </div>
+                  {subtitleDelay !== 0 ? <button data-player-menu-item type="button" onClick={() => setSubtitleDelay(0)}>Reset delay</button> : null}
+                </div>
+                <button
+                  className="subtitleAppearanceLink"
+                  type="button"
+                  data-player-menu-item
+                  onClick={() => setMenu("subtitleAppearance")}
+                >
+                  Subtitle appearance <span aria-hidden="true">→</span>
+                </button>
+              </div>
             </div>
           ) : null}
           {menu === "subtitleAppearance" ? (
-            <div className="playerMenu captionMenu subtitleAppearanceMenu" aria-label="Subtitle appearance">
+            <div className="playerMenu captionMenu subtitleAppearanceMenu" id="subtitle-menu" aria-label="Subtitle appearance">
               <div className="subtitleMenuHeader">
                 <button type="button" onClick={() => setMenu("captions")}>← Back</button>
                 <strong>Appearance</strong>
@@ -1179,9 +1246,11 @@ export default function VideoPlayer({
             <div className="controlGroup">
               <button
                 className={activeSubtitleId !== null ? "active" : ""}
+                ref={captionButtonRef}
                 type="button"
                 aria-label="Subtitles"
                 aria-expanded={menu === "captions" || menu === "subtitleAppearance"}
+                aria-controls="subtitle-menu"
                 disabled={subtitles.length === 0}
                 onClick={() => {
                   clearTimeout(hideTimerRef.current);
