@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createDatabase } from "../lib/database/sqlite.js";
 import {
   discoverCatalog,
   getGenreDefinitions,
@@ -10,6 +11,7 @@ import {
   getTrending,
   searchCatalog,
   searchMetadata,
+  TMDB_METADATA_CACHE_TTL_MS,
   tmdbImage,
 } from "../lib/metadata/tmdb.js";
 
@@ -281,4 +283,27 @@ test("rejects a v3 API key placed in the bearer-token setting", async () => {
     if (previousToken === undefined) delete process.env.TMDB_API_TOKEN;
     else process.env.TMDB_API_TOKEN = previousToken;
   }
+});
+
+test("persists public TMDB metadata without caching its bearer token", async () => {
+  await withTmdb(async () => {
+    const database = createDatabase(":memory:");
+    let calls = 0;
+    const fetchImpl = async () => {
+      calls += 1;
+      return new Response(JSON.stringify({ id: 77, title: "Cached Movie", runtime: 90 }), { status: 200 });
+    };
+    try {
+      const options = { fetchImpl, usePersistentCache: true, cacheDatabase: database, now: 1_000 };
+      assert.equal((await getMovieDetails(77, options)).title, "Cached Movie");
+      assert.equal((await getMovieDetails(77, { ...options, now: 2_000 })).title, "Cached Movie");
+      assert.equal(calls, 1);
+      const row = database.prepare("SELECT cache_key, value_json FROM external_response_cache WHERE namespace = 'tmdb'").get();
+      assert.equal(`${row.cache_key}${row.value_json}`.includes("tmdb-secret"), false);
+      await getMovieDetails(77, { ...options, now: 1_000 + TMDB_METADATA_CACHE_TTL_MS + 1 });
+      assert.equal(calls, 2);
+    } finally {
+      database.close();
+    }
+  });
 });

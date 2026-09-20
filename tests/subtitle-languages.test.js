@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createDatabase } from "../lib/database/sqlite.js";
 import {
   BUNDLED_SUBTITLE_LANGUAGES,
   getSubtitleLanguageCatalog,
+  resetSubtitleLanguageCatalogCache,
+  SUBTITLE_LANGUAGE_CACHE_TTL_MS,
 } from "../lib/subtitles/languages.js";
 
 const config = {
@@ -76,4 +79,32 @@ test("uses the bundled broad catalog when both providers fail", async () => {
   assert.equal(catalog.languages.some(({ code }) => code === "en"), true);
   assert.equal(catalog.languages.some(({ code }) => code === "mk"), true);
   assert.equal(catalog.languages.some(({ code }) => code === "de"), true);
+});
+
+test("persists remote language metadata without provider credentials", async () => {
+  const database = createDatabase(":memory:");
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls += 1;
+    return jsonResponse({ data: [{ language_code: "en", language_name: "English" }] });
+  };
+  try {
+    const options = { config, fetchImpl, useCache: true, cacheDatabase: database, now: 1_000 };
+    const first = await getSubtitleLanguageCatalog(options);
+    resetSubtitleLanguageCatalogCache();
+    const second = await getSubtitleLanguageCatalog({ ...options, now: 2_000 });
+    assert.deepEqual(second, first);
+    assert.equal(calls, 1);
+    const stored = database.prepare("SELECT value_json FROM external_response_cache WHERE namespace = 'subtitle-metadata'").get().value_json;
+    assert.equal(stored.includes("secret-open-key"), false);
+    resetSubtitleLanguageCatalogCache();
+    await getSubtitleLanguageCatalog({
+      ...options,
+      now: 1_000 + SUBTITLE_LANGUAGE_CACHE_TTL_MS + 1,
+    });
+    assert.equal(calls, 2);
+  } finally {
+    resetSubtitleLanguageCatalogCache();
+    database.close();
+  }
 });

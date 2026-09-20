@@ -178,7 +178,7 @@ test("database migration restores started media that only has a progress writer"
     assert.equal(restored.position, 0);
     assert.equal(restored.duration, 0);
     assert.equal(restored.episodeTitle, "Chapter Three: Body Double");
-    assert.equal(database.pragma("user_version", { simple: true }), 4);
+    assert.equal(database.pragma("user_version", { simple: true }), 5);
   } finally {
     database?.close();
     await rm(directory, { recursive: true, force: true });
