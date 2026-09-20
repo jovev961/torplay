@@ -36,6 +36,33 @@ test("supports prefixed WebKit element fullscreen", async () => {
   assert.deepEqual(calls, ["enter", "exit"]);
 });
 
+test("prefers custom player fullscreen when native video fullscreen is also available", async () => {
+  const calls = [];
+  const player = { requestFullscreen: () => calls.push("custom") };
+  const video = {
+    requestFullscreen: () => calls.push("video"),
+    webkitSupportsFullscreen: true,
+    webkitEnterFullscreen: () => calls.push("native"),
+  };
+
+  assert.equal(supportsFullscreen(player, video), true);
+  assert.equal(await toggleBrowserFullscreen({}, player, video), "enter");
+  assert.deepEqual(calls, ["custom"]);
+});
+
+test("prefers WebKit player fullscreen over video element fallbacks", async () => {
+  const calls = [];
+  const player = { webkitRequestFullscreen: () => calls.push("custom-webkit") };
+  const video = {
+    requestFullscreen: () => calls.push("video"),
+    webkitSupportsFullscreen: true,
+    webkitEnterFullscreen: () => calls.push("native"),
+  };
+
+  assert.equal(await toggleBrowserFullscreen({}, player, video), "enter");
+  assert.deepEqual(calls, ["custom-webkit"]);
+});
+
 test("tracks standard fullscreen when only the video element supports it", async () => {
   const video = { requestFullscreen() {} };
   const documentRef = { fullscreenElement: video };

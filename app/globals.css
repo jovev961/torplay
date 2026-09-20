@@ -2023,24 +2023,47 @@ a {
   background: #000;
 }
 
-.videoPlayer:fullscreen {
-  max-height: none;
-  aspect-ratio: auto;
-}
-
+.videoPlayer:fullscreen,
 .videoPlayer:-webkit-full-screen {
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
   max-height: none;
   aspect-ratio: auto;
 }
 
-.videoPlayer:fullscreen video {
-  position: absolute;
-  inset: 0;
-}
-
+.videoPlayer:fullscreen video,
 .videoPlayer:-webkit-full-screen video {
   position: absolute;
   inset: 0;
+}
+
+.videoPlayer:fullscreen .playerTopBar,
+.videoPlayer:-webkit-full-screen .playerTopBar {
+  padding-top: max(14px, env(safe-area-inset-top));
+  padding-right: max(18px, env(safe-area-inset-right));
+  padding-left: max(18px, env(safe-area-inset-left));
+}
+
+.videoPlayer:fullscreen .playerBottomBar,
+.videoPlayer:-webkit-full-screen .playerBottomBar {
+  padding-right: max(18px, env(safe-area-inset-right));
+  padding-bottom: max(16px, env(safe-area-inset-bottom));
+  padding-left: max(18px, env(safe-area-inset-left));
+}
+
+.videoPlayer:fullscreen .playerMenu,
+.videoPlayer:-webkit-full-screen .playerMenu {
+  right: max(9px, env(safe-area-inset-right));
+  bottom: calc(60px + env(safe-area-inset-bottom));
+  max-height: min(70dvh, calc(100dvh - 110px - env(safe-area-inset-top) - env(safe-area-inset-bottom)));
+}
+
+.videoPlayer:fullscreen .subtitleOverlay,
+.videoPlayer:-webkit-full-screen .subtitleOverlay {
+  right: max(5%, env(safe-area-inset-right));
+  bottom: max(var(--subtitle-bottom-offset, 10%), calc(env(safe-area-inset-bottom) + 12px));
+  left: max(5%, env(safe-area-inset-left));
 }
 
 .videoPlayer.controlsHidden {
@@ -2390,7 +2413,55 @@ a {
 }
 
 .captionMenu {
-  min-width: min(330px, calc(100vw - 36px));
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(360px, calc(100vw - 36px));
+  min-width: 0;
+  max-height: min(420px, 70dvh);
+  overflow: hidden;
+}
+
+.captionMenuHeader,
+.captionMenuFooter {
+  display: grid;
+  flex: 0 0 auto;
+}
+
+.captionMenuHeader {
+  gap: 3px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.captionMenuHeader > span {
+  padding: 5px 10px;
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.captionTrackList {
+  min-height: 0;
+  padding-right: 2px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  touch-action: pan-y;
+}
+
+.captionMenuFooter {
+  padding-top: 3px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.captionMenu button:focus-visible {
+  outline: 2px solid white;
+  outline-offset: -2px;
+}
+
+.captionMenu button:focus-visible:not(.active) {
+  background: rgba(255, 255, 255, 0.14);
 }
 
 .remotePlaybackMenu {
@@ -2454,7 +2525,6 @@ a {
   gap: 4px;
   margin-top: 6px;
   padding-top: 6px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .subtitleDelay div {
@@ -2989,5 +3059,55 @@ footer {
   .profileDangerZone {
     align-items: stretch;
     flex-direction: column;
+  }
+}
+
+@media (pointer: coarse) {
+  .videoPlayer:fullscreen .playerControls button,
+  .videoPlayer:-webkit-full-screen .playerControls button,
+  .videoPlayer:fullscreen .playerMenu button,
+  .videoPlayer:-webkit-full-screen .playerMenu button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .videoPlayer:fullscreen .volumeSlider,
+  .videoPlayer:-webkit-full-screen .volumeSlider {
+    display: none;
+  }
+}
+
+@media (pointer: coarse) and (orientation: portrait) {
+  .videoPlayer:fullscreen .playerMenu,
+  .videoPlayer:-webkit-full-screen .playerMenu {
+    bottom: calc(108px + env(safe-area-inset-bottom));
+    max-height: min(70dvh, calc(100dvh - 158px - env(safe-area-inset-top) - env(safe-area-inset-bottom)));
+  }
+
+  .videoPlayer:fullscreen .playerControls,
+  .videoPlayer:-webkit-full-screen .playerControls {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+
+  .videoPlayer:fullscreen .controlGroup,
+  .videoPlayer:-webkit-full-screen .controlGroup {
+    width: 100%;
+  }
+
+  .videoPlayer:fullscreen .controlGroup:first-child,
+  .videoPlayer:-webkit-full-screen .controlGroup:first-child {
+    justify-content: flex-start;
+  }
+
+  .videoPlayer:fullscreen .controlGroup:last-child,
+  .videoPlayer:-webkit-full-screen .controlGroup:last-child {
+    justify-content: flex-end;
+  }
+
+  .videoPlayer:fullscreen .playerTime,
+  .videoPlayer:-webkit-full-screen .playerTime {
+    margin-right: auto;
   }
 }
