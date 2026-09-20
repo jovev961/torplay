@@ -235,7 +235,7 @@ export default function SettingsManager() {
 
   async function addSupportedProviders() {
     const enabled = [...new Set([...nativeDraft, ...supportedSelection])];
-    if (await saveNativeProviders(enabled, "Supported indexers added.")) {
+    if (await saveNativeProviders(enabled, "Preconfigured indexers added.")) {
       setSupportedSelection([]);
       setSupportedPickerOpen(false);
     }
@@ -391,7 +391,7 @@ export default function SettingsManager() {
                 disabled={saving === "nativeProviders"}
                 onClick={() => { setSupportedPickerOpen((open) => !open); setSupportedSelection([]); }}
               >
-                Add Supported Indexer
+                Add Preconfigured Indexer
               </button>
               <button
                 className={styles.testButton}
@@ -405,7 +405,7 @@ export default function SettingsManager() {
           ) : null}
           {supportedPickerOpen ? (
             <div className={styles.supportedPicker}>
-              <div><h3>Add Supported Indexer</h3><p>Choose the torrent sources you want TorPlay to use.</p></div>
+              <div><h3>Add Preconfigured Indexer</h3><p>Choose the torrent sources you want TorPlay to use.</p></div>
               {snapshot.torrentSources.providers.map((source) => {
                 const added = nativeDraft.includes(source.id);
                 const checked = added || supportedSelection.includes(source.id);
@@ -432,7 +432,7 @@ export default function SettingsManager() {
               </div>
             </div>
           ) : null}
-          <h3 className={styles.sourceSubheading}>Supported Indexers</h3>
+          <h3 className={styles.sourceSubheading}>Preconfigured Indexers</h3>
           <div className={styles.sourceGrid}>
             {snapshot.torrentSources.providers.filter((source) => nativeDraft.includes(source.id)).map((source) => {
               return (
@@ -450,7 +450,7 @@ export default function SettingsManager() {
               );
             })}
           </div>
-          {!nativeDraft.length ? <p className={styles.emptySources}>No supported indexers have been added.</p> : null}
+          {!nativeDraft.length ? <p className={styles.emptySources}>No preconfigured indexers have been added.</p> : null}
           {snapshot.torrentSources.overrideActive ? (
             <p className={styles.sectionNote}>Native sources are read-only because TORPLAY_SEARCH_PROVIDERS controls the complete provider list.</p>
           ) : snapshot.torrentSources.managedExternally ? (
