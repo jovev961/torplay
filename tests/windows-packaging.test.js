@@ -145,6 +145,7 @@ test("fresh Windows configuration leaves required provider credentials for brows
   assert.match(template, /^JACKETT_MOVIE_INDEXERS=$/m);
   assert.match(template, /^JACKETT_SHOW_INDEXERS=$/m);
   assert.match(template, /^TORPLAY_NATIVE_PROVIDERS=$/m);
+  assert.match(template, /^TORPLAY_CONFIGURED_NATIVE_PROVIDERS=$/m);
 });
 
 test("Windows installer workflow pins its toolchain and publishes verified artifacts", async () => {

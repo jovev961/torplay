@@ -171,17 +171,29 @@ test("persists native provider selection and reports safe source metadata", asyn
   };
   try {
     const before = await settingsState({ environment, includeValues: true });
-    assert.deepEqual(before.torrentSources.providers.map(({ id, enabled }) => [id, enabled]), [
-      ["knaben", false], ["yts", false], ["eztv", false],
+    assert.deepEqual(before.torrentSources.providers.map(({ id, configured, enabled }) => [id, configured, enabled]), [
+      ["knaben", false, false], ["yts", false, false], ["eztv", false, false],
     ]);
     assert.equal(before.torrentSources.jackettActive, true);
     assert.equal(JSON.stringify(before.torrentSources).includes("secret"), false);
 
     await updateNativeProviderSettings(["eztv", "knaben", "eztv"], { environment, configPath: filename });
     assert.equal(environment.TORPLAY_NATIVE_PROVIDERS, "knaben,eztv");
+    assert.equal(environment.TORPLAY_CONFIGURED_NATIVE_PROVIDERS, "knaben,eztv");
     assert.match(await readFile(filename, "utf8"), /^TORPLAY_NATIVE_PROVIDERS=knaben,eztv$/m);
+    assert.match(await readFile(filename, "utf8"), /^TORPLAY_CONFIGURED_NATIVE_PROVIDERS=knaben,eztv$/m);
     const after = await settingsState({ environment });
     assert.deepEqual(after.torrentSources.providers.filter(({ enabled }) => enabled).map(({ id }) => id), ["knaben", "eztv"]);
+
+    await updateNativeProviderSettings(["knaben"], {
+      environment,
+      configPath: filename,
+      configuredIds: ["knaben", "eztv"],
+    });
+    const disabled = await settingsState({ environment });
+    assert.deepEqual(disabled.torrentSources.providers.map(({ id, configured, enabled }) => [id, configured, enabled]), [
+      ["knaben", true, true], ["yts", false, false], ["eztv", true, false],
+    ]);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -193,7 +205,17 @@ test("protects externally managed native settings and permits an empty source se
     const environment = {};
     await updateNativeProviderSettings([], { environment, configPath: filename });
     assert.equal(environment.TORPLAY_NATIVE_PROVIDERS, "");
+    assert.equal(environment.TORPLAY_CONFIGURED_NATIVE_PROVIDERS, "");
     assert.match(await readFile(filename, "utf8"), /^TORPLAY_NATIVE_PROVIDERS=''$/m);
+    assert.match(await readFile(filename, "utf8"), /^TORPLAY_CONFIGURED_NATIVE_PROVIDERS=''$/m);
+    await assert.rejects(
+      updateNativeProviderSettings(["knaben"], { environment: {}, configPath: filename, configuredIds: [] }),
+      /must also be configured/,
+    );
+    await assert.rejects(
+      updateNativeProviderSettings([], { environment: {}, configPath: filename, configuredIds: null }),
+      /must be an array/,
+    );
     await assert.rejects(
       updateNativeProviderSettings(["unknown"], { environment: {}, configPath: filename }),
       /unknown provider/,
@@ -208,12 +230,25 @@ test("protects externally managed native settings and permits an empty source se
     await assert.rejects(
       updateNativeProviderSettings(["knaben"], {
         environment: {
-          TORPLAY_EXTERNAL_CONFIG_KEYS: "TORPLAY_NATIVE_PROVIDERS",
+          TORPLAY_EXTERNAL_CONFIG_KEYS: "TORPLAY_CONFIGURED_NATIVE_PROVIDERS",
           TORPLAY_NATIVE_PROVIDERS: "yts",
+          TORPLAY_CONFIGURED_NATIVE_PROVIDERS: "yts",
         },
         configPath: filename,
       }),
       (error) => error instanceof SettingsError && error.status === 409,
+    );
+    const compatible = await settingsState({ environment: { TORPLAY_NATIVE_PROVIDERS: "eztv" }, cwd: directory });
+    assert.deepEqual(compatible.torrentSources.providers.filter(({ configured }) => configured).map(({ id }) => id), ["eztv"]);
+    await assert.rejects(
+      settingsState({
+        environment: {
+          TORPLAY_NATIVE_PROVIDERS: "knaben",
+          TORPLAY_CONFIGURED_NATIVE_PROVIDERS: "yts",
+        },
+        cwd: directory,
+      }),
+      /must also be configured/,
     );
     const state = await settingsState({
       environment: { TORPLAY_SEARCH_PROVIDERS: "yts,jackett" },
@@ -221,6 +256,7 @@ test("protects externally managed native settings and permits an empty source se
     });
     assert.equal(state.torrentSources.overrideActive, true);
     assert.equal(state.torrentSources.managedExternally, true);
+    assert.deepEqual(state.torrentSources.providers.filter(({ configured }) => configured).map(({ id }) => id), ["yts"]);
     assert.deepEqual(state.torrentSources.providers.filter(({ enabled }) => enabled).map(({ id }) => id), ["yts"]);
   } finally {
     await rm(directory, { recursive: true, force: true });

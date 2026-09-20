@@ -95,6 +95,7 @@ export default function SettingsManager() {
   const [visibleSecrets, setVisibleSecrets] = useState({});
   const [validations, setValidations] = useState({});
   const [nativeDraft, setNativeDraft] = useState([]);
+  const [configuredNative, setConfiguredNative] = useState([]);
   const [supportedPickerOpen, setSupportedPickerOpen] = useState(false);
   const [supportedSelection, setSupportedSelection] = useState([]);
   const [customAddOpen, setCustomAddOpen] = useState(false);
@@ -141,6 +142,7 @@ export default function SettingsManager() {
         setSnapshot(data);
         setDrafts(draftsFrom(data.providers));
         setNativeDraft(data.torrentSources.providers.filter((source) => source.enabled).map((source) => source.id));
+        setConfiguredNative(data.torrentSources.providers.filter((source) => source.configured).map((source) => source.id));
         void validateProviders(data.providers.map((provider) => provider.id));
         void validateProviders(
           data.torrentSources.providers.filter((source) => source.enabled).map((source) => source.id),
@@ -206,7 +208,7 @@ export default function SettingsManager() {
     }
   }
 
-  async function saveNativeProviders(enabled, successMessage) {
+  async function saveNativeProviders(enabled, configured, successMessage) {
     setSaving("nativeProviders");
     setNotice("");
     setError("");
@@ -214,16 +216,18 @@ export default function SettingsManager() {
       const data = await readJson(await fetch("/api/settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider: "nativeProviders", enabled }),
+        body: JSON.stringify({ provider: "nativeProviders", enabled, configured }),
       }));
       setSnapshot(data);
-      const enabled = data.torrentSources.providers.filter((source) => source.enabled).map((source) => source.id);
-      setNativeDraft(enabled);
+      const savedEnabled = data.torrentSources.providers.filter((source) => source.enabled).map((source) => source.id);
+      const savedConfigured = data.torrentSources.providers.filter((source) => source.configured).map((source) => source.id);
+      setNativeDraft(savedEnabled);
+      setConfiguredNative(savedConfigured);
       setNotice(successMessage);
       setValidations((current) => Object.fromEntries(
         Object.entries(current).filter(([id]) => !data.torrentSources.providers.some((source) => source.id === id)),
       ));
-      void validateProviders(enabled, { refresh: true, native: true });
+      void validateProviders(savedEnabled, { refresh: true, native: true });
       return true;
     } catch (saveError) {
       setError(saveError.message);
@@ -235,7 +239,8 @@ export default function SettingsManager() {
 
   async function addSupportedProviders() {
     const enabled = [...new Set([...nativeDraft, ...supportedSelection])];
-    if (await saveNativeProviders(enabled, "Preconfigured indexers added.")) {
+    const configured = [...new Set([...configuredNative, ...supportedSelection])];
+    if (await saveNativeProviders(enabled, configured, "Preconfigured indexers added.")) {
       setSupportedSelection([]);
       setSupportedPickerOpen(false);
     }
@@ -245,7 +250,17 @@ export default function SettingsManager() {
     if (!window.confirm(`Remove ${source.name} from Torrent Sources?`)) return;
     await saveNativeProviders(
       nativeDraft.filter((id) => id !== source.id),
+      configuredNative.filter((id) => id !== source.id),
       `${source.name} removed.`,
+    );
+  }
+
+  async function toggleSupportedProvider(source) {
+    const enabled = nativeDraft.includes(source.id);
+    await saveNativeProviders(
+      enabled ? nativeDraft.filter((id) => id !== source.id) : [...nativeDraft, source.id],
+      configuredNative,
+      `${source.name} ${enabled ? "disabled" : "enabled"}.`,
     );
   }
 
@@ -407,7 +422,7 @@ export default function SettingsManager() {
             <div className={styles.supportedPicker}>
               <div><h3>Add Preconfigured Indexer</h3><p>Choose the torrent sources you want TorPlay to use.</p></div>
               {snapshot.torrentSources.providers.map((source) => {
-                const added = nativeDraft.includes(source.id);
+                const added = configuredNative.includes(source.id);
                 const checked = added || supportedSelection.includes(source.id);
                 return (
                   <label className={styles.supportedChoice} key={source.id}>
@@ -434,7 +449,7 @@ export default function SettingsManager() {
           ) : null}
           <h3 className={styles.sourceSubheading}>Preconfigured Indexers</h3>
           <div className={styles.sourceGrid}>
-            {snapshot.torrentSources.providers.filter((source) => nativeDraft.includes(source.id)).map((source) => {
+            {snapshot.torrentSources.providers.filter((source) => configuredNative.includes(source.id)).map((source) => {
               return (
                 <article className={styles.sourceCard} key={source.id}>
                   <div className={styles.sourceCardHeading}>
@@ -442,15 +457,18 @@ export default function SettingsManager() {
                       <strong>{source.name}</strong>
                       <small>{source.mediaTypes.join(" & ")}</small>
                     </span>
-                    {snapshot.canEdit && !snapshot.torrentSources.managedExternally ? <button className={styles.removeButton} type="button" disabled={saving === "nativeProviders"} onClick={() => void removeSupportedProvider(source)}>Remove</button> : null}
+                    {snapshot.canEdit && !snapshot.torrentSources.managedExternally ? <div className={styles.sourceCardActions}>
+                      <button className={styles.testButton} type="button" disabled={saving === "nativeProviders"} onClick={() => void toggleSupportedProvider(source)}>{source.enabled ? "Disable" : "Enable"}</button>
+                      <button className={styles.removeButton} type="button" disabled={saving === "nativeProviders"} onClick={() => void removeSupportedProvider(source)}>Remove</button>
+                    </div> : null}
                   </div>
                   <p>{source.description}</p>
-                  <TorrentSourceStatus source={{ ...source, enabled: true }} validation={validations[source.id]} />
+                  <TorrentSourceStatus source={source} validation={validations[source.id]} />
                 </article>
               );
             })}
           </div>
-          {!nativeDraft.length ? <p className={styles.emptySources}>No preconfigured indexers have been added.</p> : null}
+          {!configuredNative.length ? <p className={styles.emptySources}>No preconfigured indexers have been added.</p> : null}
           {snapshot.torrentSources.overrideActive ? (
             <p className={styles.sectionNote}>Native sources are read-only because TORPLAY_SEARCH_PROVIDERS controls the complete provider list.</p>
           ) : snapshot.torrentSources.managedExternally ? (
