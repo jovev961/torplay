@@ -209,6 +209,7 @@ test("release validation requires the packaged runtime and Windows native tools"
       "runtime/runtime-watchdog.mjs",
       "runtime/windows-runner.mjs",
       "runtime/windows-control.mjs",
+      "runtime/torplay-first-launch.vbs",
       "runtime/torplay-tray.ps1",
       "runtime/torplay-tray.vbs",
       "app/server.js",
@@ -237,6 +238,10 @@ test("Windows packaging has no Docker runtime dependency", async () => {
 
 test("installer declares durable data, login startup, shortcuts, and firewall cleanup", async () => {
   const installer = await readFile(new URL("../installer/windows/torplay.iss", import.meta.url), "utf8");
+  const firstLaunch = await readFile(
+    new URL("../installer/windows/torplay-first-launch.vbs", import.meta.url),
+    "utf8",
+  );
   assert.match(installer, /PrivilegesRequired=lowest/);
   assert.match(installer, /Software\\Microsoft\\Windows\\CurrentVersion\\Run/);
   assert.match(installer, /ValueData: """\{sys\}\\wscript\.exe"" ""\{app\}\\runtime\\torplay-tray\.vbs"""/);
@@ -250,7 +255,16 @@ test("installer declares durable data, login startup, shortcuts, and firewall cl
   assert.match(installer, /torplay-tray\.ps1"" -StopExisting/);
   assert.match(installer, /uninsneveruninstall/);
   assert.match(installer, /VersionInfoVersion=\{#VersionInfoVersion\}/);
+  assert.match(installer, /torplay-first-launch\.vbs/);
+  assert.match(installer, /waituntilterminated skipifsilent/);
   assert.doesNotMatch(installer, /docker compose down/);
+  assert.match(firstLaunch, /windows-control\.mjs"\) & " start"/);
+  assert.match(firstLaunch, /shell\.Run\(controlCommand, 0, True\)/);
+  assert.match(firstLaunch, /torplay-tray\.vbs/);
+  assert.match(firstLaunch, /If exitCode = 0 Then/);
+  assert.match(firstLaunch, /http:\/\/localhost\/setup/);
+  assert.ok(firstLaunch.indexOf("windows-control.mjs") < firstLaunch.indexOf("torplay-tray.vbs"));
+  assert.ok(firstLaunch.indexOf("torplay-tray.vbs") < firstLaunch.indexOf("http://localhost/setup"));
 });
 
 test("Windows tray controls the existing runtime without starting a second backend", async () => {

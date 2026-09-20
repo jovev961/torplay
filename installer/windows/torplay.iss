@@ -57,7 +57,7 @@ Name: "{group}\Stop TorPlay"; Filename: "{sys}\wscript.exe"; Parameters: """{app
 
 [Run]
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\runtime\windows-firewall.ps1"" -NodePath ""{app}\runtime\node.exe"" -PublicPort 80"; Verb: runas; Flags: shellexec waituntilterminated; StatusMsg: "Configuring the Private-network firewall rules..."
-Filename: "{sys}\wscript.exe"; Parameters: """{app}\runtime\torplay-tray.vbs"""; WorkingDir: "{app}"; Flags: nowait skipifsilent; StatusMsg: "Starting TorPlay..."
+Filename: "{sys}\wscript.exe"; Parameters: """{app}\runtime\torplay-first-launch.vbs"""; WorkingDir: "{app}"; Flags: waituntilterminated skipifsilent; StatusMsg: "Starting TorPlay and opening first-time setup..."
 
 [UninstallRun]
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\runtime\torplay-tray.ps1"" -StopExisting"; WorkingDir: "{app}"; Flags: runhidden waituntilterminated skipifdoesntexist; RunOnceId: "StopTorPlayTray"
