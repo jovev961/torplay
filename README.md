@@ -22,7 +22,7 @@ Installation:
 3. Follow the setup screen to verify and save your TMDB credential.
 4. Use [http://torplay.local](http://torplay.local) from other devices on the household network.
 
-TorPlay starts automatically for the Windows account that installed it. The Start menu provides **Open TorPlay**, **TorPlay Status**, **Start or Restart TorPlay**, and **Stop TorPlay**.
+TorPlay starts automatically for the Windows account that installed it. A TorPlay system-tray icon shows runtime status and provides Open, Logs, Start/Restart, Stop, login-startup, and Exit controls. Equivalent shortcuts remain available in the Start menu.
 
 Profiles, history, configuration, and logs are kept under `%LOCALAPPDATA%\TorPlay` and are preserved during upgrades and normal uninstall. See the [complete Windows deployment guide](docs/windows-deployment.md) for installer builds, migration, firewall behavior, data locations, and troubleshooting.
 

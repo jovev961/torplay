@@ -95,15 +95,32 @@ TorPlay registers a per-user Windows login entry rather than a Windows service:
 
 ```text
 Windows login
-    -> TorPlay launcher
+    -> TorPlay tray application
+    -> existing TorPlay launcher
     -> start the private Next.js server
     -> expose port 80 to the private LAN
     -> advertise torplay.local with mDNS
 ```
 
+The tray is a lightweight Windows frontend for the existing supervisor. It does not host another web server or torrent runtime. Closing the tray with **Exit** leaves TorPlay running; use **Stop TorPlay** when the background runtime should stop.
+
+## System tray
+
+Right-click the TorPlay notification-area icon to see the current Running/Stopped state and use these commands:
+
+- **Open TorPlay** opens `http://localhost`.
+- **Open Logs** opens the current runtime log, or its folder before the first log is created.
+- **Start TorPlay** appears while stopped; **Restart TorPlay** appears while running.
+- **Stop TorPlay** gracefully stops the existing supervisor.
+- **Start with Windows** adds or removes the current user's login entry.
+- **Exit** closes only the tray frontend.
+
+The status is refreshed when the menu opens, so the tray does not continuously poll the runtime or health endpoint. Only one tray process is allowed per signed-in Windows session.
+
 ## Start menu
 
 - **Open TorPlay** opens the editable local owner address at `http://localhost`.
+- **TorPlay Tray** restores the notification-area frontend after it was closed with Exit.
 - **TorPlay Status** reports TorPlay and mDNS state, plus the last failure and important file paths.
 - **Start or Restart TorPlay** gracefully stops an existing runtime and launches it again.
 - **Stop TorPlay** requests a graceful shutdown and uses the recorded TorPlay process tree only as a fallback.
@@ -153,7 +170,7 @@ Older TorPlay versions may have created Jackett or FlareSolverr containers and v
 
 ## Uninstall
 
-Uninstall removes application/runtime files, login startup registration, Start-menu shortcuts, and TorPlay-created firewall rules.
+Uninstall closes the tray, stops the runtime, and removes application/runtime files, login startup registration, Start-menu shortcuts, and TorPlay-created firewall rules.
 
 It preserves `%LOCALAPPDATA%\TorPlay` by default. Delete it manually only if profiles, history, configuration, and logs are no longer wanted. Legacy Docker artifacts from older TorPlay versions remain independently managed and are not changed by uninstall.
 

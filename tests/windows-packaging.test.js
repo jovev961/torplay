@@ -29,6 +29,9 @@ test("installed paths are writable-data based and remain configurable", () => {
   assert.equal(environment.TORPLAY_DEFAULT_DATABASE_PATH, path.join("D:\\TorPlayData", "data", "torplay.db"));
   assert.equal(environment.TORPLAY_CONFIG_PATH, path.join("D:\\TorPlayData", "config", "torplay.env"));
   assert.equal(environment.TORPLAY_SERVER_ENTRY, path.join("C:\\Apps\\TorPlay", "app", "server.js"));
+  assert.equal(paths.trayScriptPath, path.join("C:\\Apps\\TorPlay", "runtime", "torplay-tray.ps1"));
+  assert.equal(paths.trayLauncherPath, path.join("C:\\Apps\\TorPlay", "runtime", "torplay-tray.vbs"));
+  assert.equal(paths.trayPidPath, path.join("D:\\TorPlayData", "runtime", "tray.pid"));
   assert.equal("COMPOSE_PROJECT_NAME" in environment, false);
   assert.equal("TORPLAY_DOCKER_WAIT_SECONDS" in environment, false);
 });
@@ -89,6 +92,8 @@ test("release validation requires the packaged runtime and Windows native tools"
       "runtime/home.mjs",
       "runtime/windows-runner.mjs",
       "runtime/windows-control.mjs",
+      "runtime/torplay-tray.ps1",
+      "runtime/torplay-tray.vbs",
       "app/server.js",
       "app/node_modules/better-sqlite3/build/Release/better_sqlite3.node",
       "app/node_modules/ffmpeg-static/ffmpeg.exe",
@@ -117,15 +122,39 @@ test("installer declares durable data, login startup, shortcuts, and firewall cl
   const installer = await readFile(new URL("../installer/windows/torplay.iss", import.meta.url), "utf8");
   assert.match(installer, /PrivilegesRequired=lowest/);
   assert.match(installer, /Software\\Microsoft\\Windows\\CurrentVersion\\Run/);
+  assert.match(installer, /ValueData: """\{sys\}\\wscript\.exe"" ""\{app\}\\runtime\\torplay-tray\.vbs"""/);
   assert.match(installer, /Open TorPlay/);
   assert.match(installer, /Open TorPlay"; Filename: "http:\/\/localhost"/);
+  assert.match(installer, /Name: "\{group\}\\TorPlay Tray"/);
   assert.match(installer, /TorPlay Status/);
   assert.match(installer, /Start or Restart TorPlay/);
   assert.match(installer, /Stop TorPlay/);
   assert.match(installer, /windows-firewall\.ps1"" -Remove/);
+  assert.match(installer, /torplay-tray\.ps1"" -StopExisting/);
   assert.match(installer, /uninsneveruninstall/);
   assert.match(installer, /VersionInfoVersion=\{#VersionInfoVersion\}/);
   assert.doesNotMatch(installer, /docker compose down/);
+});
+
+test("Windows tray controls the existing runtime without starting a second backend", async () => {
+  const tray = await readFile(new URL("../installer/windows/torplay-tray.ps1", import.meta.url), "utf8");
+  const launcher = await readFile(new URL("../installer/windows/torplay-tray.vbs", import.meta.url), "utf8");
+  const releaseScript = await readFile(new URL("../scripts/release-windows.js", import.meta.url), "utf8");
+
+  assert.match(tray, /Windows\.Forms\.NotifyIcon/);
+  assert.match(tray, /Status: Running/);
+  assert.match(tray, /Open TorPlay/);
+  assert.match(tray, /Open Logs/);
+  assert.match(tray, /Restart TorPlay/);
+  assert.match(tray, /Stop TorPlay/);
+  assert.match(tray, /Start with Windows/);
+  assert.match(tray, /windows-control\.mjs/);
+  assert.match(tray, /CurrentVersion\\Run/);
+  assert.match(tray, /Local\\TorPlayTray/);
+  assert.doesNotMatch(tray, /next start|server\.js|WebTorrent/);
+  assert.match(launcher, /torplay-tray\.ps1/);
+  assert.match(releaseScript, /installer\/windows\/torplay-tray\.ps1/);
+  assert.match(releaseScript, /installer\/windows\/torplay-tray\.vbs/);
 });
 
 test("fresh Windows configuration leaves required provider credentials for browser setup", async () => {
