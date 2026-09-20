@@ -62,7 +62,7 @@ export default function SetupManager() {
         body: JSON.stringify({ providers }),
       }));
       setResults(Object.fromEntries(data.results.map((item) => [item.provider, item])));
-      router.replace("/");
+      router.replace("/setup/sources");
       router.refresh();
     } catch (setupError) {
       setError(setupError.message);
@@ -120,8 +120,8 @@ export default function SetupManager() {
         );
       })}
       <div className={styles.finishRow}>
-        <p>TorPlay will verify TMDB and open the catalog. Add a compatible third-party torrent source in Settings when you are ready to search.</p>
-        <button type="submit" disabled={busy}>{busy ? "Verifying connections…" : "Verify and finish"}</button>
+        <p>TorPlay will verify TMDB, then help you choose a source for videos.</p>
+        <button type="submit" disabled={busy}>{busy ? "Verifying connections…" : "Verify and continue"}</button>
       </div>
     </form>
   );

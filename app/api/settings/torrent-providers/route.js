@@ -9,6 +9,7 @@ import {
   updateCardigannProvider,
 } from "../../../../lib/settings/torrent-providers.js";
 import { importDefinition } from "../../../../lib/search/cardigann/definition.js";
+import { communityDirectory } from "../../../../lib/search/community-directory.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,6 +22,8 @@ export async function POST(request) {
     try { body = await request.json(); } catch { return json({ error: "Request body must be valid JSON." }, 400); }
     if (body?.action === "health") return json({ results: await customProviderHealth({ refresh: body.refresh === true }) });
     assertSettingsMutationRequest(request);
+    if (body?.action === "list-community-definitions") return json(await communityDirectory.list({ refresh: body.refresh === true }));
+    if (body?.action === "import-community-definition") return json(await communityDirectory.importEntry(body.provider));
     if (body?.action === "import-definition") return json(await importDefinition(body.definitionUrl));
     if (body?.action === "create-cardigann") return json({ providers: await createCardigannProvider(body.provider || {}) });
     if (body?.action === "update-cardigann") return json({ providers: await updateCardigannProvider(body.provider || {}) });

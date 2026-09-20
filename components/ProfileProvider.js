@@ -127,7 +127,8 @@ export function ProfileProvider({ children }) {
       if (profile) window.localStorage.setItem(STORAGE_KEY, profile.id);
       else window.localStorage.removeItem(STORAGE_KEY);
     } catch {}
-    if (navigate) router.push("/");
+    // Selecting a profile must not skip either step of first-run setup.
+    if (navigate && pathname !== "/setup" && pathname !== "/setup/sources") router.push("/");
   }
 
   async function create(name, avatarId) {
