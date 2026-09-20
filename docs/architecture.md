@@ -100,9 +100,16 @@ Adapters implement the [common provider contract](torrent-providers.md) and exec
 - A distant seek replaces only that viewer's buffer-ahead lease.
 - Leaving a page releases its session; abandoned sessions expire after two minutes.
 - The final viewer releases the torrent and deletes its app-owned info-hash directory.
+- When the final torrent resource is released, TorPlay also stops its cleanup timer and destroys the idle WebTorrent client, peer connections, DHT activity, and media server. A later playback request creates them again.
 - Startup removes leftover app-owned torrent directories.
 
 The browser receives opaque routes and status, never swarm access.
+
+## Background resource usage
+
+TorPlay does not run recurring external-provider or health checks while sitting on ordinary pages. Opening Settings validates only the currently viewed provider section, with short server-side health caching; General, Playback, and About make no provider requests. Torrent metadata status is polled once per second only while metadata is loading, instead of continuing after the session becomes ready. Subtitle discovery polls only while its bounded provider work is pending, playback progress is saved only while video is playing, and HLS status polling ends when conversion completes or the player unmounts.
+
+Before this optimization, every ready source session generated one status request per second and kept its activity timestamp fresh, and the WebTorrent runtime plus a minute cleanup interval stayed alive after the final viewer left. The lifecycle and settings-navigation tests now assert the idle behavior so future changes do not silently restore that background work.
 
 ## Playback pipeline
 
