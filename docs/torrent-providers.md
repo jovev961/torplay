@@ -31,51 +31,18 @@ leechers, quality/resolution/codec, and optional release media metadata. Magnets
 download URLs, and credentials remain private; the client receives an opaque ID
 and hasMagnet. Requested playback context is stored separately from release metadata.
 
-## Native providers
+## Source-neutral configuration
 
-Knaben, YTS, and EZTV are available through **Settings → Torrent Sources → Add
-Preconfigured Indexer**. None is enabled by default. Adding or removing a preconfigured
-indexer updates `TORPLAY_CONFIGURED_NATIVE_PROVIDERS`; enabling or disabling it
-updates `TORPLAY_NATIVE_PROVIDERS`, which is the active search list. Existing
-configurations without the configured-provider value treat enabled providers as
-configured. Empty configured and enabled selections are valid. Jackett is included
-separately when its URL and non-placeholder API key are configured.
+TorPlay includes no torrent indexers or provider definitions. Add a compatible
+third-party source under **Settings → Torrent Sources** by configuring a custom
+Torznab endpoint or importing a Cardigann definition. An independently operated
+Jackett instance remains optional and is configured under **Settings → Services**.
+TorPlay never starts, stops, or configures these external services.
 
-`TORPLAY_SEARCH_PROVIDERS` remains an advanced full-provider override. Set it to
-a comma-separated allowlist of `knaben,yts,eztv,jackett`; while present, the
-Settings controls are read-only. Unknown IDs are rejected. An empty list produces
-a configuration error.
-
-Run `npm run dev:native` to start Next.js with only `knaben,yts,eztv`, even if
-Jackett credentials exist. TorPlay never starts, stops, or configures external
-provider applications; owners manage those services independently.
-
-Native adapters use JSON APIs, with no scraping or anti-bot dependency:
-
-- Knaben: general/movie title searches and episode plus season-pack searches;
-  at most 150 results per request.
-- YTS: movie IMDb-ID lookup, or title search when no IMDb ID exists; at most
-  50 movies with one candidate per torrent variant.
-- EZTV: show IMDb-ID lookup, filtering episodes and season packs; sequential
-  pages of 100, capped at ten pages. Older releases beyond that cap may be omitted.
-  Shows without an IMDb ID still search Knaben.
-
-Server-side HTTP(S) endpoint overrides:
-
-| Setting | Default |
-| --- | --- |
-| `KNABEN_API_URL` | `https://api.knaben.org/v1` |
-| `YTS_API_URL` | `https://movies-api.accel.li/api/v2/` |
-| `EZTV_API_URL` | `https://eztvx.to/api/` |
-
-YTS and EZTV settings are API base URLs; Knaben is the search endpoint.
-The Settings page performs lightweight JSON availability checks for enabled native
-providers on load and on request. Results are cached briefly, contain no torrent
-results, and never expose provider URLs or credentials. Provider outages or invalid
-JSON remain isolated by the shared provider runner.
-No mirror discovery or automatic anti-bot workaround is attempted.
-Providers that require additional anti-bot handling fail independently without
-preventing other providers or TorPlay itself from operating.
+`TORPLAY_SEARCH_PROVIDERS` is an optional advanced full-provider allowlist. It
+accepts `jackett` and the stable `custom-...` or `cardigann-...` IDs saved for
+user-configured sources. Unknown IDs are rejected, and an empty list produces a
+configuration error. No mirror discovery or mandatory anti-bot service is used.
 Only search/download content you are authorized to access.
 
 ## Custom Torznab providers

@@ -14,7 +14,7 @@ export default async function SetupPage() {
         <span className={styles.brand}>TORPLAY</span>
         <span className="eyebrow">First-time setup</span>
         <h1>Connect your movie and TV catalog.</h1>
-        <p>Your TMDB credential stays on this computer. Built-in torrent sources work without an external search service.</p>
+        <p>Your TMDB credential stays on this computer. TorPlay does not include torrent indexers; add a compatible third-party source in Settings.</p>
       </section>
       <SetupManager />
     </main>

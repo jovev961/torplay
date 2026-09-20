@@ -31,9 +31,10 @@ test("custom provider changes persist atomically, redact secrets, and preserve k
     assert.equal(await readFile(customProvidersPath(environment), "utf8"), before);
     await assert.rejects(changeCustomProvider("create", values, { environment, fetchImpl }), /already configured/);
     assert.equal(configuredProviders(environment).at(-1).id, created.id);
-    assert.deepEqual(configuredProviders({ ...environment, TORPLAY_SEARCH_PROVIDERS: "yts" }).map((p) => p.id), ["yts"]);
+    assert.deepEqual(configuredProviders({ ...environment, TORPLAY_SEARCH_PROVIDERS: created.id }).map((p) => p.id), [created.id]);
+    assert.throws(() => configuredProviders({ ...environment, TORPLAY_SEARCH_PROVIDERS: "retired-provider" }), /Unknown torrent search provider ID/);
     await changeCustomProvider("update", { id: created.id, enabled: false }, { environment, fetchImpl });
-    assert.deepEqual(configuredProviders({ ...environment, TORPLAY_SEARCH_PROVIDERS: `yts,${created.id}` }).map((p) => p.id), ["yts"]);
+    assert.deepEqual(configuredProviders({ ...environment, TORPLAY_SEARCH_PROVIDERS: created.id }), []);
     let calls = 0;
     const [disabled] = await customProviderHealth({ environment, fetchImpl: async () => { calls++; } });
     assert.equal(disabled.status, "disabled"); assert.equal(calls, 0);
@@ -44,7 +45,7 @@ test("custom provider changes persist atomically, redact secrets, and preserve k
 
 test("custom providers may be the only source, may be disabled, and cache health", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "torplay-custom-"));
-  const environment = { TORPLAY_CONFIG_PATH: path.join(directory, "config.env"), TORPLAY_NATIVE_PROVIDERS: "" };
+  const environment = { TORPLAY_CONFIG_PATH: path.join(directory, "config.env") };
   try {
     const [created] = await changeCustomProvider("create", values, { environment, fetchImpl });
     await changeCustomProvider("update", { id: created.id, enabled: false }, { environment });

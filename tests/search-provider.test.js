@@ -26,7 +26,7 @@ test("normalizes hash-only candidates and strips unknown provider payload", () =
   assert.equal(normalizeCandidate({ title: "v2 only", infoHash: "a".repeat(64) }, provider("native")), null);
 });
 
-test("Jackett and native candidates pass through the same contract", async () => {
+test("Jackett and replacement-provider candidates pass through the same contract", async () => {
   const xml = `<rss><channel><item><title>Sintel</title><torznab:attr name="infohash" value="${hash}"/><torznab:attr name="seeders" value="2"/><torznab:attr name="peers" value="5"/></item></channel></rss>`;
   for (const search of [async () => [candidate], async () => parseJackettXml(xml)]) {
     const results = await searchConfiguredProvider(context, { ...quiet, providers: [provider("test", search)] });

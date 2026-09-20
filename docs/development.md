@@ -19,7 +19,7 @@ Open TorPlay and complete the browser setup; a `.env.local` file and restart are
 
 - TorPlay: [http://localhost:3000](http://localhost:3000)
 
-Setup requires only TMDB. Torrent sources are opt-in; add preconfigured native providers, custom Torznab sources, or an independently operated Jackett instance in Settings.
+Setup requires only TMDB. TorPlay includes no torrent indexers; add a compatible custom Torznab or imported Cardigann source, or configure an independently operated Jackett instance.
 
 ## Development runtime
 

@@ -78,8 +78,6 @@ export default function SettingsManager() {
   const [secrets, setSecrets] = useState({});
   const [visibleSecrets, setVisibleSecrets] = useState({});
   const [validations, setValidations] = useState({});
-  const [nativeDraft, setNativeDraft] = useState([]);
-  const [configuredNative, setConfiguredNative] = useState([]);
   const [saving, setSaving] = useState("");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -93,13 +91,13 @@ export default function SettingsManager() {
     return () => window.removeEventListener("hashchange", selectHashSection);
   }, []);
 
-  const validateProviders = useCallback(async (providerIds, { refresh = false, native = false } = {}) => {
+  const validateProviders = useCallback(async (providerIds, { refresh = false } = {}) => {
     if (!providerIds.length) return;
     setValidations((current) => ({
       ...current,
       ...Object.fromEntries(providerIds.map((id) => [id, {
         status: "checking",
-        message: native ? "Checking source availability." : "Checking the configured service.",
+        message: "Checking the configured service.",
       }])),
     }));
     try {
@@ -131,8 +129,6 @@ export default function SettingsManager() {
         if (cancelled) return;
         setSnapshot(data);
         setDrafts(draftsFrom(data.providers));
-        setNativeDraft(data.torrentSources.providers.filter((source) => source.enabled).map((source) => source.id));
-        setConfiguredNative(data.torrentSources.providers.filter((source) => source.configured).map((source) => source.id));
       })
       .catch((loadError) => { if (!cancelled) setError(loadError.message); });
     return () => { cancelled = true; };
@@ -196,65 +192,10 @@ export default function SettingsManager() {
     }
   }
 
-  async function saveNativeProviders(enabled, configured, successMessage) {
-    setSaving("nativeProviders");
-    setNotice("");
-    setError("");
-    try {
-      const data = await readJson(await fetch("/api/settings", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider: "nativeProviders", enabled, configured }),
-      }));
-      setSnapshot(data);
-      const savedEnabled = data.torrentSources.providers.filter((source) => source.enabled).map((source) => source.id);
-      const savedConfigured = data.torrentSources.providers.filter((source) => source.configured).map((source) => source.id);
-      setNativeDraft(savedEnabled);
-      setConfiguredNative(savedConfigured);
-      setNotice(successMessage);
-      setValidations((current) => Object.fromEntries(
-        Object.entries(current).filter(([id]) => !data.torrentSources.providers.some((source) => source.id === id)),
-      ));
-      return true;
-    } catch (saveError) {
-      setError(saveError.message);
-      return false;
-    } finally {
-      setSaving("");
-    }
-  }
-
-  async function addSupportedProvider(source) {
-    return saveNativeProviders(
-      [...new Set([...nativeDraft, source.id])],
-      [...new Set([...configuredNative, source.id])],
-      `${source.name} added.`,
-    );
-  }
-
-  async function removeSupportedProvider(source) {
-    if (!window.confirm(`Remove ${source.name} from Torrent Sources?`)) return;
-    await saveNativeProviders(
-      nativeDraft.filter((id) => id !== source.id),
-      configuredNative.filter((id) => id !== source.id),
-      `${source.name} removed.`,
-    );
-  }
-
-  async function toggleSupportedProvider(source) {
-    const enabled = nativeDraft.includes(source.id);
-    await saveNativeProviders(
-      enabled ? nativeDraft.filter((id) => id !== source.id) : [...nativeDraft, source.id],
-      configuredNative,
-      `${source.name} ${enabled ? "disabled" : "enabled"}.`,
-    );
-  }
-
   if (error && !snapshot) return <div className="notice error" role="alert">{error}</div>;
   if (!snapshot) return <div className="notice">Loading Settings…</div>;
   const serviceProviders = snapshot.providers.filter((provider) => provider.section === "services");
   const subtitleProviders = snapshot.providers.filter((provider) => provider.section === "subtitles");
-  const hasEffectiveSource = nativeDraft.length > 0 || snapshot.torrentSources.jackettActive || snapshot.torrentSources.customActive;
 
   function providerHasChanges(provider) {
     return provider.fields.some((field) => {
@@ -387,24 +328,13 @@ export default function SettingsManager() {
             TorPlay does not host or provide media files. Content and torrent metadata are obtained from third-party sources selected by the user. Users are responsible for ensuring that their use of TorPlay and configured sources complies with applicable laws and the rights of content owners.
           </div>
           <TorrentIndexerManager
-            nativeProviders={snapshot.torrentSources.providers}
-            configuredNativeIds={configuredNative}
             initialCustomProviders={snapshot.customProviders}
-            nativeValidations={validations}
             canEdit={snapshot.canEdit}
-            nativeManagedExternally={snapshot.torrentSources.managedExternally}
-            nativeOverrideActive={snapshot.torrentSources.overrideActive}
-            nativeBusy={saving === "nativeProviders"}
-            onAddNative={addSupportedProvider}
-            onToggleNative={toggleSupportedProvider}
-            onRemoveNative={removeSupportedProvider}
-            onRefreshNative={() => validateProviders(nativeDraft, { refresh: true, native: true })}
             onCustomChanged={async () => {
               const data = await readJson(await fetch("/api/settings", { cache: "no-store" }));
               setSnapshot(data);
             }}
           />
-          {!hasEffectiveSource ? <p className={styles.sourceWarning}>No torrent source is configured. Browsing still works, and source searches will guide you back here.</p> : null}
         </section> : null}
 
         {selectedSection === "subtitles" ? <section className={styles.settingsSection} id="subtitles">

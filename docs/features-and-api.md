@@ -15,7 +15,7 @@ Key metadata endpoints:
 
 ## Source search
 
-Movie and episode pages call the provider-independent torrent search service only after the user requests sources. Knaben, YTS, and EZTV are native adapters, while Jackett remains available as an optional Torznab adapter. Results are filtered and ranked by the service without exposing API keys, download URLs, or magnet URIs. Public results expose `hasMagnet` instead of `magnet`; opaque result IDs resolve to server-side playback references.
+Movie and episode pages call the provider-independent torrent search service only after the user requests sources. TorPlay does not bundle torrent indexers; users can add custom Torznab or imported Cardigann sources, while Jackett remains available as an optional adapter. Results are filtered and ranked by the service without exposing API keys, download URLs, or magnet URIs. Public results expose `hasMagnet` instead of `magnet`; opaque result IDs resolve to server-side playback references.
 
 - Direct `.torrent` metadata is inspected for the top 20 relevant candidates.
 - Verified playable results appear before unverified magnet fallbacks.
@@ -107,7 +107,7 @@ Profile responses include `subtitlePreferences`. Update them with `PUT /api/prof
 
 ## Settings
 
-The Settings page separates General, Services, Torrent Sources, Subtitles, Playback, and About information. General shows the current `torplay.local` and detected private-LAN URLs with copy actions and a QR code for devices that cannot resolve mDNS. It explains each external provider, links to its official credential instructions, and checks configured services or enabled native torrent sources only when their relevant section is viewed.
+The Settings page separates General, Services, Torrent Sources, Subtitles, Playback, and About information. General shows the current `torplay.local` and detected private-LAN URLs with copy actions and a QR code for devices that cannot resolve mDNS. It explains each external provider, links to its official credential instructions, and checks configured services only when their relevant section is viewed. User-configured torrent source health is checked by the Torrent Sources manager.
 
 - `GET /api/network-access` dynamically reports the current preferred hostname and usable LAN IPv4 URL without persisting the detected address.
 

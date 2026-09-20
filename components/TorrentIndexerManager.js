@@ -58,18 +58,8 @@ function IndexerStatus({ status, message }) {
 }
 
 export default function TorrentIndexerManager({
-  nativeProviders,
-  configuredNativeIds,
   initialCustomProviders,
-  nativeValidations,
   canEdit,
-  nativeManagedExternally,
-  nativeOverrideActive,
-  nativeBusy,
-  onAddNative,
-  onToggleNative,
-  onRemoveNative,
-  onRefreshNative,
   onCustomChanged,
 }) {
   const [customProviders, setCustomProviders] = useState(initialCustomProviders);
@@ -157,15 +147,14 @@ export default function TorrentIndexerManager({
     await act("create-cardigann", { importId: importDraft.importId, settings: importDraft.values, enabled: importDraft.enabled });
   }
 
-  const configuredNative = nativeProviders.filter((provider) => configuredNativeIds.includes(provider.id));
-  const configuredCount = configuredNative.length + customProviders.length;
+  const configuredCount = customProviders.length;
 
   return (
     <div className={styles.indexerManager}>
       <div className={styles.indexerHeading}>
         <div>
           <h3>Configured Indexers</h3>
-          <p>All native, imported Cardigann, and Torznab-compatible sources you have added.</p>
+          <p>All imported Cardigann and Torznab-compatible sources you have added.</p>
         </div>
         {canEdit ? (
           <button className={styles.saveButton} type="button" onClick={() => setDialogOpen(true)}>
@@ -176,27 +165,6 @@ export default function TorrentIndexerManager({
 
       {configuredCount ? (
         <div className={styles.sourceGrid}>
-          {configuredNative.map((source) => {
-            const validation = source.enabled
-              ? nativeValidations[source.id] || { status: "checking", message: "Checking source availability." }
-              : { status: "disabled", message: "Source is disabled." };
-            return (
-              <article className={styles.sourceCard} key={source.id}>
-                <div className={styles.sourceCardHeading}>
-                  <span><strong>{source.name}</strong><small>{mediaLabel(source.mediaTypes)}</small></span>
-                  {canEdit && !nativeManagedExternally ? (
-                    <div className={styles.sourceCardActions}>
-                      <button className={styles.testButton} type="button" disabled={nativeBusy} onClick={() => void onToggleNative(source)}>{source.enabled ? "Disable" : "Enable"}</button>
-                      <button className={styles.removeButton} type="button" disabled={nativeBusy} onClick={() => void onRemoveNative(source)}>Remove</button>
-                    </div>
-                  ) : null}
-                </div>
-                <p>{source.description}</p>
-                <IndexerStatus status={validation.status} message={validation.message} />
-              </article>
-            );
-          })}
-
           {customProviders.map((provider) => {
             const currentHealth = health[provider.id];
             const status = !provider.enabled || !provider.active
@@ -233,23 +201,17 @@ export default function TorrentIndexerManager({
       ) : (
         <div className={styles.emptyState}>
           <strong>No indexers configured yet.</strong>
-          <p>Add an indexer to enable torrent search.</p>
+          <p>TorPlay does not include torrent indexers.<br />Add a compatible third-party source to enable torrent search.</p>
           {canEdit ? <button className={styles.saveButton} type="button" onClick={() => setDialogOpen(true)}>+ Add Indexer</button> : null}
         </div>
       )}
-
-      {nativeOverrideActive ? (
-        <p className={styles.sectionNote}>Native sources are read-only because TORPLAY_SEARCH_PROVIDERS controls the complete provider list.</p>
-      ) : nativeManagedExternally ? (
-        <p className={styles.sectionNote}>Native sources are managed by the host environment and read-only here.</p>
-      ) : null}
 
       {!dialogOpen && error ? <div className="notice error" role="alert">{error}</div> : null}
       {!dialogOpen && message ? <div className="notice success" role="status">{message}</div> : null}
 
       {configuredCount ? (
         <div className={styles.sourceActions}>
-          <button className={styles.testButton} type="button" disabled={nativeBusy || busy} onClick={() => { onRefreshNative(); void refreshCustom(true); }}>
+          <button className={styles.testButton} type="button" disabled={busy} onClick={() => void refreshCustom(true)}>
             Refresh availability
           </button>
         </div>
@@ -337,21 +299,6 @@ export default function TorrentIndexerManager({
               </form>
             ) : (
               <div className={styles.addIndexerOptions}>
-                <section>
-                  <h3>Preconfigured</h3>
-                  <p>TorPlay configures these indexers directly. No URL or credentials are needed.</p>
-                  <div className={styles.addIndexerGrid}>
-                    {nativeProviders.map((source) => {
-                      const added = configuredNativeIds.includes(source.id);
-                      return (
-                        <article className={styles.addIndexerCard} key={source.id}>
-                          <span><strong>{source.name}</strong><small>{mediaLabel(source.mediaTypes)}</small></span>
-                          <button className={styles.testButton} type="button" disabled={added || nativeBusy || nativeManagedExternally} onClick={() => void onAddNative(source)}>{added ? "Added" : "Add"}</button>
-                        </article>
-                      );
-                    })}
-                  </div>
-                </section>
                 <section className={styles.customIndexerOption}>
                   <h3>Custom Indexer</h3>
                   <p>Add a Torznab-compatible source such as your own Prowlarr or Jackett configuration.</p>

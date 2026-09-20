@@ -53,9 +53,7 @@ The credential is stored only on the TorPlay computer. Provider settings can be 
 
 ### Add torrent sources
 
-After setup, open **Settings → Torrent Sources** and add one or more preconfigured providers. Knaben supports general, movie, and TV searches; YTS is movie-focused; EZTV is TV-focused. These built-in sources require no API keys and can be enabled or disabled independently.
-
-Custom Torznab sources and an independently operated Jackett instance are optional. They are not installed or managed by TorPlay. See [Torrent providers](torrent-providers.md) when you intentionally want to connect one.
+After setup, open **Settings → Torrent Sources** and add a compatible third-party source. TorPlay does not include torrent indexers. You can configure a custom Torznab endpoint, import a compatible Cardigann definition, or use an independently operated Jackett instance. These services are not installed or managed by TorPlay. See [Torrent providers](torrent-providers.md) for details.
 
 ### Optional API services
 

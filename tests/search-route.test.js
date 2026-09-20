@@ -9,14 +9,12 @@ test("search returns a stable configuration prompt when no torrent source is ena
   const directory = await mkdtemp(path.join(os.tmpdir(), "torplay-empty-search-"));
   const keys = [
     "TORPLAY_CONFIG_PATH",
-    "TORPLAY_NATIVE_PROVIDERS",
     "TORPLAY_SEARCH_PROVIDERS",
     "JACKETT_URL",
     "JACKETT_API_KEY",
   ];
   const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
   process.env.TORPLAY_CONFIG_PATH = path.join(directory, "torplay.env");
-  process.env.TORPLAY_NATIVE_PROVIDERS = "";
   delete process.env.TORPLAY_SEARCH_PROVIDERS;
   delete process.env.JACKETT_URL;
   delete process.env.JACKETT_API_KEY;

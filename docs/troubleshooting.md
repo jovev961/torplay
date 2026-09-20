@@ -30,7 +30,7 @@ Open [http://torplay.local/settings](http://torplay.local/settings), Settings th
 
 ## Setup keeps reopening
 
-Open [http://torplay.local/setup](http://torplay.local/setup), the displayed private LAN address, or [http://localhost/setup](http://localhost/setup) on the TorPlay computer. Setup requires a valid TMDB API Read Access Token rather than TMDB's v3 key. Built-in source search does not need Jackett or Docker. Test optional custom Torznab endpoints and API keys under Settings → Torrent Sources.
+Open [http://torplay.local/setup](http://torplay.local/setup), the displayed private LAN address, or [http://localhost/setup](http://localhost/setup) on the TorPlay computer. Setup requires a valid TMDB API Read Access Token rather than TMDB's v3 key. TorPlay does not include torrent indexers; test configured custom or imported sources under Settings → Torrent Sources.
 
 ## Settings cannot be changed
 

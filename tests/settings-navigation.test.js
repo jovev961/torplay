@@ -30,24 +30,19 @@ test("validates external services only when their settings section is viewed", (
       { id: "tmdb", section: "services" },
       { id: "opensubtitles", section: "subtitles" },
     ],
-    torrentSources: {
-      providers: [
-        { id: "knaben", enabled: true },
-        { id: "yts", enabled: false },
-      ],
-    },
+    torrentSources: { jackettActive: false, customActive: false },
   };
 
   assert.deepEqual(settingsValidationRequest(snapshot, "general"), {
-    providerIds: [], native: false,
+    providerIds: [],
   });
   assert.deepEqual(settingsValidationRequest(snapshot, "services"), {
-    providerIds: ["tmdb"], native: false,
+    providerIds: ["tmdb"],
   });
   assert.deepEqual(settingsValidationRequest(snapshot, "torrent-sources"), {
-    providerIds: ["knaben"], native: true,
+    providerIds: [],
   });
   assert.deepEqual(settingsValidationRequest(snapshot, "subtitles"), {
-    providerIds: ["opensubtitles"], native: false,
+    providerIds: ["opensubtitles"],
   });
 });
