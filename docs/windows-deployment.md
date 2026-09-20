@@ -8,7 +8,7 @@ The recommended production deployment is the per-user TorPlay installer. It bund
 - A private home network that permits device-to-device multicast traffic
 - A TMDB API Read Access Token
 
-Built-in torrent sources work without Docker. Optional managed Jackett uses Docker Desktop with Linux containers and the existing Compose setup; enable it with `TORPLAY_MANAGED_JACKETT=true` in `torplay.env`. Existing Jackett users must opt into this flag to retain automatic container startup after upgrading.
+Docker Desktop is not required. TorPlay does not install, start, stop, configure, or monitor external provider applications.
 
 ## Install
 
@@ -18,13 +18,13 @@ Built-in torrent sources work without Docker. Optional managed Jackett uses Dock
 4. Follow the setup screen to verify and save the TMDB credential.
 5. Open [http://torplay.local](http://torplay.local) on other household devices.
 
-Optional Torznab sources can be added from Settings without enabling managed Docker services.
+Optional Torznab sources can be added from Settings.
 
 ## Optional Jackett Indexers
 
-TorPlay can use **Jackett** alongside its built-in providers. Jackett requires its own configured indexers to contribute results.
+TorPlay can use an independently operated **Jackett** instance alongside its built-in providers. Jackett requires its own configured indexers to contribute results and remains outside the TorPlay runtime lifecycle.
 
-After installing TorPlay and starting Docker, open Jackett in your browser:
+If Jackett is available on the TorPlay computer, open its dashboard in your browser:
 
 `http://localhost:9117`
 
@@ -78,7 +78,7 @@ TorPlay searches all configured Jackett indexers by default. Advanced owners can
 
 ### Troubleshooting
 
-If Jackett shows as **OK** in TorPlay Status but movies or TV shows return no torrent sources:
+If Jackett validates in Settings but movies or TV shows return no torrent sources:
 
 1. Open `http://localhost:9117`.
 2. Confirm that your authorized indexers have been added.
@@ -91,23 +91,20 @@ Only use TorPlay and configured indexers to access content you are authorized to
 
 ## Startup behavior
 
-TorPlay registers a per-user Windows login entry rather than a service because Docker Desktop runs in the interactive user session:
+TorPlay registers a per-user Windows login entry rather than a Windows service:
 
 ```text
 Windows login
     -> TorPlay launcher
-    -> optionally start/wait for Docker and managed Jackett
     -> start the private Next.js server
     -> expose port 80 to the private LAN
     -> advertise torplay.local with mDNS
 ```
 
-When managed Jackett is enabled, Docker readiness uses bounded retries: 5 seconds, 10 seconds, 20 seconds, and then 30-second intervals for at most ten minutes. Disabled managed components are reported as DISABLED.
-
 ## Start menu
 
 - **Open TorPlay** opens the editable local owner address at `http://localhost`.
-- **TorPlay Status** reports Docker, Jackett, TorPlay, and mDNS state, plus the last failure and important file paths.
+- **TorPlay Status** reports TorPlay and mDNS state, plus the last failure and important file paths.
 - **Start or Restart TorPlay** gracefully stops an existing runtime and launches it again.
 - **Stop TorPlay** requests a graceful shutdown and uses the recorded TorPlay process tree only as a fallback.
 
@@ -129,7 +126,7 @@ Runtime state  %LOCALAPPDATA%\TorPlay\runtime
 Logs           %LOCALAPPDATA%\TorPlay\logs
 ```
 
-The runtime log rotates at 5 MiB and retains three backups. Installer and uninstaller logs are copied into the same log directory. Jackett retains its configuration and downloads in Docker named volumes under the stable Compose project name `torplay`.
+The runtime log rotates at 5 MiB and retains three backups. Installer and uninstaller logs are copied into the same log directory. External provider applications manage their own configuration and data.
 
 ## Firewall and LAN access
 
@@ -146,19 +143,19 @@ Windows must classify the home network as **Private**. Guest Wi-Fi or access-poi
 
 ## Configuration changes
 
-Open [http://localhost/settings](http://localhost/settings) to update provider settings. TMDB and optional torrent-source changes activate immediately. When using managed Jackett, restart TorPlay after changing OMDb so Jackett receives the new value. Advanced runtime settings can be edited in `%LOCALAPPDATA%\TorPlay\config\torplay.env`; see [Configuration](configuration.md).
+Open [http://localhost/settings](http://localhost/settings) to update provider settings. TMDB and optional torrent-source changes activate immediately. Advanced runtime settings can be edited in `%LOCALAPPDATA%\TorPlay\config\torplay.env`; see [Configuration](configuration.md).
 
 ## Upgrade and reinstall
 
-Run the newer installer normally. It stops the existing runtime, replaces application/runtime files, retains `%LOCALAPPDATA%\TorPlay`, retains Docker volumes, and starts TorPlay again. The installer never overwrites an existing `torplay.env`.
+Run the newer installer normally. It stops the existing runtime, replaces application/runtime files, retains `%LOCALAPPDATA%\TorPlay`, and starts TorPlay again. The installer never overwrites an existing `torplay.env`.
 
-Older TorPlay versions may have created a FlareSolverr container and volume. Upgrades preserve these legacy Docker artifacts but no longer start, configure, or monitor them. Remove them manually in Docker Desktop only if you no longer need their data.
+Older TorPlay versions may have created Jackett or FlareSolverr containers and volumes. Upgrades leave these legacy Docker artifacts untouched but no longer start, configure, or monitor them. Remove them manually in Docker Desktop only if you no longer need their data.
 
 ## Uninstall
 
 Uninstall removes application/runtime files, login startup registration, Start-menu shortcuts, and TorPlay-created firewall rules.
 
-It preserves `%LOCALAPPDATA%\TorPlay` and TorPlay's Docker named volumes by default. Delete them manually only if profiles, history, configuration, logs, and Jackett settings are no longer wanted. Do not remove unrelated Docker volumes.
+It preserves `%LOCALAPPDATA%\TorPlay` by default. Delete it manually only if profiles, history, configuration, and logs are no longer wanted. Legacy Docker artifacts from older TorPlay versions remain independently managed and are not changed by uninstall.
 
 ## Migrate from the source runtime
 

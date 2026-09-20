@@ -6,13 +6,11 @@ import path from "node:path";
 import test from "node:test";
 import {
   acquireRuntimeLock,
-  checkDocker,
   formatHttpUrl,
   loadHomeEnvironment,
   parseHomeConfig,
   serverStart,
   startHomeRuntime,
-  waitForDockerReady,
 } from "../scripts/home.js";
 
 class FakeChild extends EventEmitter {
@@ -71,23 +69,6 @@ test("installed startup uses the standalone server without the Next CLI", () => 
   assert.equal(server.environment.NODE_ENV, "production");
 });
 
-test("Docker failures distinguish a missing client from a stopped daemon", () => {
-  assert.throws(
-    () => checkDocker({
-      spawnSyncProcess: () => ({ status: null, error: Object.assign(new Error("missing"), { code: "ENOENT" }) }),
-    }),
-    /not installed or docker is not on PATH/,
-  );
-
-  let call = 0;
-  assert.throws(
-    () => checkDocker({
-      spawnSyncProcess: () => (++call === 1 ? { status: 0 } : { status: 1, stderr: "daemon unavailable" }),
-    }),
-    /Docker is not running/,
-  );
-});
-
 test("installed configuration keeps process overrides and uses its explicit config file", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "torplay-home-env-"));
   const configPath = path.join(directory, "torplay.env");
@@ -113,45 +94,6 @@ test("installed configuration keeps process overrides and uses its explicit conf
   }
 });
 
-test("Docker readiness launches Desktop once and uses bounded retries", async () => {
-  let checks = 0;
-  let launches = 0;
-  const waits = [];
-  const version = await waitForDockerReady({
-    dockerDesktopCommand: "Docker Desktop.exe",
-    timeoutMs: 60_000,
-    spawnSyncProcess: (_command, args) => {
-      if (args[0] === "--version") return { status: 0, stdout: "Docker test" };
-      checks += 1;
-      return checks < 3 ? { status: 1 } : { status: 0, stdout: "29.0" };
-    },
-    spawnProcess: () => ({
-      unref() { launches += 1; },
-    }),
-    delayProcess: async (milliseconds) => waits.push(milliseconds),
-    log: () => {},
-  });
-  assert.equal(version, "29.0");
-  assert.equal(launches, 1);
-  assert.deepEqual(waits, [5_000, 10_000]);
-});
-
-test("Docker readiness does not retry a missing installation", async () => {
-  let waits = 0;
-  await assert.rejects(
-    () => waitForDockerReady({
-      timeoutMs: 60_000,
-      spawnSyncProcess: () => ({
-        status: null,
-        error: Object.assign(new Error("missing"), { code: "ENOENT" }),
-      }),
-      delayProcess: async () => { waits += 1; },
-    }),
-    /not installed/,
-  );
-  assert.equal(waits, 0);
-});
-
 test("runtime locks reject a live duplicate and release cleanly", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "torplay-home-lock-"));
   const lockPath = path.join(directory, "home.lock");
@@ -175,93 +117,11 @@ test("runtime locks reject a live duplicate and release cleanly", async () => {
   }
 });
 
-test("the supervisor manages only the Jackett service", async () => {
-  const events = [];
-  let statusCalls = 0;
-  const next = new FakeChild();
-  const spawnSyncProcess = (_command, args) => {
-    if (args[0] === "--version") return { status: 0, stdout: "Docker version test" };
-    if (args[0] === "info") return { status: 0, stdout: "29.0" };
-    if (args[0] === "compose" && args[1] === "ps" && args[2] === "--status") {
-      statusCalls += 1;
-      return { status: 0, stdout: statusCalls === 1 ? "" : "jackett\n" };
-    }
-    if (args[0] === "compose" && args[1] === "ps" && args[2] === "-q") {
-      return { status: 0, stdout: `${args[3]}-id\n` };
-    }
-    if (args[0] === "inspect") return { status: 0, stdout: "healthy\n" };
-    throw new Error(`Unexpected sync command: ${args.join(" ")}`);
-  };
-  const spawnProcess = (_command, args) => {
-    if (args[0] === "compose" && args[1] === "up") {
-      events.push("compose-up");
-      return new FakeChild(0);
-    }
-    if (args[0] === "compose" && args[1] === "stop") {
-      events.push(`compose-stop:${args.slice(2).join(",")}`);
-      return new FakeChild(0);
-    }
-    if (args[0] === "/PID") {
-      events.push("taskkill");
-      queueMicrotask(() => {
-        next.exitCode = 0;
-        next.emit("exit", 0, null);
-      });
-      return new FakeChild(0);
-    }
-    events.push("next-start");
-    return next;
-  };
-
-  const runtime = await startHomeRuntime({
-    platform: "win32",
-    cwd: process.cwd(),
-    environment: { PATH: process.env.PATH, TORPLAY_MANAGED_JACKETT: "true" },
-    dockerCommand: "docker",
-    spawnProcess,
-    spawnSyncProcess,
-    fetchProcess: async () => ({ ok: true }),
-    buildExists: () => true,
-    checkPortProcess: async (_port, host) => events.push(`port:${host}`),
-    acquireLockProcess: async () => async () => events.push("lock-release"),
-    configureJackettProcess: () => events.push("jackett-config"),
-    startProxyProcess: async () => {
-      events.push("proxy-start");
-      return { stop: async () => events.push("proxy-stop") };
-    },
-    startMdnsProcess: async () => {
-      events.push("mdns-start");
-      return { stop: async () => events.push("mdns-stop") };
-    },
-    log: () => {},
-  });
-
-  assert.deepEqual(events.slice(0, 7), [
-    "port:127.0.0.1",
-    "port:0.0.0.0",
-    "compose-up",
-    "jackett-config",
-    "next-start",
-    "proxy-start",
-    "mdns-start",
-  ]);
-  await runtime.stop();
-  assert.deepEqual(events.slice(-5), [
-    "mdns-stop",
-    "proxy-stop",
-    "taskkill",
-    "compose-stop:jackett",
-    "lock-release",
-  ]);
-  assert.deepEqual(next.signals, []);
-  assert.equal(events.some((event) => event.toLowerCase().includes("flaresolverr")), false);
-});
-
-test("native Windows startup and shutdown do not invoke Docker", async () => {
+test("Windows startup ignores obsolete managed-service settings and does not invoke Docker", async () => {
   const next = new FakeChild();
   const calls = [];
   const runtime = await startHomeRuntime({
-    platform: "win32", environment: {}, buildExists: () => true,
+    platform: "win32", environment: { TORPLAY_MANAGED_JACKETT: "true" }, buildExists: () => true,
     spawnProcess: (_command, args) => {
       calls.push(args);
       if (args.includes("/T")) {
@@ -271,7 +131,6 @@ test("native Windows startup and shutdown do not invoke Docker", async () => {
       return next;
     },
     spawnSyncProcess: () => { throw new Error("Docker must not be called"); },
-    waitForDockerProcess: () => { throw new Error("Docker must not be started"); },
     fetchProcess: async () => ({ ok: true }),
     checkPortProcess: async () => {}, acquireLockProcess: async () => async () => {},
     startProxyProcess: async () => ({ stop: async () => {} }),

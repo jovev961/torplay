@@ -2,7 +2,7 @@
 
 ## Start with status and logs
 
-On an installed Windows host, open **TorPlay Status** from the Start menu. It reports Docker, Jackett, TorPlay, and mDNS health and shows the last startup failure.
+On an installed Windows host, open **TorPlay Status** from the Start menu. It reports TorPlay and mDNS health and shows the last startup failure.
 
 Runtime logs are stored at:
 
@@ -12,24 +12,9 @@ Runtime logs are stored at:
 
 The log rotates at 5 MiB and retains three backups. Setup and uninstall logs are kept in the same directory.
 
-## Docker is missing
-
-Install Docker Desktop from its official installer. Open it once, accept its agreement, and wait for the Docker engine to become ready. Then restart Windows or choose **Start or Restart TorPlay**.
-
-TorPlay does not include a custom Docker installer.
-
-## Docker is installed but not ready
-
-The installed runtime attempts to start Docker Desktop and waits for up to ten minutes. If it still fails:
-
-1. Open Docker Desktop directly and inspect its status.
-2. Confirm it is using Linux containers.
-3. Confirm WSL 2 or the selected Docker backend is healthy.
-4. Choose **Start or Restart TorPlay** after Docker reports that it is running.
-
 ## Jackett fails
 
-- Confirm Docker is healthy.
+- Confirm your independently operated Jackett instance is running.
 - Open [http://localhost:9117](http://localhost:9117).
 - Confirm at least one Jackett indexer is configured and working.
 - Open [http://localhost/settings](http://localhost/settings) and confirm the Jackett API key matches the value shown by Jackett.
@@ -43,13 +28,13 @@ Open [http://localhost/settings](http://localhost/settings) on the TorPlay compu
 
 ## Setup keeps reopening
 
-Open [http://localhost/setup](http://localhost/setup) on the TorPlay computer. Setup requires a valid TMDB API Read Access Token rather than TMDB's v3 key. Built-in source search does not need Jackett or Docker. Test optional custom Torznab endpoints and API keys under Settings → Torrent Sources; managed Jackett additionally requires Docker and `TORPLAY_MANAGED_JACKETT=true`.
+Open [http://localhost/setup](http://localhost/setup) on the TorPlay computer. Setup requires a valid TMDB API Read Access Token rather than TMDB's v3 key. Built-in source search does not need Jackett or Docker. Test optional custom Torznab endpoints and API keys under Settings → Torrent Sources.
 
 ## Settings are read-only
 
 Provider settings can be changed only from `localhost` on the TorPlay computer. This protects credentials from other household devices. Open [http://localhost/settings](http://localhost/settings), not `http://torplay.local/settings`, to edit them. Values supplied by the host environment are also read-only in the page and must be changed at their source.
 
-If Settings reports that a restart is required after an OMDb change, choose **Start or Restart TorPlay** from the Windows Start menu. Other provider credential changes are used by new requests without a restart.
+Provider credential changes are used by new requests without a restart.
 
 ## `torplay.local` does not open
 

@@ -1,4 +1,4 @@
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, open, readFile, unlink } from "node:fs/promises";
@@ -6,29 +6,13 @@ import { createRequire } from "node:module";
 import net from "node:net";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { configureJackett, readLocalEnvironment } from "./jackett-config.js";
-import { resolveDockerCommand, resolveDockerDesktopCommand } from "./docker-paths.js";
 import { startMdnsAdvertisement, startReverseProxy } from "./home-network.js";
+import { readLocalEnvironment } from "./local-environment.js";
 import { controlEndpoint, startControlServer } from "./runtime-control.js";
 import { createStatusReporter } from "./runtime-status.js";
 import { SETTINGS_ENVIRONMENT_KEYS } from "../lib/settings/definitions.js";
 
 const require = createRequire(import.meta.url);
-const REQUIRED_SERVICES = ["jackett"];
-const COMPOSE_START_ARGS = [
-  "compose",
-  "up",
-  "-d",
-  "--wait",
-  "--wait-timeout",
-  "120",
-  ...REQUIRED_SERVICES,
-];
-
-function withCode(message, code) {
-  return Object.assign(new Error(message), { code });
-}
-
 export function loadHomeEnvironment({ cwd = process.cwd(), environment = process.env } = {}) {
   const configPath = environment.TORPLAY_CONFIG_PATH || path.join(cwd, ".env.local");
   const fileEnvironment = readLocalEnvironment(configPath);
@@ -167,144 +151,6 @@ export function checkPortAvailable(port, host) {
   });
 }
 
-function successfulResult(result, label) {
-  if (result.error) throw new Error(`${label} could not run: ${result.error.message}`);
-  if (result.status !== 0) {
-    const detail = result.stderr?.trim();
-    throw new Error(`${label} failed${detail ? `: ${detail}` : ` with exit code ${result.status}`}.`);
-  }
-  return result.stdout?.trim() || "";
-}
-
-function dockerOptions(environment) {
-  return {
-    encoding: "utf8",
-    env: environment,
-    timeout: 30_000,
-    windowsHide: true,
-  };
-}
-
-export function checkDocker({
-  dockerCommand = "docker",
-  spawnSyncProcess = spawnSync,
-  environment = process.env,
-} = {}) {
-  const installed = spawnSyncProcess(dockerCommand, ["--version"], dockerOptions(environment));
-  if (installed.error?.code === "ENOENT" || installed.status !== 0) {
-    throw withCode(
-      "TorPlay could not start because Docker Desktop is not installed or docker is not on PATH.",
-      "DOCKER_NOT_FOUND",
-    );
-  }
-
-  const daemon = spawnSyncProcess(
-    dockerCommand,
-    ["info", "--format", "{{.ServerVersion}}"],
-    dockerOptions(environment),
-  );
-  if (daemon.error || daemon.status !== 0) {
-    throw withCode(
-      "TorPlay could not start because Docker is not running. Start Docker Desktop and try again.",
-      "DOCKER_NOT_READY",
-    );
-  }
-  return daemon.stdout?.trim() || "available";
-}
-
-function dockerRetryDelays(timeoutMs) {
-  const delays = [];
-  let elapsed = 0;
-  for (const delayMs of [5_000, 10_000, 20_000]) {
-    if (elapsed + delayMs > timeoutMs) return delays;
-    delays.push(delayMs);
-    elapsed += delayMs;
-  }
-  while (elapsed + 30_000 <= timeoutMs) {
-    delays.push(30_000);
-    elapsed += 30_000;
-  }
-  if (elapsed < timeoutMs) delays.push(timeoutMs - elapsed);
-  return delays;
-}
-
-export async function waitForDockerReady({
-  dockerCommand = "docker",
-  spawnSyncProcess = spawnSync,
-  spawnProcess = spawn,
-  environment = process.env,
-  timeoutMs = 0,
-  dockerDesktopCommand = null,
-  delayProcess = delay,
-  log = console.log,
-} = {}) {
-  let desktopStarted = false;
-  const delays = dockerRetryDelays(timeoutMs);
-  for (let attempt = 0; ; attempt += 1) {
-    try {
-      return checkDocker({ dockerCommand, spawnSyncProcess, environment });
-    } catch (error) {
-      if (error.code === "DOCKER_NOT_FOUND" || attempt >= delays.length) throw error;
-      if (!desktopStarted && dockerDesktopCommand) {
-        desktopStarted = true;
-        const desktop = spawnProcess(dockerDesktopCommand, [], {
-          detached: true,
-          stdio: "ignore",
-          windowsHide: true,
-        });
-        desktop.on?.("error", (desktopError) => {
-          log(`[TorPlay] Docker Desktop could not be launched: ${desktopError.message}`);
-        });
-        desktop.unref?.();
-        log("[TorPlay] Docker Desktop is starting.");
-      }
-      const waitMs = delays[attempt];
-      log(`[TorPlay] Docker is not ready; retrying in ${Math.ceil(waitMs / 1_000)} seconds.`);
-      await delayProcess(waitMs);
-    }
-  }
-}
-
-export function runningComposeServices({
-  dockerCommand,
-  spawnSyncProcess = spawnSync,
-  environment,
-} = {}) {
-  const result = spawnSyncProcess(
-    dockerCommand,
-    ["compose", "ps", "--status", "running", "--services"],
-    dockerOptions(environment),
-  );
-  const output = successfulResult(result, "Docker Compose status");
-  return new Set(output.split(/\r?\n/).map((value) => value.trim()).filter(Boolean));
-}
-
-export function composeServiceHealth(service, {
-  dockerCommand,
-  spawnSyncProcess = spawnSync,
-  environment,
-} = {}) {
-  const idResult = spawnSyncProcess(
-    dockerCommand,
-    ["compose", "ps", "-q", service],
-    dockerOptions(environment),
-  );
-  const containerId = successfulResult(idResult, `${service} container lookup`);
-  if (!containerId) throw new Error(`${service} did not start.`);
-
-  const healthResult = spawnSyncProcess(
-    dockerCommand,
-    [
-      "inspect",
-      "--format",
-      "{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}",
-      containerId,
-    ],
-    dockerOptions(environment),
-  );
-  return successfulResult(healthResult, `${service} health check`).toLowerCase();
-}
-
 function waitForProcess(child, label) {
   return new Promise((resolve, reject) => {
     child.once("error", (error) => reject(new Error(`${label} could not start: ${error.message}`)));
@@ -404,38 +250,17 @@ async function stopNextProcess(child, {
   child.kill("SIGKILL");
 }
 
-async function stopComposeServices(services, {
-  dockerCommand,
-  spawnProcess,
-  environment,
-} = {}) {
-  if (!services.length) return;
-  await runCommand(
-    spawnProcess,
-    dockerCommand,
-    ["compose", "stop", ...services],
-    { stdio: "inherit", env: environment, windowsHide: true },
-    "Docker services shutdown",
-  );
-}
-
 export async function startHomeRuntime({
   platform = process.platform,
   cwd = process.cwd(),
   environment,
   spawnProcess = spawn,
-  spawnSyncProcess = spawnSync,
   fetchProcess = fetch,
-  configureJackettProcess = configureJackett,
   startProxyProcess = startReverseProxy,
   startMdnsProcess = startMdnsAdvertisement,
   acquireLockProcess = acquireRuntimeLock,
   checkPortProcess = checkPortAvailable,
   buildExists = existsSync,
-  dockerCommand,
-  dockerDesktopCommand,
-  waitForDockerProcess = waitForDockerReady,
-  delayProcess = delay,
   statusReporter,
   log = console.log,
 } = {}) {
@@ -457,12 +282,9 @@ export async function startHomeRuntime({
     logPath: environment.TORPLAY_LOG_PATH || null,
   });
   const releaseLock = await acquireLockProcess({ lockPath: path.join(runtimeDir, "home.lock") });
-  dockerCommand ||= resolveDockerCommand({ platform, environment });
-  dockerDesktopCommand ??= resolveDockerDesktopCommand({ platform, environment });
   let nextProcess = null;
   let proxy = null;
   let mdns = null;
-  let newlyStartedServices = [];
   let stopped = false;
 
   const stop = async () => {
@@ -474,11 +296,6 @@ export async function startHomeRuntime({
     if (proxy) await proxy.stop().catch((error) => errors.push(error));
     await stopNextProcess(nextProcess, { platform, spawnProcess, environment })
       .catch((error) => errors.push(error));
-    await stopComposeServices([...newlyStartedServices].reverse(), {
-      dockerCommand,
-      spawnProcess,
-      environment,
-    }).catch((error) => errors.push(error));
     await releaseLock().catch((error) => errors.push(error));
     reporter.write({
       state: "stopped",
@@ -493,60 +310,6 @@ export async function startHomeRuntime({
     log("[TorPlay] Starting Windows home runtime...");
     await checkPortProcess(config.port, config.host);
     await checkPortProcess(config.publicPort, config.publicHost);
-
-    if (environment.TORPLAY_MANAGED_JACKETT === "true") {
-      const waitSeconds = Number(environment.TORPLAY_DOCKER_WAIT_SECONDS || 0);
-      const dockerVersion = await waitForDockerProcess({
-        dockerCommand,
-        spawnSyncProcess,
-        spawnProcess,
-        environment,
-        timeoutMs: Number.isFinite(waitSeconds) && waitSeconds > 0 ? waitSeconds * 1_000 : 0,
-        dockerDesktopCommand,
-        delayProcess,
-        log,
-      });
-      reporter.write({ components: { Docker: "OK" } });
-      log(`[TorPlay] Docker OK (${dockerVersion}).`);
-      const runningBefore = runningComposeServices({ dockerCommand, spawnSyncProcess, environment });
-
-      try {
-        await runCommand(
-          spawnProcess,
-          dockerCommand,
-          COMPOSE_START_ARGS,
-          { stdio: "inherit", env: environment, windowsHide: true },
-          "Docker services",
-        );
-      } finally {
-        try {
-          const runningAfter = runningComposeServices({ dockerCommand, spawnSyncProcess, environment });
-          newlyStartedServices = REQUIRED_SERVICES.filter(
-            (service) => runningAfter.has(service) && !runningBefore.has(service),
-          );
-        } catch {
-          newlyStartedServices = REQUIRED_SERVICES.filter((service) => !runningBefore.has(service));
-        }
-      }
-
-      configureJackettProcess({
-        dockerCommand,
-        spawnSyncProcess,
-        environment,
-        processEnvironment: environment,
-      });
-      for (const service of REQUIRED_SERVICES) {
-        const health = composeServiceHealth(service, { dockerCommand, spawnSyncProcess, environment });
-        if (health !== "healthy" && health !== "running") {
-          throw new Error(`${service} is ${health || "not healthy"}.`);
-        }
-        reporter.write({ components: { Jackett: "OK" } });
-        log("[TorPlay] Jackett ready.");
-      }
-
-    } else {
-      reporter.write({ components: { Docker: "DISABLED", Jackett: "DISABLED" } });
-    }
 
     const server = serverStart(environment, config);
     nextProcess = spawnProcess(
@@ -604,9 +367,6 @@ export async function startHomeRuntime({
     const networkUrl = formatHttpUrl(config.publicHostname, config.publicPort);
     log("");
     log("TorPlay       OK");
-    if (environment.TORPLAY_MANAGED_JACKETT === "true") {
-      log("Jackett       OK");
-    }
     log(`Port ${String(config.publicPort).padEnd(9)}OK`);
     log("mDNS          OK");
     log("");

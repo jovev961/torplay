@@ -47,8 +47,8 @@ Settings controls are read-only. Unknown IDs are rejected. An empty list produce
 a configuration error.
 
 Run `npm run dev:native` to start Next.js with only `knaben,yts,eztv`, even if
-Jackett credentials exist. This command does not start, stop, or configure Docker
-or Jackett. The existing development and Windows launchers are unchanged.
+Jackett credentials exist. TorPlay never starts, stops, or configures external
+provider applications; owners manage those services independently.
 
 Native adapters use JSON APIs, with no scraping or anti-bot dependency:
 

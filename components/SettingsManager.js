@@ -364,11 +364,6 @@ export default function SettingsManager() {
             Sensitive settings are read-only over the network. Open <strong>http://localhost/settings</strong> on the TorPlay computer to make changes.
           </div>
         ) : null}
-        {snapshot.restartRequired ? (
-          <div className="notice" role="status">
-            Restart TorPlay to synchronize the updated OMDb setting with Jackett. Use <strong>Start or Restart TorPlay</strong> on Windows, or restart the development command.
-          </div>
-        ) : null}
         {notice ? <div className="notice success" role="status">{notice}</div> : null}
         {error ? <div className="notice error" role="alert">{error}</div> : null}
 
@@ -385,7 +380,7 @@ export default function SettingsManager() {
         </section>
 
         <section className={styles.settingsSection} id="services">
-          <div className={styles.sectionHeading}><span>02</span><div><h2>Services</h2><p>Metadata, source discovery, and managed search support.</p></div></div>
+          <div className={styles.sectionHeading}><span>02</span><div><h2>Services</h2><p>Metadata, source discovery, and external search integrations.</p></div></div>
           <div className={styles.providerGrid}>{serviceProviders.map(providerCard)}</div>
         </section>
 

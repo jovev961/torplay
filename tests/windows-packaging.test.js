@@ -4,7 +4,6 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { resolveDockerCommand, resolveDockerDesktopCommand } from "../scripts/dev.js";
 import {
   INNO_VERSION,
   NODE_VERSION,
@@ -23,22 +22,6 @@ test("Windows file versions are numeric and preserve beta build numbers", () => 
   assert.throws(() => windowsFileVersion("1.2.65536"), /out of range/);
 });
 
-test("Windows Docker discovery supports per-user and all-user installations", () => {
-  const environment = { LOCALAPPDATA: "C:\\Users\\Owner\\AppData\\Local", ProgramFiles: "C:\\Program Files" };
-  const perUserCli = path.join(environment.LOCALAPPDATA, "Programs", "DockerDesktop", "resources", "bin", "docker.exe");
-  const allUserDesktop = path.join(environment.ProgramFiles, "Docker", "Docker", "Docker Desktop.exe");
-  assert.equal(resolveDockerCommand({
-    platform: "win32",
-    environment,
-    fileExists: (candidate) => candidate === perUserCli,
-  }), perUserCli);
-  assert.equal(resolveDockerDesktopCommand({
-    platform: "win32",
-    environment,
-    fileExists: (candidate) => candidate === allUserDesktop,
-  }), allUserDesktop);
-});
-
 test("installed paths are writable-data based and remain configurable", () => {
   const paths = installedPaths({ installDir: "C:\\Apps\\TorPlay", dataDir: "D:\\TorPlayData" });
   const environment = installedEnvironment(paths, { TORPLAY_DATABASE_PATH: "E:\\custom.db" });
@@ -46,7 +29,8 @@ test("installed paths are writable-data based and remain configurable", () => {
   assert.equal(environment.TORPLAY_DEFAULT_DATABASE_PATH, path.join("D:\\TorPlayData", "data", "torplay.db"));
   assert.equal(environment.TORPLAY_CONFIG_PATH, path.join("D:\\TorPlayData", "config", "torplay.env"));
   assert.equal(environment.TORPLAY_SERVER_ENTRY, path.join("C:\\Apps\\TorPlay", "app", "server.js"));
-  assert.equal(environment.COMPOSE_PROJECT_NAME, "torplay");
+  assert.equal("COMPOSE_PROJECT_NAME" in environment, false);
+  assert.equal("TORPLAY_DOCKER_WAIT_SECONDS" in environment, false);
 });
 
 test("runtime status retains actionable failure details", async () => {
@@ -54,22 +38,16 @@ test("runtime status retains actionable failure details", async () => {
   const statusPath = path.join(directory, "runtime", "status.json");
   try {
     const reporter = createStatusReporter(statusPath);
-    assert.deepEqual(Object.keys(reporter.get().components), ["Docker", "Jackett", "TorPlay", "mDNS"]);
-    reporter.write({ components: { Docker: "OK" } });
-    reporter.write({ state: "error", lastError: "Docker timed out" });
+    assert.deepEqual(Object.keys(reporter.get().components), ["TorPlay", "mDNS"]);
+    reporter.write({ components: { TorPlay: "OK" } });
+    reporter.write({ state: "error", lastError: "Application failed" });
     const status = readRuntimeStatus(statusPath);
-    assert.equal(status.components.Docker, "OK");
-    assert.equal(status.lastError, "Docker timed out");
+    assert.equal(status.components.TorPlay, "OK");
+    assert.equal(status.lastError, "Application failed");
     assert.equal(status.state, "error");
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
-});
-
-test("managed Docker support contains Jackett without an anti-bot service", async () => {
-  const compose = await readFile(new URL("../docker-compose.yml", import.meta.url), "utf8");
-  assert.match(compose, /^\s{2}jackett:/m);
-  assert.doesNotMatch(compose, /flaresolverr/i);
 });
 
 test("the control channel requests a graceful supervisor stop", async () => {
@@ -115,7 +93,6 @@ test("release validation requires the packaged runtime and Windows native tools"
       "app/node_modules/better-sqlite3/build/Release/better_sqlite3.node",
       "app/node_modules/ffmpeg-static/ffmpeg.exe",
       "app/node_modules/ffprobe-static/ffprobe.exe",
-      "docker-compose.yml",
     ];
     for (const file of files) {
       const filePath = path.join(directory, file);
@@ -128,6 +105,12 @@ test("release validation requires the packaged runtime and Windows native tools"
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test("Windows packaging has no Docker runtime dependency", async () => {
+  const releaseScript = await readFile(new URL("../scripts/release-windows.js", import.meta.url), "utf8");
+  assert.doesNotMatch(releaseScript, /docker|compose/i);
+  assert.equal(existsSync(new URL("../docker-compose.yml", import.meta.url)), false);
 });
 
 test("installer declares durable data, login startup, shortcuts, and firewall cleanup", async () => {
@@ -153,6 +136,7 @@ test("fresh Windows configuration leaves required provider credentials for brows
   assert.match(template, /^JACKETT_SHOW_INDEXERS=$/m);
   assert.match(template, /^TORPLAY_NATIVE_PROVIDERS=$/m);
   assert.match(template, /^TORPLAY_CONFIGURED_NATIVE_PROVIDERS=$/m);
+  assert.doesNotMatch(template, /DOCKER|COMPOSE|TORPLAY_MANAGED_JACKETT/i);
 });
 
 test("Windows installer workflow pins its toolchain and publishes verified artifacts", async () => {

@@ -31,7 +31,7 @@ This boundary keeps the reusable APIs suitable for another trusted client, such 
 | Persistence | SQLite through `better-sqlite3` |
 | Metadata | TMDB API |
 | Source search | Provider-independent adapters, native JSON APIs, Torznab XML through Fast XML Parser |
-| Search support | Native providers, optional custom Torznab/Jackett, optional managed Docker, optional OMDb |
+| Search support | Native providers, optional custom Torznab/Jackett, optional OMDb |
 | Torrent runtime | WebTorrent and `parse-torrent` |
 | Playback | HTML5 video, HTTP Range, HLS.js |
 | Conversion | FFmpeg and FFprobe static packages |
@@ -90,13 +90,13 @@ Subtitles may come from torrent sidecars, embedded streams, OpenSubtitles, or Su
 
 SQLite stores local profiles, progress, history, and stale-writer protection. Media identity is based on profile plus TMDB title/episode identity rather than torrent identity. Writer tokens and monotonically increasing sequences prevent older players or delayed requests from overwriting current progress.
 
-Temporary torrent files, subtitle caches, and conversion outputs are separate from persistent data. Custom Torznab configuration stays in a private server-side file. When managed Jackett is explicitly enabled, Docker named volumes retain its configuration and downloads.
+Temporary torrent files, subtitle caches, and conversion outputs are separate from persistent data. Custom Torznab configuration stays in a private server-side file. External provider applications retain and manage their own data independently of TorPlay.
 
 ## Runtime variants
 
-- `npm run dev` starts the Next.js development server without Docker by default. Setting `TORPLAY_MANAGED_JACKETT=true` also starts the managed Compose services.
+- `npm run dev` starts the Next.js development server and does not manage external provider processes.
 - `npm start` starts a conventional production Next.js build.
-- `npm run start:home` adds the Windows supervisor, port 80, and mDNS to a source checkout. Managed Compose services start only when `TORPLAY_MANAGED_JACKETT=true`.
-- The Windows installer packages a standalone Next.js build and bundled Node runtime around the same native-first supervisor; managed Jackett remains an explicit option.
+- `npm run start:home` adds the Windows supervisor, port 80, and mDNS to a source checkout.
+- The Windows installer packages a standalone Next.js build and bundled Node runtime around the same supervisor without Docker Desktop or containers.
 
 All variants preserve the same API, playback, profile, search, and persistence behavior.

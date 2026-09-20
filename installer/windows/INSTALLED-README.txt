@@ -17,8 +17,7 @@ Persistent profiles and watch history:
   %LOCALAPPDATA%\TorPlay\data\torplay.db
 
 Torrent sources are opt-in. Add preconfigured or custom indexers in Settings.
-For managed Jackett only, install Docker Desktop and set TORPLAY_MANAGED_JACKETT=true
-in torplay.env, then use Start or Restart TorPlay. Existing Jackett credentials are retained.
+An independently operated Jackett instance can be connected through Settings.
 
 Migration from the source-checkout runtime:
   1. Stop the old TorPlay runtime.
@@ -27,6 +26,6 @@ Migration from the source-checkout runtime:
   3. Copy provider values from .env.local into the configuration file above.
   4. Use Start/Restart TorPlay.
 
-Upgrades and uninstall preserve the writable TorPlay data directory and Docker named
-volumes. They can be removed manually only after TorPlay is uninstalled if the owner no
-longer wants profiles, history, provider configuration, logs, or Jackett settings.
+Upgrades and uninstall preserve the writable TorPlay data directory. It can be removed
+manually only after TorPlay is uninstalled if the owner no longer wants profiles,
+history, provider configuration, or logs.
