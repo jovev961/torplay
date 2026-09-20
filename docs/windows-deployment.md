@@ -178,7 +178,7 @@ Release builds must run on Windows x64 so SQLite, FFmpeg, and FFprobe native fil
 
 The **Windows installer** workflow runs only manually: open GitHub Actions, select **Windows installer**, choose **Run workflow**, and select the branch to package. Pull requests and tags do not start installer builds. When manually running against a tag, its name must match `v<package-version>`.
 
-Pull requests targeting `main` or `develop` run the separate **CI** workflow. Its required **Test, lint, and build** job verifies the application on Windows without packaging an installer.
+Before merging a pull request into `develop`, run relevant tests, the full test suite, lint, and a production build locally. GitHub Actions checks are not required for merging. Promotion to `main` also requires explicit release approval and manual testing.
 
 Each successful run retains one workflow artifact for 14 days containing the versioned installer and its SHA-256 file. The workflow verifies the checksum before upload. Download both files and compare the published digest before distributing the installer. This workflow does not create or modify a GitHub Release.
 

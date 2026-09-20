@@ -53,15 +53,22 @@ When asked to implement a GitHub issue:
 
 ## Git Workflow
 
-Use `main` as the stable/release branch and `develop` as the integration/testing branch.
+Use `main` as the stable/release branch and `develop` as the integration/manual-testing branch.
 
 1. Fetch origin and start new work from a clean, current `origin/develop` on a scoped `feat/...`, `fix/...`, or `refactor/...` branch.
-2. Implement and verify the change with relevant tests, the full suite, lint, and a production build.
-3. Push the completed branch and open a pull request into `develop`. Required CI must pass before merging.
-4. Testing fixes branch from current `develop` and return through a separate pull request and commit; do not rewrite the original feature commit.
+
+2. Implement and verify the change locally with relevant tests, the full test suite, lint, and a production build. Do not rely on GitHub CI for verification.
+
+3. Push the completed branch and open a pull request into `develop`. Merge only after local verification passes.
+
+4. If testing on `develop` finds a problem, create a separate `fix/...` branch from current `develop`, fix and verify it locally, then merge it back through a pull request. Do not rewrite the original feature commit.
+
 5. Delete completed feature/fix/refactor branches only after their pull requests are successfully merged.
-6. Promote `develop` to `main` only through a pull request after explicit user approval and final verification. Never promote it automatically.
-7. Never directly push implementation changes to protected `main` or `develop`, force-push, rewrite published history, discard unrelated work, or bypass failing checks.
+
+6. Promote `develop` to `main` only through a pull request after explicit user approval, successful local verification, and manual testing. Never promote it automatically.
+
+7. Never directly push implementation changes to protected `main` or `develop`, force-push, rewrite published history, or discard unrelated work.
+
 8. Only bump the application version when preparing a public release/build. During beta, increment only the beta number unless instructed otherwise.
 
-After completion, report the branch, pull request, commit, verification results, and merge status.
+After completion, report the branch, pull request, commit, local verification results, and merge status.
