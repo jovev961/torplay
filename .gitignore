@@ -11,6 +11,6 @@ npm-debug.log*
 docs/tasks
 .DS_Store
 torrent-providers.json
-public/torplay-browser-icon-v1.png
-public/torplay-apple-icon-v1.png
+public/torplay-favicon-v2.ico
+public/torplay-apple-icon-v2.png
 installer/windows/torplay.ico
