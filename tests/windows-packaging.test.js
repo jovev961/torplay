@@ -54,6 +54,7 @@ test("runtime status retains actionable failure details", async () => {
   const statusPath = path.join(directory, "runtime", "status.json");
   try {
     const reporter = createStatusReporter(statusPath);
+    assert.deepEqual(Object.keys(reporter.get().components), ["Docker", "Jackett", "TorPlay", "mDNS"]);
     reporter.write({ components: { Docker: "OK" } });
     reporter.write({ state: "error", lastError: "Docker timed out" });
     const status = readRuntimeStatus(statusPath);
@@ -63,6 +64,12 @@ test("runtime status retains actionable failure details", async () => {
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test("managed Docker support contains Jackett without an anti-bot service", async () => {
+  const compose = await readFile(new URL("../docker-compose.yml", import.meta.url), "utf8");
+  assert.match(compose, /^\s{2}jackett:/m);
+  assert.doesNotMatch(compose, /flaresolverr/i);
 });
 
 test("the control channel requests a graceful supervisor stop", async () => {

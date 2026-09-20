@@ -1,31 +1,6 @@
 services:
-  flaresolverr:
-    image: ghcr.io/flaresolverr/flaresolverr:latest
-    environment:
-      LOG_LEVEL: info
-      LOG_HTML: "false"
-      CAPTCHA_SOLVER: none
-      TZ: Europe/Skopje
-    expose:
-      - "8191"
-    volumes:
-      - flaresolverr-config:/config
-    healthcheck:
-      test:
-        - CMD-SHELL
-        - >-
-          /usr/local/bin/python -c "import urllib.request;
-          urllib.request.urlopen('http://localhost:8191', timeout=5)"
-      interval: 10s
-      timeout: 10s
-      retries: 12
-      start_period: 20s
-
   jackett:
     image: lscr.io/linuxserver/jackett:latest
-    depends_on:
-      flaresolverr:
-        condition: service_healthy
     environment:
       PUID: "1000"
       PGID: "1000"
@@ -44,6 +19,5 @@ services:
       start_period: 15s
 
 volumes:
-  flaresolverr-config:
   jackett-config:
   jackett-downloads:

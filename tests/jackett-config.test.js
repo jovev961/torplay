@@ -5,7 +5,6 @@ import path from "node:path";
 import test from "node:test";
 import {
   CONFIGURE_JACKETT_ARGS,
-  FLARESOLVERR_URL,
   OMDB_API_URL,
   RESTART_JACKETT_ARGS,
   WAIT_FOR_JACKETT_ARGS,
@@ -25,10 +24,9 @@ test("reads quoted values from the local environment file", () => {
   }
 });
 
-test("builds FlareSolverr and OMDb settings without changing the timeout", () => {
+test("builds OMDb settings without unrelated Jackett configuration", () => {
   assert.deepEqual(jackettConfigurationPatch({ OMDB_API_KEY: "omdb-secret" }), {
     patch: {
-      FlareSolverrUrl: FLARESOLVERR_URL,
       OmdbApiKey: "omdb-secret",
       OmdbApiUrl: OMDB_API_URL,
     },
@@ -41,8 +39,7 @@ test("preserves an existing OMDb key when the environment key is absent or place
   for (const value of [undefined, "", "replace-me"]) {
     const { patch, hasOmdbKey } = jackettConfigurationPatch({ OMDB_API_KEY: value });
     assert.equal(hasOmdbKey, false);
-    assert.equal("OmdbApiKey" in patch, false);
-    assert.equal(patch.FlareSolverrUrl, FLARESOLVERR_URL);
+    assert.deepEqual(patch, {});
   }
 });
 

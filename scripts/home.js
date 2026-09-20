@@ -14,7 +14,7 @@ import { createStatusReporter } from "./runtime-status.js";
 import { SETTINGS_ENVIRONMENT_KEYS } from "../lib/settings/definitions.js";
 
 const require = createRequire(import.meta.url);
-const REQUIRED_SERVICES = ["flaresolverr", "jackett"];
+const REQUIRED_SERVICES = ["jackett"];
 const COMPOSE_START_ARGS = [
   "compose",
   "up",
@@ -540,14 +540,12 @@ export async function startHomeRuntime({
         if (health !== "healthy" && health !== "running") {
           throw new Error(`${service} is ${health || "not healthy"}.`);
         }
-        reporter.write({
-          components: { [service === "jackett" ? "Jackett" : "FlareSolverr"]: "OK" },
-        });
-        log(`[TorPlay] ${service === "jackett" ? "Jackett" : "FlareSolverr"} ready.`);
+        reporter.write({ components: { Jackett: "OK" } });
+        log("[TorPlay] Jackett ready.");
       }
 
     } else {
-      reporter.write({ components: { Docker: "DISABLED", Jackett: "DISABLED", FlareSolverr: "DISABLED" } });
+      reporter.write({ components: { Docker: "DISABLED", Jackett: "DISABLED" } });
     }
 
     const server = serverStart(environment, config);
@@ -608,7 +606,6 @@ export async function startHomeRuntime({
     log("TorPlay       OK");
     if (environment.TORPLAY_MANAGED_JACKETT === "true") {
       log("Jackett       OK");
-      log("FlareSolverr  OK");
     }
     log(`Port ${String(config.publicPort).padEnd(9)}OK`);
     log("mDNS          OK");

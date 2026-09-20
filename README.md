@@ -39,7 +39,7 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) and complete the setup screen. No environment file or restart is required. Optional Torznab sources can be added in Settings. Set `TORPLAY_MANAGED_JACKETT=true` in `.env.local` only if you want TorPlay to start Jackett and FlareSolverr through Docker.
+Open [http://localhost:3000](http://localhost:3000) and complete the setup screen. No environment file or restart is required. Optional Torznab sources can be added in Settings. Set `TORPLAY_MANAGED_JACKETT=true` in `.env.local` only if you want TorPlay to start Jackett through Docker.
 
 See [Development](docs/development.md) and [Configuration](docs/configuration.md) for the complete setup.
 

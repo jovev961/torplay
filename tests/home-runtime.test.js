@@ -175,7 +175,7 @@ test("runtime locks reject a live duplicate and release cleanly", async () => {
   }
 });
 
-test("the supervisor starts in order and shuts down only services it started", async () => {
+test("the supervisor manages only the Jackett service", async () => {
   const events = [];
   let statusCalls = 0;
   const next = new FakeChild();
@@ -184,7 +184,7 @@ test("the supervisor starts in order and shuts down only services it started", a
     if (args[0] === "info") return { status: 0, stdout: "29.0" };
     if (args[0] === "compose" && args[1] === "ps" && args[2] === "--status") {
       statusCalls += 1;
-      return { status: 0, stdout: statusCalls === 1 ? "jackett\n" : "jackett\nflaresolverr\n" };
+      return { status: 0, stdout: statusCalls === 1 ? "" : "jackett\n" };
     }
     if (args[0] === "compose" && args[1] === "ps" && args[2] === "-q") {
       return { status: 0, stdout: `${args[3]}-id\n` };
@@ -250,11 +250,11 @@ test("the supervisor starts in order and shuts down only services it started", a
     "mdns-stop",
     "proxy-stop",
     "taskkill",
-    "compose-stop:flaresolverr",
+    "compose-stop:jackett",
     "lock-release",
   ]);
   assert.deepEqual(next.signals, []);
-  assert.equal(events.some((event) => event === "compose-stop:jackett"), false);
+  assert.equal(events.some((event) => event.toLowerCase().includes("flaresolverr")), false);
 });
 
 test("native Windows startup and shutdown do not invoke Docker", async () => {

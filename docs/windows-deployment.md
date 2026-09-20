@@ -96,7 +96,7 @@ TorPlay registers a per-user Windows login entry rather than a service because D
 ```text
 Windows login
     -> TorPlay launcher
-    -> optionally start/wait for Docker and managed Jackett/FlareSolverr
+    -> optionally start/wait for Docker and managed Jackett
     -> start the private Next.js server
     -> expose port 80 to the private LAN
     -> advertise torplay.local with mDNS
@@ -107,7 +107,7 @@ When managed Jackett is enabled, Docker readiness uses bounded retries: 5 second
 ## Start menu
 
 - **Open TorPlay** opens the editable local owner address at `http://localhost`.
-- **TorPlay Status** reports Docker, Jackett, FlareSolverr, TorPlay, and mDNS state, plus the last failure and important file paths.
+- **TorPlay Status** reports Docker, Jackett, TorPlay, and mDNS state, plus the last failure and important file paths.
 - **Start or Restart TorPlay** gracefully stops an existing runtime and launches it again.
 - **Stop TorPlay** requests a graceful shutdown and uses the recorded TorPlay process tree only as a fallback.
 
@@ -129,7 +129,7 @@ Runtime state  %LOCALAPPDATA%\TorPlay\runtime
 Logs           %LOCALAPPDATA%\TorPlay\logs
 ```
 
-The runtime log rotates at 5 MiB and retains three backups. Installer and uninstaller logs are copied into the same log directory. Jackett and FlareSolverr retain their configuration in Docker named volumes under the stable Compose project name `torplay`.
+The runtime log rotates at 5 MiB and retains three backups. Installer and uninstaller logs are copied into the same log directory. Jackett retains its configuration and downloads in Docker named volumes under the stable Compose project name `torplay`.
 
 ## Firewall and LAN access
 
@@ -151,6 +151,8 @@ Open [http://localhost/settings](http://localhost/settings) to update provider s
 ## Upgrade and reinstall
 
 Run the newer installer normally. It stops the existing runtime, replaces application/runtime files, retains `%LOCALAPPDATA%\TorPlay`, retains Docker volumes, and starts TorPlay again. The installer never overwrites an existing `torplay.env`.
+
+Older TorPlay versions may have created a FlareSolverr container and volume. Upgrades preserve these legacy Docker artifacts but no longer start, configure, or monitor them. Remove them manually in Docker Desktop only if you no longer need their data.
 
 ## Uninstall
 

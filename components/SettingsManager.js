@@ -387,10 +387,6 @@ export default function SettingsManager() {
         <section className={styles.settingsSection} id="services">
           <div className={styles.sectionHeading}><span>02</span><div><h2>Services</h2><p>Metadata, source discovery, and managed search support.</p></div></div>
           <div className={styles.providerGrid}>{serviceProviders.map(providerCard)}</div>
-          <article className={styles.providerCard}>
-            <div className={styles.providerTitle}><h3>FlareSolverr</h3><span>Managed</span></div>
-            <p>Optional support for managed Jackett. Enable TORPLAY_MANAGED_JACKETT on the host to start these Docker services with TorPlay.</p>
-          </article>
         </section>
 
         <section className={styles.settingsSection} id="torrent-sources">

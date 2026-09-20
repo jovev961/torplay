@@ -31,7 +31,7 @@ This boundary keeps the reusable APIs suitable for another trusted client, such 
 | Persistence | SQLite through `better-sqlite3` |
 | Metadata | TMDB API |
 | Source search | Provider-independent adapters, native JSON APIs, Torznab XML through Fast XML Parser |
-| Search support | Native providers, optional custom Torznab/Jackett, optional managed Docker/FlareSolverr, optional OMDb |
+| Search support | Native providers, optional custom Torznab/Jackett, optional managed Docker, optional OMDb |
 | Torrent runtime | WebTorrent and `parse-torrent` |
 | Playback | HTML5 video, HTTP Range, HLS.js |
 | Conversion | FFmpeg and FFprobe static packages |
@@ -90,7 +90,7 @@ Subtitles may come from torrent sidecars, embedded streams, OpenSubtitles, or Su
 
 SQLite stores local profiles, progress, history, and stale-writer protection. Media identity is based on profile plus TMDB title/episode identity rather than torrent identity. Writer tokens and monotonically increasing sequences prevent older players or delayed requests from overwriting current progress.
 
-Temporary torrent files, subtitle caches, and conversion outputs are separate from persistent data. Custom Torznab configuration stays in a private server-side file. When managed Jackett is explicitly enabled, Docker named volumes retain Jackett and FlareSolverr configuration.
+Temporary torrent files, subtitle caches, and conversion outputs are separate from persistent data. Custom Torznab configuration stays in a private server-side file. When managed Jackett is explicitly enabled, Docker named volumes retain its configuration and downloads.
 
 ## Runtime variants
 

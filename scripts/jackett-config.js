@@ -2,7 +2,6 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
-export const FLARESOLVERR_URL = "http://flaresolverr:8191";
 export const OMDB_API_URL = "https://www.omdbapi.com/";
 export const CONFIGURE_JACKETT_ARGS = [
   "compose",
@@ -55,7 +54,7 @@ export function readLocalEnvironment(filePath = path.join(process.cwd(), ".env.l
 }
 
 export function jackettConfigurationPatch(environment) {
-  const patch = { FlareSolverrUrl: FLARESOLVERR_URL };
+  const patch = {};
   const omdbKey = environment.OMDB_API_KEY?.trim();
   const hasOmdbKey = Boolean(omdbKey && omdbKey !== "replace-me");
   if (hasOmdbKey) {
