@@ -20,7 +20,9 @@ export default function SourceOnboarding() {
     load().then((data) => { if (!cancelled) setSnapshot(data); }).catch((error) => { if (!cancelled) setError(error.message); });
     return () => { cancelled = true; };
   }, []);
-  const active = snapshot?.torrentSources.jackettActive || snapshot?.torrentSources.customActive;
+  const active = snapshot?.torrentSources.nativeActive
+    || snapshot?.torrentSources.jackettActive
+    || snapshot?.torrentSources.customActive;
   return <>
     {error ? <p className="notice error" role="alert">{error}</p> : null}
     {!snapshot && !error ? <p>Loading source settings…</p> : null}
@@ -29,7 +31,7 @@ export default function SourceOnboarding() {
     {saved ? <div className="notice" role="status">
       <p>Source saved. Availability and verification status are shown in Settings.</p>
       <button className={styles.testButton} type="button" onClick={() => setSaved(false)}>Add another source</button>
-    </div> : snapshot?.canEdit ? <AddSourceDialog embedded onSaved={async () => {
+    </div> : snapshot?.canEdit ? <AddSourceDialog embedded testedSources={snapshot.nativeSources} onSaved={async () => {
       setSaved(true);
       try { setSnapshot(await load()); } catch (error) { setError(error.message); }
     }} /> : null}

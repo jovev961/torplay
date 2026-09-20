@@ -10,6 +10,7 @@ import {
 } from "../../../../lib/settings/torrent-providers.js";
 import { importDefinition } from "../../../../lib/search/cardigann/definition.js";
 import { communityDirectory } from "../../../../lib/search/community-directory.js";
+import { changeNativeSource, nativeSourceHealth } from "../../../../lib/settings/native-sources.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,8 +21,18 @@ export async function POST(request) {
     assertSameOriginSettingsRequest(request);
     let body;
     try { body = await request.json(); } catch { return json({ error: "Request body must be valid JSON." }, 400); }
-    if (body?.action === "health") return json({ results: await customProviderHealth({ refresh: body.refresh === true }) });
+    if (body?.action === "health") {
+      const [native, custom] = await Promise.all([
+        nativeSourceHealth({ refresh: body.refresh === true }),
+        customProviderHealth({ refresh: body.refresh === true }),
+      ]);
+      return json({ results: [...native, ...custom] });
+    }
     assertSettingsMutationRequest(request);
+    if (["add-native", "update-native", "remove-native"].includes(body?.action)) {
+      const action = body.action.replace("-native", "");
+      return json({ nativeSources: await changeNativeSource(action, body.provider || {}) });
+    }
     if (body?.action === "list-community-definitions") return json(await communityDirectory.list({ refresh: body.refresh === true }));
     if (body?.action === "import-community-definition") return json(await communityDirectory.importEntry(body.provider));
     if (body?.action === "import-definition") return json(await importDefinition(body.definitionUrl));

@@ -535,6 +535,37 @@
   overflow-wrap: anywhere;
 }
 
+.sourceChoiceSections {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.addSourceGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+}
+
+.addSourceCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--panel-raised);
+}
+
+.addSourceCard span {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.addSourceCard small {
+  color: var(--muted);
+}
+
 .verificationPrompt {
   display: grid;
   gap: 10px;

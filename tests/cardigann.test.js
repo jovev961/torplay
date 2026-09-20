@@ -59,12 +59,12 @@ function response(url, body, status = 200, headers = {}) {
 
 test("definition URLs accept public YAML and normalize GitHub blob pages", () => {
   assert.equal(
-    normalizeDefinitionUrl("https://github.com/Prowlarr/Indexers/blob/master/definitions/v11/yts.yml#readme"),
-    "https://raw.githubusercontent.com/Prowlarr/Indexers/master/definitions/v11/yts.yml",
+    normalizeDefinitionUrl("https://github.com/Prowlarr/Indexers/blob/master/definitions/v11/example.yml#readme"),
+    "https://raw.githubusercontent.com/Prowlarr/Indexers/master/definitions/v11/example.yml",
   );
   assert.equal(
-    normalizeDefinitionUrl("https://raw.githubusercontent.com/Prowlarr/Indexers/master/definitions/v11/yts.yml"),
-    "https://raw.githubusercontent.com/Prowlarr/Indexers/master/definitions/v11/yts.yml",
+    normalizeDefinitionUrl("https://raw.githubusercontent.com/Prowlarr/Indexers/master/definitions/v11/example.yml"),
+    "https://raw.githubusercontent.com/Prowlarr/Indexers/master/definitions/v11/example.yml",
   );
   assert.equal(normalizeDefinitionUrl("https://definitions.example/index.yaml"), "https://definitions.example/index.yaml");
   assert.throws(() => normalizeDefinitionUrl("http://definitions.example/index.yml"), /public HTTPS/);
@@ -204,8 +204,8 @@ test("safe requests classify connection and timeout failures without leaking det
 });
 
 test("GitHub blob and raw URLs both enter the complete definition pipeline", async () => {
-  const blobUrl = "https://github.com/Prowlarr/Indexers/blob/master/definitions/v11/yts.yml";
-  const rawUrl = "https://raw.githubusercontent.com/Prowlarr/Indexers/master/definitions/v11/yts.yml";
+  const blobUrl = "https://github.com/Prowlarr/Indexers/blob/master/definitions/v11/example.yml";
+  const rawUrl = "https://raw.githubusercontent.com/Prowlarr/Indexers/master/definitions/v11/example.yml";
   const requested = [];
   for (const url of [blobUrl, rawUrl]) {
     const imported = await importDefinition(url, {
