@@ -1,4 +1,4 @@
-import { deleteProfile, renameProfile } from "../../../../lib/profiles/service.js";
+import { deleteProfile, updateProfile } from "../../../../lib/profiles/service.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -6,9 +6,9 @@ export const dynamic = "force-dynamic";
 export async function PATCH(request, context) {
   try {
     const { id } = await context.params;
-    return Response.json({ profile: renameProfile(id, await request.json()) });
+    return Response.json({ profile: updateProfile(id, await request.json()) });
   } catch (error) {
-    return Response.json({ error: error.message || "Could not rename the profile." }, { status: error.status || 400 });
+    return Response.json({ error: error.message || "Could not update the profile." }, { status: error.status || 400 });
   }
 }
 
