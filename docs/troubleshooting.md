@@ -2,7 +2,7 @@
 
 ## Start with status and logs
 
-On an installed Windows host, open **TorPlay Status** from the Start menu. It reports TorPlay and mDNS health and shows the last startup failure.
+On an installed Windows host, right-click the TorPlay system-tray icon for current runtime status and quick access to logs or start/stop controls. **TorPlay Status** in the Start menu provides the detailed TorPlay and mDNS report plus the last startup failure.
 
 Runtime logs are stored at:
 

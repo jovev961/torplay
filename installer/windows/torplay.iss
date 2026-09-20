@@ -46,19 +46,21 @@ Source: "{#StageDir}\*"; DestDir: "{app}"; Excludes: "config\*"; Flags: ignoreve
 Source: "{#StageDir}\config\torplay.env"; DestDir: "{localappdata}\TorPlay\config"; Flags: onlyifdoesntexist uninsneveruninstall
 
 [Registry]
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "TorPlay"; ValueData: """{sys}\wscript.exe"" ""{app}\runtime\torplay-launcher.vbs"" start"; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "TorPlay"; ValueData: """{sys}\wscript.exe"" ""{app}\runtime\torplay-tray.vbs"""; Flags: uninsdeletevalue
 
 [Icons]
 Name: "{group}\Open TorPlay"; Filename: "http://localhost"
+Name: "{group}\TorPlay Tray"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\runtime\torplay-tray.vbs"""; WorkingDir: "{app}"
 Name: "{group}\TorPlay Status"; Filename: "{app}\runtime\torplay-status.cmd"; WorkingDir: "{app}"
 Name: "{group}\Start or Restart TorPlay"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\runtime\torplay-launcher.vbs"" restart"; WorkingDir: "{app}"
 Name: "{group}\Stop TorPlay"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\runtime\torplay-launcher.vbs"" stop"; WorkingDir: "{app}"
 
 [Run]
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\runtime\windows-firewall.ps1"" -NodePath ""{app}\runtime\node.exe"" -PublicPort 80"; Verb: runas; Flags: shellexec waituntilterminated; StatusMsg: "Configuring the Private-network firewall rules..."
-Filename: "{sys}\wscript.exe"; Parameters: """{app}\runtime\torplay-launcher.vbs"" start"; WorkingDir: "{app}"; Flags: nowait skipifsilent; StatusMsg: "Starting TorPlay..."
+Filename: "{sys}\wscript.exe"; Parameters: """{app}\runtime\torplay-tray.vbs"""; WorkingDir: "{app}"; Flags: nowait skipifsilent; StatusMsg: "Starting TorPlay..."
 
 [UninstallRun]
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\runtime\torplay-tray.ps1"" -StopExisting"; WorkingDir: "{app}"; Flags: runhidden waituntilterminated skipifdoesntexist; RunOnceId: "StopTorPlayTray"
 Filename: "{app}\runtime\node.exe"; Parameters: """{app}\runtime\windows-control.mjs"" stop"; WorkingDir: "{app}"; Flags: runhidden waituntilterminated skipifdoesntexist; RunOnceId: "StopTorPlay"
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\runtime\windows-firewall.ps1"" -Remove"; Verb: runas; Flags: shellexec waituntilterminated skipifdoesntexist; RunOnceId: "RemoveTorPlayFirewall"
 
@@ -68,8 +70,14 @@ var
   ResultCode: Integer;
   NodePath: String;
   ControlPath: String;
+  TrayPath: String;
 begin
   Result := '';
+  TrayPath := ExpandConstant('{app}\runtime\torplay-tray.ps1');
+  if FileExists(TrayPath) then
+    Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
+      '-NoProfile -ExecutionPolicy Bypass -File "' + TrayPath + '" -StopExisting',
+      ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ResultCode);
   NodePath := ExpandConstant('{app}\runtime\node.exe');
   ControlPath := ExpandConstant('{app}\runtime\windows-control.mjs');
   if FileExists(NodePath) and FileExists(ControlPath) then

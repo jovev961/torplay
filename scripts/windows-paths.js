@@ -22,6 +22,9 @@ export function installedPaths({
     runnerEntry: path.join(resolvedInstall, "runtime", "windows-runner.mjs"),
     controlEntry: path.join(resolvedInstall, "runtime", "windows-control.mjs"),
     launcherPath: path.join(resolvedInstall, "runtime", "torplay-launcher.vbs"),
+    trayScriptPath: path.join(resolvedInstall, "runtime", "torplay-tray.ps1"),
+    trayLauncherPath: path.join(resolvedInstall, "runtime", "torplay-tray.vbs"),
+    trayPidPath: path.join(resolvedData, "runtime", "tray.pid"),
     nodePath: path.join(resolvedInstall, "runtime", "node.exe"),
   };
 }

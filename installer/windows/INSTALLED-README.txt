@@ -5,6 +5,11 @@ Open TorPlay at http://localhost after TorPlay finishes starting.
 The first launch guides you through TMDB setup without editing files.
 Household devices can use http://torplay.local after setup is complete.
 
+System tray:
+  Right-click the TorPlay notification-area icon to open TorPlay or its logs,
+  start/restart/stop the runtime, and control whether the tray starts at login.
+  Exit closes the tray only; choose Stop TorPlay to stop the background runtime.
+
 Configuration:
   Open http://localhost/settings on the TorPlay computer to manage provider keys.
   For manual fallback, edit %LOCALAPPDATA%\TorPlay\config\torplay.env.
