@@ -107,5 +107,6 @@ The Settings page separates General, Services, Torrent Sources, Subtitles, Playb
 - `GET /api/settings` returns secret-free configuration and runtime status. Non-secret editable values are returned only to a localhost request.
 - `PATCH /api/settings` updates one service or the enabled native-provider IDs from a same-origin JSON request on localhost only.
 - `POST /api/settings/validate` checks selected provider connections and returns sanitized validity or availability states. `{ "refresh": true }` bypasses the short health cache.
+- `POST /api/settings/torrent-providers` accepts `action` (`create`, `update`, `remove`, `test`, or `health`) and a `provider` object. Saved-provider actions use its stable `id`; connection fields are `name`, `endpoint`, and optional `apiKey`. Blank keys keep existing credentials; `clearApiKey` removes them. Mutations and draft tests require localhost. Health returns safe status for saved sources and supports `refresh`.
 
 Secret values are never returned by these endpoints. LAN clients can inspect safe status but cannot change provider configuration.

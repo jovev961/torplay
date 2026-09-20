@@ -2,7 +2,7 @@
 
 TorPlay is a self-hosted web app for discovering and streaming public-domain, Creative Commons, or otherwise authorized torrent video. Search, torrent traffic, media conversion, provider credentials, profiles, and watch history remain on the TorPlay computer; browsers connect only to the web app.
 
-TorPlay includes movie and TV discovery, Jackett-powered source search, server-side WebTorrent streaming, profiles and Continue Watching, subtitles, autoplay, native HTTP Range playback, and FFmpeg-backed playback for additional video formats.
+TorPlay includes movie and TV discovery, built-in torrent sources and optional Torznab providers, server-side WebTorrent streaming, profiles and Continue Watching, subtitles, autoplay, native HTTP Range playback, and FFmpeg-backed playback for additional video formats.
 
 > Use TorPlay only with content you are legally permitted to download and view.
 
@@ -13,17 +13,14 @@ The recommended household deployment is the TorPlay Windows installer.
 Requirements:
 
 - Windows 10 or 11 x64
-- Docker Desktop
 - A TMDB API Read Access Token
-- At least one configured Jackett indexer and its API key
 
 Installation:
 
-1. Install and open Docker Desktop once, accepting its agreement.
-2. Run `TorPlay-Setup-<version>.exe`.
-3. Choose **Open TorPlay** from the Start menu, or open [http://localhost](http://localhost).
-4. Follow the setup screen to verify and save the TMDB and Jackett credentials.
-5. Use [http://torplay.local](http://torplay.local) from other devices on the household network.
+1. Run `TorPlay-Setup-<version>.exe`.
+2. Choose **Open TorPlay** from the Start menu, or open [http://localhost](http://localhost).
+3. Follow the setup screen to verify and save your TMDB credential.
+4. Use [http://torplay.local](http://torplay.local) from other devices on the household network.
 
 TorPlay starts automatically for the Windows account that installed it. The Start menu provides **Open TorPlay**, **TorPlay Status**, **Start or Restart TorPlay**, and **Stop TorPlay**.
 
@@ -35,14 +32,14 @@ For native Knaben, YTS, and EZTV discovery without starting Docker services, run
 `npm run dev:native`. Configure TMDB as usual. Provider selection and endpoint
 overrides are documented in [Torrent providers](docs/torrent-providers.md).
 
-Requirements: Node.js 20.9 or newer and Docker with the `docker compose` command.
+Requirements: Node.js 20.9 or newer. Docker is optional for managed Jackett.
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) and complete the setup screen. No environment file or restart is required. You can still use `.env.local` for advanced or externally managed configuration. `npm run dev` starts Jackett and FlareSolverr before Next.js.
+Open [http://localhost:3000](http://localhost:3000) and complete the setup screen. No environment file or restart is required. Optional Torznab sources can be added in Settings. Set `TORPLAY_MANAGED_JACKETT=true` in `.env.local` only if you want TorPlay to start Jackett and FlareSolverr through Docker.
 
 See [Development](docs/development.md) and [Configuration](docs/configuration.md) for the complete setup.
 
@@ -51,7 +48,7 @@ See [Development](docs/development.md) and [Configuration](docs/configuration.md
 | Command | Purpose |
 | --- | --- |
 | `npm install` | Install project dependencies |
-| `npm run dev` | Start Docker services and the development server |
+| `npm run dev` | Start the development server with built-in sources |
 | `npm run build` | Create a production Next.js build |
 | `npm start` | Start the standard production Next.js server |
 | `npm run start:home` | Start the manual Windows home/LAN runtime |

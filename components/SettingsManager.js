@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import styles from "./SettingsManager.module.css";
+import CustomTorrentProviders from "./CustomTorrentProviders.js";
 
 const sections = [
   ["general", "General"],
@@ -234,7 +235,7 @@ export default function SettingsManager() {
   const savedNative = snapshot.torrentSources.providers.filter((source) => source.enabled).map((source) => source.id);
   const nativeChanged = savedNative.length !== nativeDraft.length
     || savedNative.some((id) => !nativeDraft.includes(id));
-  const hasEffectiveSource = nativeDraft.length > 0 || snapshot.torrentSources.jackettActive;
+  const hasEffectiveSource = nativeDraft.length > 0 || snapshot.torrentSources.jackettActive || snapshot.torrentSources.customActive;
 
   function providerHasChanges(provider) {
     return provider.fields.some((field) => {
@@ -355,12 +356,13 @@ export default function SettingsManager() {
           <div className={styles.providerGrid}>{serviceProviders.map(providerCard)}</div>
           <article className={styles.providerCard}>
             <div className={styles.providerTitle}><h3>FlareSolverr</h3><span>Managed</span></div>
-            <p>Started and configured automatically alongside Jackett. Its current state appears in General when supervisor status is available.</p>
+            <p>Optional support for managed Jackett. Enable TORPLAY_MANAGED_JACKETT on the host to start these Docker services with TorPlay.</p>
           </article>
         </section>
 
         <section className={styles.settingsSection} id="torrent-sources">
           <div className={styles.sectionHeading}><span>03</span><div><h2>Torrent Sources</h2><p>Native movie and TV search providers built into TorPlay.</p></div></div>
+          <h3>Built-in</h3>
           <div className={styles.sourceGrid}>
             {snapshot.torrentSources.providers.map((source) => {
               const checked = nativeDraft.includes(source.id);
@@ -395,7 +397,7 @@ export default function SettingsManager() {
           ) : snapshot.torrentSources.managedExternally ? (
             <p className={styles.sectionNote}>Native sources are managed by the host environment and read-only here.</p>
           ) : null}
-          {!hasEffectiveSource ? <p className={styles.sourceWarning}>Enable at least one native source or configure Jackett before saving.</p> : null}
+          {!hasEffectiveSource ? <p className={styles.sourceWarning}>Enable at least one built-in or custom source, or configure Jackett before saving.</p> : null}
           <div className={styles.sourceActions}>
             {snapshot.canEdit && !snapshot.torrentSources.managedExternally ? (
               <button
@@ -416,6 +418,10 @@ export default function SettingsManager() {
               Refresh availability
             </button>
           </div>
+          <CustomTorrentProviders initialProviders={snapshot.customProviders} canEdit={snapshot.canEdit} onChanged={async () => {
+            const data = await readJson(await fetch("/api/settings", { cache: "no-store" }));
+            setSnapshot(data);
+          }} />
         </section>
 
         <section className={styles.settingsSection} id="subtitles">

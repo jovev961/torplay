@@ -13,8 +13,8 @@ export default async function SetupPage() {
       <section className={styles.setupHero}>
         <span className={styles.brand}>TORPLAY</span>
         <span className="eyebrow">First-time setup</span>
-        <h1>Connect the two services TorPlay needs.</h1>
-        <p>Your credentials stay on this computer. TorPlay verifies both connections before saving anything.</p>
+        <h1>Connect your movie and TV catalog.</h1>
+        <p>Your TMDB credential stays on this computer. Built-in torrent sources work without Jackett or Docker.</p>
       </section>
       <SetupManager />
     </main>
