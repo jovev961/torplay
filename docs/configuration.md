@@ -13,6 +13,8 @@ TorPlay stores Settings changes atomically in the runtime's configuration file a
 
 ## Required providers
 
+Create a TMDB account, follow the official [TMDB API getting-started guide](https://developer.themoviedb.org/docs/getting-started), and copy the **API Read Access Token** from [TMDB API settings](https://www.themoviedb.org/settings/api). TorPlay does not accept the shorter v3 API key in this field.
+
 | Variable | Required | Default | Description |
 | --- | --- | --- | --- |
 | `TMDB_API_TOKEN` | Yes | None | TMDB API Read Access Token used for metadata. A v3 API key is not accepted here. |
@@ -20,6 +22,8 @@ TorPlay stores Settings changes atomically in the runtime's configuration file a
 | `JACKETT_API_KEY` | Only for optional Jackett | None | API key shown in the Jackett dashboard. |
 
 ## Search and Jackett
+
+OMDb is optional. Request a key from the official [OMDb API key page](https://www.omdbapi.com/apikey.aspx). Jackett is also optional and independently operated; use the official [Jackett project](https://github.com/Jackett/Jackett) when you intentionally want that integration.
 
 | Variable | Default | Description |
 | --- | --- | --- |
@@ -63,6 +67,8 @@ Fallback trackers supplement torrent-provided trackers and DHT. They do not make
 MP4, M4V, and WebM use native browser playback with HTTP Range seeking. Other recognized containers use FFmpeg-prepared H.264/AAC playback when needed.
 
 ## Subtitles
+
+External subtitle services are optional. Obtain credentials through the official [OpenSubtitles API consumers](https://www.opensubtitles.com/en/consumers) or [SubDL API panel](https://subdl.com/panel/api).
 
 | Variable | Default | Description |
 | --- | --- | --- |

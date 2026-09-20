@@ -14,14 +14,14 @@ The log rotates at 5 MiB and retains three backups. Setup and uninstall logs are
 
 TorPlay automatically retries an application, LAN proxy, or mDNS component after two consecutive health failures. If the same component exceeds three recovery attempts within 60 seconds, the tray shows **Status: Error** and the log records the failing component and each attempt. Choose **Retry TorPlay** to perform a clean full restart after correcting the reported problem.
 
-## Jackett fails
+## Optional Jackett fails
 
 - Confirm your independently operated Jackett instance is running.
 - Open [http://localhost:9117](http://localhost:9117).
 - Confirm at least one Jackett indexer is configured and working.
 - Open [http://localhost/settings](http://localhost/settings) and confirm the Jackett API key matches the value shown by Jackett.
 - Confirm explicitly listed movie/show indexer IDs exist in Jackett.
-- Required Jackett settings activate immediately after TorPlay verifies and saves them.
+- Jackett settings activate immediately after TorPlay verifies and saves them.
 - Indexers that require separate anti-bot tooling may fail, but they do not prevent TorPlay or other providers from operating.
 
 ## Metadata is unavailable

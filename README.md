@@ -6,56 +6,23 @@ TorPlay includes movie and TV discovery, built-in torrent sources and optional T
 
 > Use TorPlay only with content you are legally permitted to download and view.
 
-## Deploy on Windows
+## Install on Windows
 
-The recommended household deployment is the TorPlay Windows installer.
+The normal installation path is the self-contained Windows installer. It does not require Node.js, npm, Docker, Jackett, FlareSolverr, or a source checkout.
 
-Requirements:
+1. Open [TorPlay Releases](https://github.com/jovev961/torplay/releases) and download `TorPlay-Setup-<version>.exe` plus its `.sha256` file.
+2. Run the installer on Windows 10 or 11 x64 and approve the Private-network firewall prompt.
+3. Wait while TorPlay starts. The installer opens the first-time setup page automatically.
+4. Paste a TMDB **API Read Access Token** from [TMDB API settings](https://www.themoviedb.org/settings/api), test it, and finish setup.
+5. Add at least one preconfigured torrent source under **Settings → Torrent Sources** when you are ready to search authorized content.
 
-- Windows 10 or 11 x64
-- A TMDB API Read Access Token
+TorPlay then opens at [http://localhost](http://localhost). Other devices on the same private household network can use [http://torplay.local](http://torplay.local). The system-tray icon provides Open, Logs, Start/Restart, Stop, login-startup, Retry, and Exit controls.
 
-Installation:
+Profiles, history, configuration, and logs are kept under `%LOCALAPPDATA%\TorPlay` and are preserved during upgrades and normal uninstall. See the [complete Windows installation and first-run guide](docs/windows-deployment.md) for checksum verification, API setup, tray controls, troubleshooting, updates, and uninstalling.
 
-1. Run `TorPlay-Setup-<version>.exe`.
-2. Choose **Open TorPlay** from the Start menu, or open [http://localhost](http://localhost).
-3. Follow the setup screen to verify and save your TMDB credential.
-4. Use [http://torplay.local](http://torplay.local) from other devices on the household network.
+## Developer/source setup
 
-TorPlay starts automatically for the Windows account that installed it. A TorPlay system-tray icon shows runtime status and provides Open, Logs, Start/Restart, Stop, login-startup, and Exit controls. Equivalent shortcuts remain available in the Start menu.
-
-Profiles, history, configuration, and logs are kept under `%LOCALAPPDATA%\TorPlay` and are preserved during upgrades and normal uninstall. See the [complete Windows deployment guide](docs/windows-deployment.md) for installer builds, migration, firewall behavior, data locations, and troubleshooting.
-
-## Development quick start
-
-For discovery using only native Knaben, YTS, and EZTV providers, run
-`npm run dev:native`. Configure TMDB as usual. Provider selection and endpoint
-overrides are documented in [Torrent providers](docs/torrent-providers.md).
-
-Requirement: Node.js 20.9 or newer. Docker is not required.
-
-```bash
-npm install
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) and complete the setup screen. No environment file or restart is required. Optional Torznab sources and an independently operated Jackett instance can be added in Settings.
-
-See [Development](docs/development.md) and [Configuration](docs/configuration.md) for the complete setup.
-
-## Common commands
-
-| Command | Purpose |
-| --- | --- |
-| `npm install` | Install project dependencies |
-| `npm run dev` | Start the development server; add torrent sources in Settings |
-| `npm run build` | Create a production Next.js build |
-| `npm start` | Start the standard production Next.js server |
-| `npm run start:home` | Start the manual Windows home/LAN runtime |
-| `npm run firewall:home` | Configure manual-runtime Windows firewall rules |
-| `npm run release:windows` | Test, build, and package the Windows installer |
-| `npm test` | Run unit and integration tests |
-| `npm run lint` | Run ESLint |
+Source development is separate from normal installation and requires Node.js and npm. See [Development](docs/development.md) for prerequisites, commands, local data, quality checks, and Windows release builds.
 
 ## Documentation
 
