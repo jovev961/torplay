@@ -40,6 +40,10 @@ export async function releaseTorrentSession(
   return true;
 }
 
+export function shouldPollTorrentSession(session) {
+  return Boolean(session?.id && session.status === "loading");
+}
+
 export function useSourceLookup() {
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
@@ -79,7 +83,7 @@ export function useSourceLookup() {
   }, []);
 
   useEffect(() => {
-    if (!session?.id || !["loading", "ready"].includes(session.status)) return undefined;
+    if (!shouldPollTorrentSession(session)) return undefined;
 
     let cancelled = false;
     const timer = setTimeout(async () => {

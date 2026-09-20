@@ -1,8 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { SETTINGS_SECTIONS, settingsSectionFromHash } from "../lib/settings/navigation.js";
+import { useCallback, useEffect, useState } from "react";
+import {
+  SETTINGS_SECTIONS,
+  settingsSectionFromHash,
+  settingsValidationRequest,
+} from "../lib/settings/navigation.js";
 import styles from "./SettingsManager.module.css";
 import TorrentIndexerManager from "./TorrentIndexerManager.js";
 
@@ -88,7 +92,7 @@ export default function SettingsManager() {
     return () => window.removeEventListener("hashchange", selectHashSection);
   }, []);
 
-  async function validateProviders(providerIds, { refresh = false, native = false } = {}) {
+  const validateProviders = useCallback(async (providerIds, { refresh = false, native = false } = {}) => {
     if (!providerIds.length) return;
     setValidations((current) => ({
       ...current,
@@ -116,7 +120,7 @@ export default function SettingsManager() {
         }])),
       }));
     }
-  }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -128,15 +132,15 @@ export default function SettingsManager() {
         setDrafts(draftsFrom(data.providers));
         setNativeDraft(data.torrentSources.providers.filter((source) => source.enabled).map((source) => source.id));
         setConfiguredNative(data.torrentSources.providers.filter((source) => source.configured).map((source) => source.id));
-        void validateProviders(data.providers.map((provider) => provider.id));
-        void validateProviders(
-          data.torrentSources.providers.filter((source) => source.enabled).map((source) => source.id),
-          { native: true },
-        );
       })
       .catch((loadError) => { if (!cancelled) setError(loadError.message); });
     return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    const request = settingsValidationRequest(snapshot, selectedSection);
+    if (request.providerIds.length) void validateProviders(request.providerIds, request);
+  }, [selectedSection, snapshot, validateProviders]);
 
   async function saveProvider(provider) {
     const values = {};
@@ -164,7 +168,6 @@ export default function SettingsManager() {
         Object.entries(current).filter(([fieldKey]) => !fieldKey.startsWith(`${provider.id}:`)),
       ));
       setNotice(`${provider.name} settings saved.`);
-      void validateProviders([provider.id]);
     } catch (saveError) {
       setError(saveError.message);
     } finally {
@@ -185,7 +188,6 @@ export default function SettingsManager() {
       }));
       setSnapshot(data);
       setNotice(`${provider.name} ${field.label} removed.`);
-      void validateProviders([provider.id]);
     } catch (removeError) {
       setError(removeError.message);
     } finally {
@@ -212,7 +214,6 @@ export default function SettingsManager() {
       setValidations((current) => Object.fromEntries(
         Object.entries(current).filter(([id]) => !data.torrentSources.providers.some((source) => source.id === id)),
       ));
-      void validateProviders(savedEnabled, { refresh: true, native: true });
       return true;
     } catch (saveError) {
       setError(saveError.message);

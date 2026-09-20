@@ -5,19 +5,23 @@ import path from "node:path";
 import test from "node:test";
 import { DELETE as deleteSession } from "../app/api/torrents/[id]/route.js";
 import { POST as releaseSession } from "../app/api/torrents/[id]/release/route.js";
-import { releaseTorrentSession } from "../components/useSourceLookup.js";
+import {
+  releaseTorrentSession,
+  shouldPollTorrentSession,
+} from "../components/useSourceLookup.js";
 import {
   cleanupSubtitleCacheForSessions,
   cleanupIdleTorrentSessions,
+  shutdownIdleTorrentRuntime,
   stopTorrent,
   TORRENT_SESSION_IDLE_TTL_MS,
 } from "../lib/torrent/manager.js";
 
 const stateKey = Symbol.for("torplay.torrentState");
 
-function createState(sessions = [], resources = [], remove = async () => {}) {
+function createState(sessions = [], resources = [], remove = async () => {}, destroy = (done) => done()) {
   return {
-    client: { remove },
+    client: { remove, destroy },
     sessions: new Map(sessions.map((session) => [session.id, session])),
     resources: new Map(resources.map((resource) => [resource.infoHash, resource])),
     resourceStarts: new Map(),
@@ -83,20 +87,25 @@ test("keeps a shared torrent until its final viewer leaves, then deletes its fil
       activeConversion: { stop: () => { stoppedConversions += 1; } },
     });
     const removeCalls = [];
+    let destroyCalls = 0;
     globalThis[stateKey] = createState(
       [first, second],
       [resource],
       async (...args) => { removeCalls.push(args); },
+      (done) => { destroyCalls += 1; done(); },
     );
 
     assert.equal(await stopTorrent(first.id), true);
     await access(directory);
     assert.equal(removeCalls.length, 0);
+    assert.equal(destroyCalls, 0);
 
     assert.equal(await stopTorrent(second.id), true);
     await assert.rejects(access(directory));
     assert.deepEqual(removeCalls, [[infoHash, { destroyStore: true }]]);
     assert.equal(stoppedConversions, 1);
+    assert.equal(destroyCalls, 1);
+    assert.equal(globalThis[stateKey].client, null);
   });
 });
 
@@ -126,6 +135,28 @@ test("expires abandoned sessions after two minutes but keeps recent and streamin
     assert.equal(globalThis[stateKey].sessions.has("expired"), false);
     assert.equal(globalThis[stateKey].sessions.has("recent"), true);
     assert.equal(globalThis[stateKey].sessions.has("streaming"), true);
+  });
+});
+
+test("stops the cleanup timer and torrent runtime when no sessions remain", async () => {
+  await withTemporaryTorrentState(async () => {
+    let destroyCalls = 0;
+    const state = createState([], [], async () => {}, (done) => {
+      destroyCalls += 1;
+      done();
+    });
+    state.cleanupTimer = setInterval(() => {}, 60_000);
+    state.cleanupTimer.unref?.();
+    state.mediaServer = {};
+    state.mediaServerReady = Promise.resolve();
+    globalThis[stateKey] = state;
+
+    assert.equal(await shutdownIdleTorrentRuntime(), true);
+    assert.equal(destroyCalls, 1);
+    assert.equal(state.cleanupTimer, null);
+    assert.equal(state.client, null);
+    assert.equal(state.mediaServer, null);
+    assert.equal(state.mediaServerReady, null);
   });
 });
 
@@ -200,4 +231,11 @@ test("uses a beacon for page exit and keepalive requests for fallback or explici
     ["/api/torrents/fallback/release", { method: "POST", keepalive: true }],
     ["/api/torrents/explicit", { method: "DELETE", keepalive: true }],
   ]);
+});
+
+test("polls torrent metadata only while the session is loading", () => {
+  assert.equal(shouldPollTorrentSession({ id: "session", status: "loading" }), true);
+  assert.equal(shouldPollTorrentSession({ id: "session", status: "ready" }), false);
+  assert.equal(shouldPollTorrentSession({ id: "session", status: "error" }), false);
+  assert.equal(shouldPollTorrentSession(null), false);
 });
