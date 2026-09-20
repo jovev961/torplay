@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -14,7 +14,7 @@ import {
 import { applyFilters } from "../lib/search/cardigann/filters.js";
 import { resolvePublicAddress, safeRequest } from "../lib/search/cardigann/http.js";
 import { renderTemplate } from "../lib/search/cardigann/template.js";
-import { createCardigannProvider, publicCustomProviders, readCustomProviders } from "../lib/settings/torrent-providers.js";
+import { createCardigannProvider, publicCustomProviders, readCustomProviders, updateCardigannProvider } from "../lib/settings/torrent-providers.js";
 
 const definition = {
   id: "example",
@@ -70,12 +70,18 @@ test("Cardigann v11 definitions are schema checked and report unsupported featur
     assert.fail("CAPTCHA definition should have failed");
   } catch (error) {
     assert.equal(error.code, "CARDIGANN_UNSUPPORTED");
-    assert.equal(error.unsupportedFeatures[0].feature, "captcha");
+    assert.deepEqual(error.unsupportedFeatures[0], {
+      feature: "captcha",
+      path: "definition.login.captcha",
+      message: "CAPTCHA-based login is not supported.",
+    });
   }
-  assert.throws(
-    () => parseDefinition(stringify({ ...definition, download: { before: { path: "/token" } } })),
-    (error) => error.unsupportedFeatures?.some((item) => item.feature === "download.before"),
-  );
+  assert.doesNotThrow(() => parseDefinition(stringify({ ...definition, download: { before: { path: "/token" } } })));
+  assert.throws(() => parseDefinition(stringify({
+    ...definition,
+    settings: [{ name: "info_flaresolverr", type: "info_flaresolverr" }],
+  })), (error) => error.code === "CARDIGANN_UNSUPPORTED"
+    && error.unsupportedFeatures[0].path === "definition.settings[0]");
 });
 
 test("definition settings validate options and preserve stored secrets", () => {
@@ -85,8 +91,10 @@ test("definition settings validate options and preserve stored secrets", () => {
 });
 
 test("Cardigann templates and filters render supported expressions without evaluation", () => {
-  assert.equal(renderTemplate("{{ if eq .Query.Type \"movie-search\" }}movie{{ else }}other{{ end }}", { Query: { Type: "movie-search" } }), "movie");
+  assert.equal(renderTemplate("{{ if eq .Query.Type \"movie\" }}movie{{ else }}other{{ end }}", { Query: { Type: "movie" } }), "movie");
   assert.equal(renderTemplate("{{ range $item := .Items }}{{$item}},{{ end }}", { Items: ["a", "b"] }), "a,b,");
+  assert.equal(renderTemplate("{{ range .Items }}{{.}},{{ end }}", { Items: ["a", "b"] }), "a,b,");
+  assert.equal(renderTemplate("{{ if .Config.missing }}wrong{{ else }}empty{{ end }}", { Config: {} }), "empty");
   assert.equal(applyFilters("SINTÉL", [{ name: "tolower" }, { name: "diacritics" }, { name: "append", args: " 2010" }]), "sintel 2010");
   assert.throws(() => renderTemplate("{{ dangerous .Query }}", {}), /Unsupported Cardigann template function/);
 });
@@ -145,12 +153,131 @@ test("Cardigann adapter supports JSON and XML result documents", async () => {
   assert.equal((await xml.search({ title: "Sintel", type: "movie" }))[0].title, "Sintel XML");
 });
 
+test("Cardigann adapter renders raw category queries and expands JSON row attributes", async () => {
+  const requests = [];
+  const jsonDefinition = {
+    ...definition,
+    search: {
+      paths: [{ path: "/api", response: { type: "json" }, categories: [2000] }],
+      inputs: { $raw: "{{ range .Categories }}category[]={{.}}&{{ end }}", q: "{{ .Query.Keywords }}", t: "{{ .Query.Type }}", imdb: "{{ .Query.IMDBID }}", short: "{{ .Query.IMDBIDShort }}" },
+      rows: { selector: "$.payload", attribute: "items", multiple: true },
+      fields: {
+        title: { selector: "$.title" }, size: { selector: "$.size" }, seeders: { selector: "$.seeders" },
+        category: { text: "Movies" }, magnet: { selector: "$.magnet" },
+      },
+    },
+  };
+  const adapter = cardigannAdapter({
+    id: "cardigann-json-rows", name: "JSON rows", definition: jsonDefinition, settings: {},
+    capabilities: { mediaTypes: ["Movies"], modes: definition.caps.modes },
+  }, { request: async (url) => {
+    requests.push(String(url));
+    return response(url, JSON.stringify({ payload: { items: [{
+      title: "Sintel API", size: "4 MB", seeders: 4,
+      magnet: "magnet:?xt=urn:btih:dddddddddddddddddddddddddddddddddddddddd",
+    }] } }));
+  } });
+  const results = await adapter.search({ title: "Sintel", type: "movie", imdbId: "tt1727587" });
+  const requested = new URL(requests[0]);
+  assert.deepEqual(requested.searchParams.getAll("category[]"), ["2000"]);
+  assert.equal(requested.searchParams.get("q"), "Sintel");
+  assert.equal(requested.searchParams.get("t"), "movie");
+  assert.equal(requested.searchParams.get("imdb"), "tt1727587");
+  assert.equal(requested.searchParams.get("short"), "1727587");
+  assert.equal(results[0].title, "Sintel API");
+});
+
+test("Cardigann adapter decodes definition-selected legacy encodings", async () => {
+  const encoded = Buffer.concat([
+    Buffer.from('<article class="result"><span class="title">'),
+    Buffer.from([0xd2, 0xe5, 0xf1, 0xf2]),
+    Buffer.from('</span><span class="size">1 MB</span><span class="seeders">2</span><a href="magnet:?xt=urn:btih:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee">Get</a></article>'),
+  ]);
+  const encodedDefinition = { ...definition, encoding: "windows-1251" };
+  const adapter = cardigannAdapter({
+    id: "cardigann-encoding", name: "Encoded", definition: encodedDefinition, settings: {},
+    capabilities: { mediaTypes: ["Movies"], modes: definition.caps.modes },
+  }, { request: async (url) => response(url, encoded) });
+  assert.equal((await adapter.search({ title: "Test", type: "movie" }))[0].title, "Тест");
+});
+
+test("Cardigann form login uses definition selectors, hidden inputs, and session cookies", async () => {
+  const requests = [];
+  const privateDefinition = {
+    ...definition,
+    type: "private",
+    login: {
+      path: "/login", method: "form", form: "form#login", selectors: true,
+      cookies: ["JAVA=OK"],
+      inputs: { "#user": "{{ .Config.username }}", "#pass": "{{ .Config.password }}" },
+      selectorinputs: { csrf: { selector: "input[name=csrf]", attribute: "value" } },
+      test: { path: "/account", selector: ".logout" },
+    },
+    settings: [
+      { name: "username", type: "text", label: "Username" },
+      { name: "password", type: "password", label: "Password" },
+    ],
+  };
+  const adapter = cardigannAdapter({
+    id: "cardigann-login", name: "Private", definition: privateDefinition,
+    settings: { username: "alice", password: "secret" }, capabilities: { mediaTypes: ["Movies"], modes: definition.caps.modes },
+  }, { request: async (url, options) => {
+    requests.push({ url: String(url), options });
+    if (String(url).endsWith("/login") && options.method !== "POST") {
+      return response(url, '<form id="login" action="/session"><input id="user" name="login"><input id="pass" name="password"><input name="csrf" value="token"></form>', 200, { "set-cookie": "sid=abc; Path=/" });
+    }
+    if (String(url).endsWith("/session")) return response(url, "ok", 200, { "set-cookie": "auth=yes; Path=/" });
+    if (String(url).endsWith("/account")) return response(url, '<a class="logout">Logout</a>');
+    return response(url, '<article class="result"><span class="title">Sintel</span><span class="size">1 MB</span><span class="seeders">1</span><a href="magnet:?xt=urn:btih:ffffffffffffffffffffffffffffffffffffffff">Get</a></article>');
+  } });
+  await adapter.search({ title: "Sintel", type: "movie" });
+  const login = requests.find((item) => item.url.endsWith("/session"));
+  assert.deepEqual(Object.fromEntries(new URLSearchParams(login.options.body)), { login: "alice", password: "secret", csrf: "token" });
+  assert.match(login.options.headers.Cookie, /sid=abc/);
+  assert.match(login.options.headers.Cookie, /JAVA=OK/);
+  assert.match(requests.at(-1).options.headers.Cookie, /auth=yes/);
+});
+
+test("Cardigann download preparation can construct a magnet from a before response", async () => {
+  const requests = [];
+  const downloadDefinition = {
+    ...definition,
+    download: {
+      before: { path: "/api/info", inputs: { id: "{{ re_replace .DownloadUri.AbsolutePath \"/info/\" \"\" }}" } },
+      infohash: {
+        usebeforeresponse: true,
+        hash: { selector: ":root", filters: [{ name: "regexp", args: "([a-f0-9]{40})" }] },
+        title: { selector: ":root", filters: [{ name: "regexp", args: "title:([^;]+)" }] },
+      },
+    },
+    search: {
+      ...definition.search,
+      fields: { ...definition.search.fields, magnet: undefined, download: { selector: "a", attribute: "href" } },
+    },
+  };
+  delete downloadDefinition.search.fields.magnet;
+  const adapter = cardigannAdapter({
+    id: "cardigann-download", name: "Download", definition: downloadDefinition, settings: {},
+    capabilities: { mediaTypes: ["Movies"], modes: definition.caps.modes },
+  }, { request: async (url) => {
+    requests.push(String(url));
+    if (String(url).includes("/api/info")) return response(url, "hash:1111111111111111111111111111111111111111;title:Sintel");
+    if (String(url).includes("/info/")) return response(url, "<html>details</html>");
+    return response(url, '<article class="result"><span class="title">Sintel</span><span class="size">1 MB</span><span class="seeders">1</span><a href="/info/42">Get</a></article>');
+  } });
+  const result = (await adapter.search({ title: "Sintel", type: "movie" }))[0];
+  const resolved = await result.source.resolver();
+  assert.match(requests.find((url) => url.includes("/api/info")), /id=42/);
+  assert.equal(resolved.magnet, "magnet:?xt=urn:btih:1111111111111111111111111111111111111111&dn=Sintel");
+});
+
 test("imported definitions persist only after live verification and redact settings", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "torplay-cardigann-"));
   const environment = { TORPLAY_CONFIG_PATH: path.join(directory, "torplay.env") };
   try {
+    const definitionYaml = `# retained import comment\n${stringify(definition)}`;
     const imported = await importDefinition("https://github.com/example/indexers/blob/main/example.yml", {
-      request: async (url) => response(url, stringify(definition)),
+      request: async (url) => response(url, definitionYaml),
     });
     assert.deepEqual(imported.definition, {
       id: "example",
@@ -165,6 +292,7 @@ test("imported definitions persist only after live verification and redact setti
         { name: "safe", label: "Safe search", type: "checkbox", options: null, default: true, required: false, secret: false, configured: false },
       ],
     });
+    assert.deepEqual(readCustomProviders(environment), []);
     const providers = await createCardigannProvider({ importId: imported.importId, settings: { token: "private", safe: true } }, {
       environment,
       request: async (url) => response(url, '<div class="result"><span class="title">Sintel</span><span class="size">1 MB</span><span class="seeders">1</span><a href="magnet:?xt=urn:btih:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa">Get</a></div>'),
@@ -172,6 +300,9 @@ test("imported definitions persist only after live verification and redact setti
     assert.equal(providers[0].kind, "cardigann");
     assert.equal(JSON.stringify(providers).includes("private"), false);
     assert.equal(readCustomProviders(environment)[0].settings.token, "private");
+    const stored = JSON.parse(await readFile(path.join(directory, "torrent-providers.json"), "utf8"));
+    assert.equal(stored[0].definitionYaml, definitionYaml);
+    assert.equal(stored[0].definitionSourceFormat, "original");
     assert.equal(publicCustomProviders(environment)[0].definitionUrl, "https://github.com/example/indexers/blob/main/example.yml");
   } finally {
     await rm(directory, { recursive: true, force: true });
@@ -186,4 +317,26 @@ test("public definitions without settings preview as requiring no configuration"
   assert.equal(imported.definition.access, "public");
   assert.equal(imported.definition.website, "https://indexer.example/");
   assert.equal(imported.definition.sourceUrl, "https://definitions.example/public.yml");
+});
+
+test("legacy parsed-only Cardigann records remain readable and canonicalize on save", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "torplay-cardigann-legacy-"));
+  const environment = { TORPLAY_CONFIG_PATH: path.join(directory, "torplay.env") };
+  const filename = path.join(directory, "torrent-providers.json");
+  try {
+    await writeFile(filename, JSON.stringify([{
+      id: "cardigann-legacy", kind: "cardigann", name: definition.name,
+      definitionUrl: "https://definitions.example/legacy.yml", definitionHash: "legacy",
+      definition, settings: { token: "stored", safe: true }, enabled: true,
+      capabilities: { mediaTypes: ["Movies", "TV"], modes: definition.caps.modes },
+    }]));
+    assert.equal(readCustomProviders(environment)[0].definition.id, "example");
+    await updateCardigannProvider({ id: "cardigann-legacy", enabled: false }, { environment });
+    const stored = JSON.parse(await readFile(filename, "utf8"));
+    assert.equal(stored[0].definitionSourceFormat, "canonicalized-legacy");
+    assert.match(stored[0].definitionYaml, /^id: example/m);
+    assert.match(stored[0].definitionHash, /^[a-f\d]{64}$/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
