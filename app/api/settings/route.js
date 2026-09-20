@@ -1,4 +1,8 @@
-import { SettingsError, updateProviderSettings } from "../../../lib/settings/config.js";
+import {
+  SettingsError,
+  updateNativeProviderSettings,
+  updateProviderSettings,
+} from "../../../lib/settings/config.js";
 import {
   assertSettingsMutationRequest,
   isLoopbackSettingsRequest,
@@ -46,8 +50,11 @@ export async function PATCH(request) {
     if (!body || typeof body.provider !== "string") {
       throw new SettingsError("A settings provider is required.");
     }
-    const change = await updateProviderSettings(body.provider, body);
-    clearSettingsValidation(body.provider);
+    const change = body.provider === "nativeProviders"
+      ? await updateNativeProviderSettings(body.enabled)
+      : await updateProviderSettings(body.provider, body);
+    if (body.provider === "nativeProviders") clearSettingsValidation();
+    else clearSettingsValidation(body.provider);
     if (change.restartRequired) requireSettingsRestart();
     const snapshot = await getSettingsSnapshot({ canEdit: true });
     return Response.json(snapshot, { headers: { "Cache-Control": "no-store" } });

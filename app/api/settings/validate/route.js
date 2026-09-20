@@ -17,7 +17,10 @@ export async function POST(request) {
     if (body?.providers !== undefined && !Array.isArray(body.providers)) {
       throw new SettingsError("providers must be an array.");
     }
-    const results = await validateSettingsProviders(body?.providers);
+    if (body?.refresh !== undefined && typeof body.refresh !== "boolean") {
+      throw new SettingsError("refresh must be a boolean.");
+    }
+    const results = await validateSettingsProviders(body?.providers, { useCache: body?.refresh !== true });
     return Response.json({ results }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return Response.json(

@@ -120,6 +120,22 @@ test("native-only movie and TV discovery never contacts Jackett", async () => {
   });
 });
 
+test("native provider settings select a subset while the advanced override remains authoritative", () => {
+  assert.deepEqual(
+    configuredProviders({ TORPLAY_NATIVE_PROVIDERS: "yts,eztv" }).map((item) => item.id),
+    ["yts", "eztv"],
+  );
+  assert.deepEqual(
+    configuredProviders({
+      TORPLAY_NATIVE_PROVIDERS: "yts",
+      TORPLAY_SEARCH_PROVIDERS: "knaben,jackett",
+    }).map((item) => item.id),
+    ["knaben", "jackett"],
+  );
+  assert.deepEqual(configuredProviders({ TORPLAY_NATIVE_PROVIDERS: "" }), []);
+  assert.throws(() => configuredProviders({ TORPLAY_NATIVE_PROVIDERS: "unknown" }), /Unknown/);
+});
+
 test("native development launches Next only and overrides an inherited provider selection", () => {
   const calls = [];
   startNativeDevelopment({ environment: { TORPLAY_SEARCH_PROVIDERS: "jackett" }, spawnProcess: (...args) => calls.push(args) });

@@ -33,10 +33,16 @@ and hasMagnet. Requested playback context is stored separately from release meta
 
 ## Native providers
 
-Knaben, YTS, and EZTV are enabled by default. Jackett is also included when its
-URL and non-placeholder API key are configured. Set `TORPLAY_SEARCH_PROVIDERS`
-to a comma-separated allowlist of `knaben,yts,eztv,jackett` to override this.
-Unknown IDs are rejected. An empty list produces a configuration error.
+Knaben, YTS, and EZTV are enabled by default and can be enabled or disabled from
+**Settings → Torrent Sources**. Their selection is stored as the comma-separated
+`TORPLAY_NATIVE_PROVIDERS` value. At least one native provider must remain enabled
+unless Jackett is configured. Jackett is included separately when its URL and
+non-placeholder API key are configured.
+
+`TORPLAY_SEARCH_PROVIDERS` remains an advanced full-provider override. Set it to
+a comma-separated allowlist of `knaben,yts,eztv,jackett`; while present, the
+Settings controls are read-only. Unknown IDs are rejected. An empty list produces
+a configuration error.
 
 Run `npm run dev:native` to start Next.js with only `knaben,yts,eztv`, even if
 Jackett credentials exist. This command does not start, stop, or configure Docker,
@@ -61,9 +67,11 @@ Server-side HTTP(S) endpoint overrides:
 | `EZTV_API_URL` | `https://eztvx.to/api/` |
 
 YTS and EZTV settings are API base URLs; Knaben is the search endpoint.
-Provider outages or invalid JSON remain isolated by the shared provider runner.
+The Settings page performs lightweight JSON availability checks for enabled native
+providers on load and on request. Results are cached briefly, contain no torrent
+results, and never expose provider URLs or credentials. Provider outages or invalid
+JSON remain isolated by the shared provider runner.
 No mirror discovery or automatic anti-bot workaround is attempted.
 Only search/download content you are authorized to access.
 
-Provider configuration/health UI, additional indexers, Prowlarr setup, and ranking
-improvements remain separate work.
+Additional indexers, Prowlarr setup, and ranking improvements remain separate work.

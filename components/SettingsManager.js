@@ -7,6 +7,7 @@ import styles from "./SettingsManager.module.css";
 const sections = [
   ["general", "General"],
   ["services", "Services"],
+  ["torrent-sources", "Torrent Sources"],
   ["subtitles", "Subtitles"],
   ["playback", "Playback"],
   ["about", "About"],
@@ -19,6 +20,10 @@ const statusLabels = {
   missing: "Missing",
   unconfigured: "Not configured",
   checking: "Checking…",
+  available: "Available",
+  unavailable: "Unavailable",
+  disabled: "Disabled",
+  pending: "Not saved",
 };
 
 function key(providerId, fieldId) {
@@ -68,26 +73,45 @@ function RuntimeStatus({ components }) {
   );
 }
 
+function TorrentSourceStatus({ source, validation }) {
+  const current = source.enabled
+    ? validation || { status: "checking", message: "Checking source availability." }
+    : { status: "disabled", message: "Source is disabled." };
+  return (
+    <div className={styles.providerStatus}>
+      <span className={`${styles.statusBadge} ${styles[current.status] || ""}`}>
+        {statusLabels[current.status] || "Unknown"}
+      </span>
+      <span>{current.message}</span>
+    </div>
+  );
+}
+
 export default function SettingsManager() {
   const [snapshot, setSnapshot] = useState(null);
   const [drafts, setDrafts] = useState({});
   const [secrets, setSecrets] = useState({});
   const [visibleSecrets, setVisibleSecrets] = useState({});
   const [validations, setValidations] = useState({});
+  const [nativeDraft, setNativeDraft] = useState([]);
   const [saving, setSaving] = useState("");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
 
-  async function validateProviders(providerIds) {
+  async function validateProviders(providerIds, { refresh = false, native = false } = {}) {
+    if (!providerIds.length) return;
     setValidations((current) => ({
       ...current,
-      ...Object.fromEntries(providerIds.map((id) => [id, { status: "checking", message: "Checking the configured service." }])),
+      ...Object.fromEntries(providerIds.map((id) => [id, {
+        status: "checking",
+        message: native ? "Checking source availability." : "Checking the configured service.",
+      }])),
     }));
     try {
       const data = await readJson(await fetch("/api/settings/validate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ providers: providerIds }),
+        body: JSON.stringify({ providers: providerIds, refresh }),
       }));
       setValidations((current) => ({
         ...current,
@@ -112,7 +136,12 @@ export default function SettingsManager() {
         if (cancelled) return;
         setSnapshot(data);
         setDrafts(draftsFrom(data.providers));
+        setNativeDraft(data.torrentSources.providers.filter((source) => source.enabled).map((source) => source.id));
         void validateProviders(data.providers.map((provider) => provider.id));
+        void validateProviders(
+          data.torrentSources.providers.filter((source) => source.enabled).map((source) => source.id),
+          { native: true },
+        );
       })
       .catch((loadError) => { if (!cancelled) setError(loadError.message); });
     return () => { cancelled = true; };
@@ -173,10 +202,39 @@ export default function SettingsManager() {
     }
   }
 
+  async function saveNativeProviders() {
+    setSaving("nativeProviders");
+    setNotice("");
+    setError("");
+    try {
+      const data = await readJson(await fetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider: "nativeProviders", enabled: nativeDraft }),
+      }));
+      setSnapshot(data);
+      const enabled = data.torrentSources.providers.filter((source) => source.enabled).map((source) => source.id);
+      setNativeDraft(enabled);
+      setNotice("Torrent source settings saved.");
+      setValidations((current) => Object.fromEntries(
+        Object.entries(current).filter(([id]) => !data.torrentSources.providers.some((source) => source.id === id)),
+      ));
+      void validateProviders(enabled, { refresh: true, native: true });
+    } catch (saveError) {
+      setError(saveError.message);
+    } finally {
+      setSaving("");
+    }
+  }
+
   if (error && !snapshot) return <div className="notice error" role="alert">{error}</div>;
   if (!snapshot) return <div className="notice">Loading Settings…</div>;
   const serviceProviders = snapshot.providers.filter((provider) => provider.section === "services");
   const subtitleProviders = snapshot.providers.filter((provider) => provider.section === "subtitles");
+  const savedNative = snapshot.torrentSources.providers.filter((source) => source.enabled).map((source) => source.id);
+  const nativeChanged = savedNative.length !== nativeDraft.length
+    || savedNative.some((id) => !nativeDraft.includes(id));
+  const hasEffectiveSource = nativeDraft.length > 0 || snapshot.torrentSources.jackettActive;
 
   function providerHasChanges(provider) {
     return provider.fields.some((field) => {
@@ -301,14 +359,73 @@ export default function SettingsManager() {
           </article>
         </section>
 
+        <section className={styles.settingsSection} id="torrent-sources">
+          <div className={styles.sectionHeading}><span>03</span><div><h2>Torrent Sources</h2><p>Native movie and TV search providers built into TorPlay.</p></div></div>
+          <div className={styles.sourceGrid}>
+            {snapshot.torrentSources.providers.map((source) => {
+              const checked = nativeDraft.includes(source.id);
+              const displayedSource = { ...source, enabled: checked };
+              const sourceValidation = checked && !source.enabled
+                ? { status: "pending", message: "Save this selection to check availability." }
+                : validations[source.id];
+              return (
+                <article className={styles.sourceCard} key={source.id}>
+                  <label className={styles.sourceToggle}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      disabled={!snapshot.canEdit || snapshot.torrentSources.managedExternally || saving === "nativeProviders"}
+                      onChange={(event) => setNativeDraft((current) => (
+                        event.target.checked ? [...current, source.id] : current.filter((id) => id !== source.id)
+                      ))}
+                    />
+                    <span>
+                      <strong>{source.name}</strong>
+                      <small>{source.mediaTypes.join(" + ")}</small>
+                    </span>
+                  </label>
+                  <p>{source.description}</p>
+                  <TorrentSourceStatus source={displayedSource} validation={checked ? sourceValidation : null} />
+                </article>
+              );
+            })}
+          </div>
+          {snapshot.torrentSources.overrideActive ? (
+            <p className={styles.sectionNote}>Native sources are read-only because TORPLAY_SEARCH_PROVIDERS controls the complete provider list.</p>
+          ) : snapshot.torrentSources.managedExternally ? (
+            <p className={styles.sectionNote}>Native sources are managed by the host environment and read-only here.</p>
+          ) : null}
+          {!hasEffectiveSource ? <p className={styles.sourceWarning}>Enable at least one native source or configure Jackett before saving.</p> : null}
+          <div className={styles.sourceActions}>
+            {snapshot.canEdit && !snapshot.torrentSources.managedExternally ? (
+              <button
+                className={styles.saveButton}
+                type="button"
+                disabled={saving === "nativeProviders" || !nativeChanged || !hasEffectiveSource}
+                onClick={saveNativeProviders}
+              >
+                {saving === "nativeProviders" ? "Saving…" : "Save torrent sources"}
+              </button>
+            ) : null}
+            <button
+              className={styles.testButton}
+              type="button"
+              disabled={!nativeDraft.length || nativeChanged || saving === "nativeProviders"}
+              onClick={() => validateProviders(nativeDraft, { refresh: true, native: true })}
+            >
+              Refresh availability
+            </button>
+          </div>
+        </section>
+
         <section className={styles.settingsSection} id="subtitles">
-          <div className={styles.sectionHeading}><span>03</span><div><h2>Subtitles</h2><p>Optional external subtitle providers.</p></div></div>
+          <div className={styles.sectionHeading}><span>04</span><div><h2>Subtitles</h2><p>Optional external subtitle providers.</p></div></div>
           <div className={styles.providerGrid}>{subtitleProviders.map(providerCard)}</div>
           <p className={styles.sectionNote}>Preferred subtitle languages remain profile-specific. <Link href="/profiles">Manage profile languages →</Link></p>
         </section>
 
         <section className={styles.settingsSection} id="playback">
-          <div className={styles.sectionHeading}><span>04</span><div><h2>Playback</h2><p>Current playback capabilities and safe runtime defaults.</p></div></div>
+          <div className={styles.sectionHeading}><span>05</span><div><h2>Playback</h2><p>Current playback capabilities and safe runtime defaults.</p></div></div>
           <div className={styles.capabilityGrid}>
             <div><span>Native formats</span><strong>{snapshot.playback.nativeFormats.join(" · ")}</strong></div>
             <div><span>Prepared playback</span><strong>{snapshot.playback.hlsAvailable ? "HLS available" : "Unavailable"}</strong></div>
@@ -320,7 +437,7 @@ export default function SettingsManager() {
         </section>
 
         <section className={styles.settingsSection} id="about">
-          <div className={styles.sectionHeading}><span>05</span><div><h2>About</h2><p>Build and project information.</p></div></div>
+          <div className={styles.sectionHeading}><span>06</span><div><h2>About</h2><p>Build and project information.</p></div></div>
           <div className={styles.summaryCard}>
             <dl>
               <div><dt>Version</dt><dd>{snapshot.about.version}</dd></div>

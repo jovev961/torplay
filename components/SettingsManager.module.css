@@ -168,6 +168,11 @@
   background: #16492c;
 }
 
+.available {
+  color: #b5f0cb;
+  background: #16492c;
+}
+
 .invalid,
 .missing {
   color: #ffd0d0;
@@ -177,6 +182,91 @@
 .unreachable {
   color: #ffe2a6;
   background: #5a4219;
+}
+
+.unavailable {
+  color: #ffe2a6;
+  background: #5a4219;
+}
+
+.disabled {
+  color: #c3c9d0;
+  background: #343b43;
+}
+
+.pending {
+  color: #d6dbe1;
+  background: #424a53;
+}
+
+.sourceGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.sourceCard {
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--panel);
+}
+
+.sourceCard > p {
+  min-height: 2.9em;
+  margin: 13px 0 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.sourceToggle {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  cursor: pointer;
+}
+
+.sourceToggle input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.sourceToggle input:disabled {
+  cursor: not-allowed;
+}
+
+.sourceToggle span {
+  display: grid;
+  gap: 3px;
+}
+
+.sourceToggle strong {
+  font-size: 1rem;
+}
+
+.sourceToggle small {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.sourceActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 9px;
+  margin-top: 14px;
+}
+
+.sourceWarning {
+  margin: 12px 2px 0;
+  color: #ffb7b7;
+  font-size: 0.8rem;
 }
 
 .helpText {
