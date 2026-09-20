@@ -54,7 +54,7 @@ export default function SourcePanel({
 
       {lookup.errorCode === "NO_TORRENT_SOURCES" ? (
         <div className="notice" role="status">
-          No torrent sources are configured. <Link href="/settings#torrent-sources">Choose Torrent Sources →</Link>
+          No torrent sources are configured. <Link href="/setup/sources">Choose sources →</Link>
         </div>
       ) : lookup.error ? <div className="notice error" role="alert">{lookup.error}</div> : null}
       {lookup.searching ? <div className="notice">Searching sources…</div> : null}
