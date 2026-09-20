@@ -152,6 +152,19 @@ test("imported definitions persist only after live verification and redact setti
     const imported = await importDefinition("https://github.com/example/indexers/blob/main/example.yml", {
       request: async (url) => response(url, stringify(definition)),
     });
+    assert.deepEqual(imported.definition, {
+      id: "example",
+      name: "Example Indexer",
+      access: "public",
+      language: "en-US",
+      mediaTypes: ["Movies", "TV"],
+      website: "https://indexer.example/",
+      sourceUrl: "https://github.com/example/indexers/blob/main/example.yml",
+      settings: [
+        { name: "token", label: "Token", type: "password", options: null, default: null, required: true, secret: true, configured: false },
+        { name: "safe", label: "Safe search", type: "checkbox", options: null, default: true, required: false, secret: false, configured: false },
+      ],
+    });
     const providers = await createCardigannProvider({ importId: imported.importId, settings: { token: "private", safe: true } }, {
       environment,
       request: async (url) => response(url, '<div class="result"><span class="title">Sintel</span><span class="size">1 MB</span><span class="seeders">1</span><a href="magnet:?xt=urn:btih:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa">Get</a></div>'),
@@ -163,4 +176,14 @@ test("imported definitions persist only after live verification and redact setti
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test("public definitions without settings preview as requiring no configuration", async () => {
+  const imported = await importDefinition("https://definitions.example/public.yml", {
+    request: async (url) => response(url, stringify({ ...definition, settings: [] })),
+  });
+  assert.deepEqual(imported.definition.settings, []);
+  assert.equal(imported.definition.access, "public");
+  assert.equal(imported.definition.website, "https://indexer.example/");
+  assert.equal(imported.definition.sourceUrl, "https://definitions.example/public.yml");
 });

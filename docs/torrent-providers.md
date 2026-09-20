@@ -95,6 +95,12 @@ definition is validated against a pinned v11 schema before any provider settings
 are shown or saved. TorPlay does not bundle a definition catalog or enable imported
 indexers by default.
 
+If you do not already have a definition URL, browse the community-maintained
+[Prowlarr v11 definitions](https://github.com/Prowlarr/Indexers/tree/master/definitions/v11),
+open the individual `.yml` file for the indexer, and copy that file page's browser
+URL. Do not paste the torrent indexer's own website URL. GitHub's **Raw** button is
+not required.
+
 Imported definitions run entirely on the TorPlay server. Definition settings,
 cookies, passwords, magnets, torrent files, and download URLs are not exposed to
 the browser. Saved definitions live in the same private `torrent-providers.json`

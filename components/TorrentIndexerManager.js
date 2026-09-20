@@ -11,6 +11,22 @@ const statusLabels = {
   checking: "Checking…",
 };
 
+const PROWLARR_DEFINITIONS_URL = "https://github.com/Prowlarr/Indexers/tree/master/definitions/v11";
+
+function accessLabel(value) {
+  return String(value || "").split("-").map((part) => part ? `${part[0].toUpperCase()}${part.slice(1)}` : "").join("-");
+}
+
+function languageLabel(value) {
+  const code = String(value || "");
+  if (!code) return "Unknown";
+  try {
+    return `${new Intl.DisplayNames(["en"], { type: "language" }).of(code) || code} (${code})`;
+  } catch {
+    return code;
+  }
+}
+
 async function request(action, provider, refresh = false, extra = {}) {
   const response = await fetch("/api/settings/torrent-providers", {
     method: "POST",
@@ -245,7 +261,7 @@ export default function TorrentIndexerManager({
             <div className={styles.dialogHeading}>
               <div>
                 <span className="eyebrow">Torrent Sources</span>
-                <h2 id="indexer-dialog-title">{draft?.id || importDraft?.editId ? "Edit Indexer" : draft ? "Add Custom Indexer" : importDraft ? "Configure Imported Indexer" : "Add Indexer"}</h2>
+                <h2 id="indexer-dialog-title">{draft?.id || importDraft?.editId ? "Edit Indexer" : draft ? "Add Custom Indexer" : importDraft ? "Import Indexer" : "Add Indexer"}</h2>
               </div>
               <button className={styles.dialogClose} type="button" aria-label="Close Add Indexer" disabled={busy} onClick={closeDialog}>×</button>
             </div>
@@ -257,8 +273,24 @@ export default function TorrentIndexerManager({
               <form onSubmit={(event) => { event.preventDefault(); void (importDraft.editId
                 ? act("update-cardigann", { id: importDraft.editId, settings: importDraft.values, enabled: importDraft.enabled })
                 : saveImported()); }}>
-                <p className={styles.dialogIntro}>Configure <strong>{importDraft.definition.name}</strong>. Secret values stay on the TorPlay server.</p>
+                <div className={styles.definitionPreview}>
+                  <h3>Definition preview</h3>
+                  <dl className={styles.definitionDetails}>
+                    <div><dt>Name</dt><dd>{importDraft.definition.name}</dd></div>
+                    {importDraft.definition.access ? <div><dt>Access</dt><dd>{accessLabel(importDraft.definition.access)}</dd></div> : null}
+                    {importDraft.definition.language ? <div><dt>Language</dt><dd>{languageLabel(importDraft.definition.language)}</dd></div> : null}
+                    {importDraft.definition.mediaTypes?.length ? <div><dt>Categories</dt><dd>{importDraft.definition.mediaTypes.join(", ")}</dd></div> : null}
+                    {importDraft.definition.website ? <div><dt>Website</dt><dd className={styles.definitionUrl}>{importDraft.definition.website}</dd></div> : null}
+                    {importDraft.definition.sourceUrl ? <div><dt>Definition</dt><dd className={styles.definitionUrl}>{importDraft.definition.sourceUrl}</dd></div> : null}
+                  </dl>
+                  {importDraft.definition.settings.length ? (
+                    <p className={styles.definitionRequirement}>Configuration is required. Complete the fields below before adding this indexer.</p>
+                  ) : (
+                    <p className={`${styles.definitionRequirement} ${styles.definitionReady}`}>✓ No account configuration required</p>
+                  )}
+                </div>
                 <div className={styles.providerForm}>
+                  {importDraft.definition.settings.length ? <h3>Configuration required</h3> : null}
                   {importDraft.definition.settings.map((field) => (
                     <div className={styles.field} key={field.name}>
                       <label htmlFor={`cardigann-${field.name}`}>{field.label}</label>
@@ -277,7 +309,7 @@ export default function TorrentIndexerManager({
                   <label className={styles.checkboxLabel}><input type="checkbox" checked={importDraft.enabled} disabled={busy} onChange={(event) => setImportDraft({ ...importDraft, enabled: event.target.checked })} /> Enabled</label>
                   <div className={styles.sourceActions}>
                     <button className={styles.saveButton} type="submit" disabled={busy}>{busy ? "Verifying…" : importDraft.editId ? "Verify and save" : "Add Indexer"}</button>
-                    <button className={styles.testButton} type="button" disabled={busy} onClick={() => importDraft.editId ? closeDialog() : setImportDraft(null)}>Back</button>
+                    <button className={styles.testButton} type="button" disabled={busy} onClick={() => importDraft.editId ? closeDialog() : setImportDraft(null)}>Cancel</button>
                   </div>
                 </div>
               </form>
@@ -336,6 +368,25 @@ export default function TorrentIndexerManager({
                         <button className={styles.testButton} type="button" disabled={busy || !definitionUrl.trim()} onClick={() => void importDefinition()}>{busy ? "Importing…" : "Import"}</button>
                       </div>
                     </div>
+                    <aside className={styles.definitionHelp} aria-labelledby="definition-help-title">
+                      <strong id="definition-help-title">Don&apos;t know where to find a definition?</strong>
+                      <p>Browse community-maintained definitions in the Prowlarr Indexers repository.</p>
+                      <strong>How to add one:</strong>
+                      <ol>
+                        <li>Open the definitions list.</li>
+                        <li>Find the indexer you want.</li>
+                        <li>Open its <code>.yml</code> file.</li>
+                        <li>Copy the URL of that file from your browser.</li>
+                        <li>Paste the URL above and select <strong>Import</strong>.</li>
+                      </ol>
+                      <p>You do not need to use GitHub&apos;s <strong>Raw</strong> button. TorPlay accepts normal GitHub file URLs.</p>
+                      <a className={styles.definitionBrowse} href={PROWLARR_DEFINITIONS_URL} target="_blank" rel="noreferrer">Browse Prowlarr Indexer Definitions ↗</a>
+                      <div className={styles.definitionExample}>
+                        <strong>✓ Use the URL of the definition file:</strong>
+                        <code>https://github.com/Prowlarr/Indexers/blob/master/definitions/v11/example.yml</code>
+                        <span>Do not paste the torrent indexer&apos;s website URL.</span>
+                      </div>
+                    </aside>
                   </div>
                 </section>
               </div>
