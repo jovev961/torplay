@@ -58,9 +58,11 @@ Enabled custom providers join the existing provider runner and share filtering, 
 Use Settings → Torrent Sources → Add Indexer → Import Indexer Definition to add a
 Cardigann v11 YAML definition from a public HTTPS URL. TorPlay accepts direct YAML
 URLs and normal GitHub `blob` pages, which it converts to their raw-file URL. The
-definition is validated against a pinned v11 schema before any provider settings
-are shown or saved. TorPlay does not bundle a definition catalog or enable imported
-indexers by default.
+complete response is parsed safely, validated against a pinned v11 schema, and
+analyzed for required execution features before any provider settings are shown
+or saved. The preview is derived from that parsed definition; it does not reduce
+or replace the imported YAML. TorPlay does not bundle a definition catalog or
+enable imported indexers by default.
 
 If you do not already have a definition URL, browse the community-maintained
 [Prowlarr v11 definitions](https://github.com/Prowlarr/Indexers/tree/master/definitions/v11),
@@ -70,13 +72,30 @@ not required.
 
 Imported definitions run entirely on the TorPlay server. Definition settings,
 cookies, passwords, magnets, torrent files, and download URLs are not exposed to
-the browser. Saved definitions live in the same private `torrent-providers.json`
-file as custom Torznab providers. Secret settings require the indexer's own links
-to use HTTPS.
+the browser. After the user confirms the preview, TorPlay performs a live
+definition-driven search before saving anything. Saved definitions live in the
+same private `torrent-providers.json` file as custom Torznab providers. The
+original YAML is retained byte-for-byte together with its SHA-256 integrity hash
+and is the authoritative definition when reloaded. Older parsed-only records
+remain readable and are converted to canonical YAML the next time provider
+settings are saved. Secret settings require the indexer's own links to use HTTPS.
 
-TorPlay supports common Cardigann search paths, HTML/JSON/XML row selectors,
-templates and filters, form/cookie login, redirects and cookies, and direct,
-magnet, or selector-based torrent downloads. Definitions that require CAPTCHA,
-FlareSolverr, custom certificates, non-UTF-8 decoding, or another unsupported
-Cardigann operation are rejected during import with a compatibility message.
-TorPlay never installs or requires an anti-bot service.
+The generic engine supports definition-driven GET/POST and raw search inputs,
+templates and filters, categories, HTML/JSON/XML parsing, declared response
+encodings, public/cookie/form authentication, selector-derived login values,
+session cookies, error selectors, and direct or multi-step torrent downloads.
+Definitions that require CAPTCHA, FlareSolverr/anti-bot handling, custom
+certificate pinning, torrent-link self-testing, an unavailable text encoding, or
+another unknown operation are rejected during import. Every compatibility error
+names the unsupported feature and its YAML path; sections are never silently
+ignored. TorPlay never installs or requires an anti-bot service.
+
+Developers can audit a locally supplied Cardigann v11 corpus without downloading
+or bundling a catalog:
+
+```sh
+npm run audit:cardigann -- /path/to/definitions/v11
+```
+
+The audit reports compatible, explicitly unsupported, and schema-invalid files.
+Add `--details` to include the per-definition classifications.

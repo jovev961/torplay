@@ -15,7 +15,8 @@
     "firewall:home": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/windows-firewall.ps1",
     "release:windows": "node scripts/release-windows.js",
     "lint": "eslint .",
-    "test": "node --test"
+    "test": "node --test",
+    "audit:cardigann": "node scripts/audit-cardigann-definitions.js"
   },
   "dependencies": {
     "@homebridge/ciao": "^1.3.12",
