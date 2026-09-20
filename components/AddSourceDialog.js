@@ -25,7 +25,7 @@ function settingValues(settings) {
 }
 
 
-export default function AddSourceDialog({ initial = {}, onClose, onSaved, embedded = false }) {
+export default function AddSourceDialog({ initial = {}, testedSources = [], onClose, onSaved, embedded = false }) {
   const [draft, setDraft] = useState(initial.draft || null);
   const [definitionUrl, setDefinitionUrl] = useState("");
   const [importDraft, setImportDraft] = useState(initial.importDraft || null);
@@ -39,7 +39,7 @@ export default function AddSourceDialog({ initial = {}, onClose, onSaved, embedd
     try {
       const data = await request(action, provider);
       if (action === "test") setMessage("Connected · " + data.capabilities.mediaTypes.join(" · "));
-      else await onSaved(data.providers);
+      else await onSaved(data);
     } catch (error) {
       if (action === "create-cardigann" && error.canAddUnverified) {
         setImportDraft((current) => ({ ...current, verificationFailure: error.verificationFailure, confirmationToken: error.confirmationToken }));
@@ -190,7 +190,21 @@ export default function AddSourceDialog({ initial = {}, onClose, onSaved, embedd
                 </div>
               </form>
             ) : !advanced ? (
-              <CommunitySources busy={busy} onSelect={importDefinition} onAdvanced={() => { setAdvanced(true); setError(""); }} />
+              <div className={styles.sourceChoiceSections}>
+                <section className={styles.providerForm}>
+                  <h3>TorPlay Tested Sources</h3>
+                  <p>Optional sources that TorPlay can configure directly. None are added or enabled automatically.</p>
+                  <div className={styles.addSourceGrid}>
+                    {testedSources.map((source) => (
+                      <article className={styles.addSourceCard} key={source.id}>
+                        <span><strong>{source.name}</strong><small>{source.mediaTypes.map((type) => type === "TV" ? "TV Shows" : type).join(" & ")}</small></span>
+                        <button className={styles.testButton} type="button" disabled={busy || source.configured} onClick={() => void act("add-native", { id: source.id })}>{source.configured ? "Added" : "Add"}</button>
+                      </article>
+                    ))}
+                  </div>
+                </section>
+                <CommunitySources busy={busy} onSelect={importDefinition} onAdvanced={() => { setAdvanced(true); setError(""); }} />
+              </div>
             ) : (
               <div className={styles.addIndexerOptions}>
                 <button className={styles.testButton} type="button" disabled={busy} onClick={() => { setAdvanced(false); setError(""); }}>Back to community sources</button>

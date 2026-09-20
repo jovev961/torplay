@@ -328,11 +328,13 @@ export default function SettingsManager() {
             TorPlay does not host or provide media files. Content and torrent metadata are obtained from third-party sources selected by the user. Users are responsible for ensuring that their use of TorPlay and configured sources complies with applicable laws and the rights of content owners.
           </div>
           <TorrentIndexerManager
+            nativeSources={snapshot.nativeSources}
             initialCustomProviders={snapshot.customProviders}
             canEdit={snapshot.canEdit}
             onCustomChanged={async () => {
               const data = await readJson(await fetch("/api/settings", { cache: "no-store" }));
               setSnapshot(data);
+              return data;
             }}
           />
         </section> : null}

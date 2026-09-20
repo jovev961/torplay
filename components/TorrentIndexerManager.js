@@ -37,6 +37,7 @@ function IndexerStatus({ status, message }) {
 }
 
 export default function TorrentIndexerManager({
+  nativeSources = [],
   initialCustomProviders,
   canEdit,
   onCustomChanged,
@@ -98,12 +99,13 @@ export default function TorrentIndexerManager({
         setMessage(data.verification.status === "verified" ? "Indexer connection verified." : data.verification.message);
         await onCustomChanged();
       } else {
-        setCustomProviders(data.providers);
+        if (Array.isArray(data.providers)) setCustomProviders(data.providers);
         setDraft(null);
         setImportDraft(null);
         setDialogOpen(false);
         setMessage(action.startsWith("remove") ? "Source removed." : "Source saved.");
-        await onCustomChanged();
+        const snapshot = await onCustomChanged();
+        if (Array.isArray(snapshot?.customProviders)) setCustomProviders(snapshot.customProviders);
         await refreshCustom(true);
       }
     } catch (actionError) {
@@ -113,7 +115,8 @@ export default function TorrentIndexerManager({
     }
   }
 
-  const configuredCount = customProviders.length;
+  const configuredNative = nativeSources.filter((source) => source.configured);
+  const configuredCount = configuredNative.length + customProviders.length;
 
   return (
     <div className={styles.indexerManager}>
@@ -131,6 +134,32 @@ export default function TorrentIndexerManager({
 
       {configuredCount ? (
         <div className={styles.sourceGrid}>
+          {configuredNative.map((provider) => {
+            const currentHealth = health[provider.id];
+            const status = !provider.enabled || !provider.active
+              ? "disabled"
+              : currentHealth?.status || "checking";
+            const statusMessage = !provider.enabled
+              ? "Source is disabled."
+              : !provider.active
+                ? "Source is excluded by the provider override."
+                : currentHealth?.message || "Checking source availability.";
+            return (
+              <article className={styles.sourceCard} key={provider.id}>
+                <div className={styles.sourceCardHeading}>
+                  <span><strong>{provider.name}</strong><small>TorPlay Tested Source · {mediaLabel(provider.mediaTypes)}</small></span>
+                  {canEdit ? (
+                    <div className={styles.sourceCardActions}>
+                      <button className={styles.testButton} type="button" disabled={busy} onClick={() => void act("update-native", { id: provider.id, enabled: !provider.enabled })}>{provider.enabled ? "Disable" : "Enable"}</button>
+                      <button className={styles.removeButton} type="button" disabled={busy} onClick={() => { if (window.confirm(`Remove ${provider.name}?`)) void act("remove-native", { id: provider.id }); }}>Remove</button>
+                    </div>
+                  ) : null}
+                </div>
+                <p>{provider.description}</p>
+                <IndexerStatus status={status} message={statusMessage} />
+              </article>
+            );
+          })}
           {customProviders.map((provider) => {
             const currentHealth = health[provider.id];
             const status = !provider.enabled || !provider.active
@@ -186,11 +215,14 @@ export default function TorrentIndexerManager({
 
       {dialogOpen ? <AddSourceDialog
         initial={{ draft, importDraft }}
+        testedSources={nativeSources}
         onClose={closeDialog}
-        onSaved={async (providers) => {
-          setCustomProviders(providers); closeDialog(); setMessage("Source saved.");
+        onSaved={async (data) => {
+          if (Array.isArray(data.providers)) setCustomProviders(data.providers);
+          closeDialog(); setMessage("Source saved.");
           setHealth({});
-          await onCustomChanged();
+          const snapshot = await onCustomChanged();
+          if (Array.isArray(snapshot?.customProviders)) setCustomProviders(snapshot.customProviders);
         }}
       /> : null}
     </div>

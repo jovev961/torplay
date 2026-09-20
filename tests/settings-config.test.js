@@ -183,7 +183,7 @@ test("reports source-neutral torrent state without exposing credentials", async 
   };
   try {
     const state = await settingsState({ environment, includeValues: true });
-    assert.deepEqual(state.torrentSources, { jackettActive: true, customActive: false });
+    assert.deepEqual(state.torrentSources, { nativeActive: false, jackettActive: true, customActive: false });
     assert.equal(JSON.stringify(state.torrentSources).includes("secret"), false);
   } finally {
     await rm(directory, { recursive: true, force: true });
