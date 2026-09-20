@@ -38,27 +38,43 @@ test("Windows file versions are numeric and preserve beta build numbers", () => 
 
 test("canonical artwork generates matching browser and Windows icon assets", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "torplay-icons-"));
-  const favicon = path.join(directory, "app", "favicon.ico");
-  const appIcon = path.join(directory, "app", "icon.png");
+  const browserIcon = path.join(directory, "public", "torplay-browser-icon-v1.png");
+  const appleIcon = path.join(directory, "public", "torplay-apple-icon-v1.png");
   const windowsIcon = path.join(directory, "installer", "torplay.ico");
+  const legacyFavicon = path.join(directory, "app", "favicon.ico");
+  const legacyAppIcon = path.join(directory, "app", "icon.png");
   try {
+    await mkdir(path.dirname(legacyFavicon), { recursive: true });
+    await Promise.all([
+      writeFile(legacyFavicon, "old favicon"),
+      writeFile(legacyAppIcon, "old app icon"),
+    ]);
     const result = await generateIcons({
       source: fileURLToPath(new URL("../public/torplay-logo.png", import.meta.url)),
-      favicon,
-      appIcon,
+      browserIcon,
+      appleIcon,
       windowsIcon,
+      legacyBrowserIcons: [legacyFavicon, legacyAppIcon],
     });
-    const [faviconBytes, windowsBytes, appMetadata] = await Promise.all([
-      readFile(favicon),
+    const [windowsBytes, browserMetadata, appleMetadata, layout] = await Promise.all([
       readFile(windowsIcon),
-      sharp(appIcon).metadata(),
+      sharp(browserIcon).metadata(),
+      sharp(appleIcon).metadata(),
+      readFile(new URL("../app/layout.js", import.meta.url), "utf8"),
     ]);
     assert.deepEqual(result.sizes, WINDOWS_ICON_SIZES);
-    assert.deepEqual(readIcoSizes(faviconBytes).sort((left, right) => left - right), WINDOWS_ICON_SIZES);
-    assert.deepEqual(faviconBytes, windowsBytes);
-    assert.equal(appMetadata.width, 256);
-    assert.equal(appMetadata.height, 256);
-    assert.equal(appMetadata.hasAlpha, true);
+    assert.deepEqual(readIcoSizes(windowsBytes).sort((left, right) => left - right), WINDOWS_ICON_SIZES);
+    assert.equal(browserMetadata.width, 256);
+    assert.equal(browserMetadata.height, 256);
+    assert.equal(browserMetadata.hasAlpha, true);
+    assert.equal(appleMetadata.width, 180);
+    assert.equal(appleMetadata.height, 180);
+    assert.equal(appleMetadata.hasAlpha, true);
+    assert.equal(existsSync(legacyFavicon), false);
+    assert.equal(existsSync(legacyAppIcon), false);
+    assert.match(layout, /icon: \[\{ url: "\/torplay-browser-icon-v1\.png"/);
+    assert.match(layout, /apple: \[\{ url: "\/torplay-apple-icon-v1\.png"/);
+    assert.doesNotMatch(layout, /favicon\.ico/);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
