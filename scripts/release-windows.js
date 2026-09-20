@@ -134,6 +134,7 @@ export function validateStage(root = stageDir) {
     path.join(root, "runtime", "runtime-watchdog.mjs"),
     path.join(root, "runtime", "windows-runner.mjs"),
     path.join(root, "runtime", "windows-control.mjs"),
+    path.join(root, "runtime", "torplay-first-launch.vbs"),
     path.join(root, "runtime", "torplay-tray.ps1"),
     path.join(root, "runtime", "torplay-tray.vbs"),
     path.join(root, "app", "server.js"),
@@ -440,6 +441,10 @@ async function stageRuntime() {
     [
       "installer/windows/torplay-launcher.vbs",
       "runtime/torplay-launcher.vbs",
+    ],
+    [
+      "installer/windows/torplay-first-launch.vbs",
+      "runtime/torplay-first-launch.vbs",
     ],
     [
       "installer/windows/torplay-status.cmd",
