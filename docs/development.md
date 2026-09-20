@@ -29,6 +29,7 @@ Setup requires only TMDB. Torrent sources are opt-in; add preconfigured native p
 
 | Command | Purpose |
 | --- | --- |
+| `npm run icons:generate` | Regenerate browser and Windows icons from the canonical TorPlay artwork |
 | `npm run dev` | Start the Next.js development server |
 | `npm run build` | Create the standard production build |
 | `npm start` | Run the standard production build |

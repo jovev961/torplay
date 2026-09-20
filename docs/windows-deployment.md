@@ -31,7 +31,7 @@ TorPlay beta installers may not yet be code-signed, so Windows SmartScreen can s
 ## Install
 
 1. Run `TorPlay-Setup-<version>.exe` as the Windows account that will host TorPlay.
-2. Choose the installation location or accept the per-user default.
+2. Choose the installation location or accept the per-user default. Enable **Create a desktop shortcut** only if you want one.
 3. Approve the administrator prompt for the Private-network firewall rules. The application itself remains a per-user installation.
 4. Finish installation. TorPlay waits for its packaged runtime to become ready, starts the tray, and opens [http://localhost/setup](http://localhost/setup).
 
@@ -90,7 +90,7 @@ Right-click the TorPlay tray icon:
 - **Start with Windows** enables or disables automatic startup for the current account.
 - **Exit** cleanly stops TorPlay and closes the tray.
 
-The tray reports **Starting**, **Running**, **Recovering**, **Stopped**, or **Error**. The Start menu also contains **Open TorPlay**, **TorPlay Tray**, **TorPlay Status**, **Start or Restart TorPlay**, and **Stop TorPlay** shortcuts.
+The tray reports **Starting**, **Running**, **Recovering**, **Stopped**, or **Error**. The Start menu contains one **TorPlay** launcher. It starts a stopped runtime and waits until it is ready before opening the browser; when TorPlay is already running, it simply opens the browser. Start, restart, stop, status, and log controls remain in the tray menu.
 
 ## Logs and basic troubleshooting
 

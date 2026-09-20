@@ -16,6 +16,7 @@ $logPath = Join-Path $dataDir "logs\torplay.log"
 $nodePath = Join-Path $runtimeDir "node.exe"
 $controlPath = Join-Path $runtimeDir "windows-control.mjs"
 $trayLauncherPath = Join-Path $runtimeDir "torplay-tray.vbs"
+$iconPath = Join-Path $runtimeDir "torplay.ico"
 $runKeyPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
 $runValueName = "TorPlay"
 $wscriptPath = Join-Path $env:WINDIR "System32\wscript.exe"
@@ -63,42 +64,16 @@ New-Item -ItemType Directory -Path $stateDir -Force | Out-Null
 
 Add-Type -AssemblyName System.Drawing
 Add-Type -AssemblyName System.Windows.Forms
-Add-Type @"
-using System;
-using System.Runtime.InteropServices;
-public static class TorPlayNativeIcon {
-  [DllImport("user32.dll", CharSet = CharSet.Auto)]
-  public static extern bool DestroyIcon(IntPtr handle);
-}
-"@
 
 function New-TorPlayIcon {
-  $bitmap = [Drawing.Bitmap]::new(32, 32)
-  $graphics = [Drawing.Graphics]::FromImage($bitmap)
-  $background = [Drawing.SolidBrush]::new([Drawing.Color]::FromArgb(111, 66, 193))
-  $border = [Drawing.Pen]::new([Drawing.Color]::FromArgb(125, 238, 255), 2)
+  if (-not (Test-Path -LiteralPath $iconPath -PathType Leaf)) {
+    throw "The TorPlay application icon is missing."
+  }
+  $sourceIcon = [Drawing.Icon]::new($iconPath, 32, 32)
   try {
-    $graphics.SmoothingMode = [Drawing.Drawing2D.SmoothingMode]::AntiAlias
-    $graphics.Clear([Drawing.Color]::Transparent)
-    $graphics.FillEllipse($background, 1, 1, 30, 30)
-    $graphics.DrawEllipse($border, 3, 3, 26, 26)
-    $points = [Drawing.PointF[]]@(
-      [Drawing.PointF]::new(12, 9),
-      [Drawing.PointF]::new(12, 23),
-      [Drawing.PointF]::new(23, 16)
-    )
-    $graphics.FillPolygon([Drawing.Brushes]::White, $points)
-    $handle = $bitmap.GetHicon()
-    try {
-      return ([Drawing.Icon]::FromHandle($handle)).Clone()
-    } finally {
-      [TorPlayNativeIcon]::DestroyIcon($handle) | Out-Null
-    }
+    return $sourceIcon.Clone()
   } finally {
-    $border.Dispose()
-    $background.Dispose()
-    $graphics.Dispose()
-    $bitmap.Dispose()
+    $sourceIcon.Dispose()
   }
 }
 
