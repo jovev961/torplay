@@ -131,6 +131,7 @@ export function validateStage(root = stageDir) {
   const required = [
     path.join(root, "runtime", "node.exe"),
     path.join(root, "runtime", "home.mjs"),
+    path.join(root, "runtime", "runtime-watchdog.mjs"),
     path.join(root, "runtime", "windows-runner.mjs"),
     path.join(root, "runtime", "windows-control.mjs"),
     path.join(root, "runtime", "torplay-tray.ps1"),
@@ -393,6 +394,19 @@ async function stageRuntime() {
       stageDir,
       "runtime",
       "home.mjs",
+    ),
+  );
+
+  bundle(
+    path.join(
+      projectRoot,
+      "scripts",
+      "runtime-watchdog.js",
+    ),
+    path.join(
+      stageDir,
+      "runtime",
+      "runtime-watchdog.mjs",
     ),
   );
 

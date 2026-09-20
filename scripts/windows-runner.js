@@ -10,6 +10,7 @@ import {
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { installedEnvironment, installedPaths } from "./windows-paths.js";
+import { stopInstalledRuntime } from "./windows-control.js";
 
 const DEFAULT_MAX_BYTES = 5 * 1024 * 1024;
 const DEFAULT_BACKUPS = 3;
@@ -40,6 +41,38 @@ export function createRotatingLog(logPath, options = {}) {
   };
 }
 
+export function attachInstalledRuntimeLifecycle(child, {
+  paths = installedPaths(),
+  environment = process.env,
+  processRef = process,
+  stopRuntime = stopInstalledRuntime,
+} = {}) {
+  let stopping = false;
+  const listeners = new Map();
+  const detach = () => {
+    for (const [signal, listener] of listeners) processRef.removeListener(signal, listener);
+    listeners.clear();
+  };
+  for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
+    const listener = () => {
+      if (stopping) return;
+      stopping = true;
+      void stopRuntime({ paths, environment })
+        .then((result) => {
+          if (result?.stopped === false && child.exitCode === null) child.kill?.();
+        })
+        .catch(() => {
+          child.kill?.();
+          processRef.exitCode = 1;
+        });
+    };
+    listeners.set(signal, listener);
+    processRef.once(signal, listener);
+  }
+  child.once("exit", detach);
+  return detach;
+}
+
 export function runInstalledRuntime({
   paths = installedPaths(),
   environment = process.env,
@@ -57,6 +90,7 @@ export function runInstalledRuntime({
   child.stdout?.on("data", (chunk) => output.write(chunk));
   child.stderr?.on("data", (chunk) => output.write(chunk));
   child.on("error", (error) => output.write(`[TorPlay] Launcher error: ${error.message}\n`));
+  attachInstalledRuntimeLifecycle(child, { paths, environment: runtimeEnvironment });
   child.on("exit", (code, signal) => {
     output.write(
       `[${new Date().toISOString()}] TorPlay exited${signal ? ` with ${signal}` : ` with code ${code}`}.\n`,

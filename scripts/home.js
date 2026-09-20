@@ -5,7 +5,7 @@ import { mkdir, open, readFile, unlink } from "node:fs/promises";
 import { createRequire } from "node:module";
 import net from "node:net";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { startMdnsAdvertisement, startReverseProxy } from "./home-network.js";
 import { readLocalEnvironment } from "./local-environment.js";
 import { controlEndpoint, startControlServer } from "./runtime-control.js";
@@ -69,16 +69,25 @@ export function formatHttpUrl(hostname, port) {
 
 export function serverStart(environment, config) {
   const serverEntry = environment.TORPLAY_SERVER_ENTRY?.trim() || null;
+  const watchdogEntry = environment.TORPLAY_WATCHDOG_ENTRY?.trim()
+    || path.join(path.dirname(fileURLToPath(import.meta.url)), "runtime-watchdog.js");
+  const watchdogOption = `--import=${pathToFileURL(watchdogEntry).href}`;
+  const childEnvironment = {
+    ...environment,
+    NODE_ENV: "production",
+    TORPLAY_SUPERVISOR_PID: String(process.pid),
+    NODE_OPTIONS: [environment.NODE_OPTIONS, watchdogOption].filter(Boolean).join(" "),
+  };
   return serverEntry
     ? {
         entry: serverEntry,
         args: [serverEntry],
-        environment: { ...environment, NODE_ENV: "production", HOSTNAME: config.host, PORT: String(config.port) },
+        environment: { ...childEnvironment, HOSTNAME: config.host, PORT: String(config.port) },
       }
     : {
         entry: path.join(process.cwd(), ".next", "BUILD_ID"),
         args: [require.resolve("next/dist/bin/next"), "start", "-H", config.host, "-p", String(config.port)],
-        environment: { ...environment, NODE_ENV: "production" },
+        environment: childEnvironment,
       };
 }
 

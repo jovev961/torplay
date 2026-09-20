@@ -102,7 +102,7 @@ Windows login
     -> advertise torplay.local with mDNS
 ```
 
-The tray is a lightweight Windows frontend for the existing supervisor. It does not host another web server or torrent runtime. Closing the tray with **Exit** leaves TorPlay running; use **Stop TorPlay** when the background runtime should stop.
+The tray is a lightweight Windows frontend for the existing supervisor. It does not host another web server or torrent runtime. The supervisor owns the application server, port 80 proxy, mDNS advertisement, runtime lock, and status/control files. Startup waits until that complete runtime reports ready, while restart always completes shutdown before starting a replacement.
 
 ## System tray
 
@@ -113,9 +113,9 @@ Right-click the TorPlay notification-area icon to see the current Running/Stoppe
 - **Start TorPlay** appears while stopped; **Restart TorPlay** appears while running.
 - **Stop TorPlay** gracefully stops the existing supervisor.
 - **Start with Windows** adds or removes the current user's login entry.
-- **Exit** closes only the tray frontend.
+- **Exit** cleanly stops the runtime before closing the tray.
 
-The status is refreshed when the menu opens, so the tray does not continuously poll the runtime or health endpoint. Only one tray process is allowed per signed-in Windows session.
+The status is refreshed when the menu opens, so the tray does not continuously poll the runtime or health endpoint. Only one tray process is allowed per signed-in Windows session. Windows logout or shutdown uses the same stop path. The launcher also forwards termination signals to the supervisor, and the application server watches its supervisor so it does not remain orphaned if that supervisor is terminated unexpectedly.
 
 ## Start menu
 

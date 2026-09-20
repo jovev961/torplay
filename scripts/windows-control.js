@@ -6,10 +6,10 @@ import { controlEndpoint, sendControlCommand } from "./runtime-control.js";
 import { readRuntimeStatus } from "../platform/runtime/status.js";
 import { installedEnvironment, installedPaths } from "./windows-paths.js";
 
-function processIsRunning(pid) {
+export function processIsRunning(pid, killProcess = process.kill) {
   if (!Number.isInteger(pid) || pid < 1) return false;
   try {
-    process.kill(pid, 0);
+    killProcess(pid, 0);
     return true;
   } catch (error) {
     return error.code === "EPERM";
@@ -20,18 +20,67 @@ function wait(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
+async function healthIsReady(fetchProcess) {
+  try {
+    const response = await fetchProcess("http://127.0.0.1/api/health", {
+      cache: "no-store",
+      signal: AbortSignal.timeout(2_000),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function waitForInstalledRuntime({
+  paths = installedPaths(),
+  previousStartedAt = null,
+  fetchProcess = fetch,
+  readStatus = readRuntimeStatus,
+  isRunning = processIsRunning,
+  waitProcess = wait,
+  timeoutMs = 60_000,
+  intervalMs = 250,
+  now = Date.now,
+} = {}) {
+  const deadline = now() + timeoutMs;
+  let lastFailure = null;
+  while (now() < deadline) {
+    const snapshot = readStatus(paths.statusPath);
+    const belongsToNewStart = snapshot?.startedAt
+      && snapshot.startedAt !== previousStartedAt;
+    if (belongsToNewStart && snapshot.state === "error") {
+      throw new Error(snapshot.lastError || "TorPlay failed while starting.");
+    }
+    if (belongsToNewStart && snapshot.state === "ready" && isRunning(snapshot.pid)) {
+      if (await healthIsReady(fetchProcess)) return snapshot;
+      lastFailure = "the health check is not ready";
+    } else if (snapshot?.state) {
+      lastFailure = `runtime state is ${snapshot.state}`;
+    }
+    await waitProcess(intervalMs);
+  }
+  throw new Error(
+    `TorPlay did not become ready within ${Math.ceil(timeoutMs / 1_000)} seconds${lastFailure ? ` (${lastFailure})` : ""}. See the runtime log for details.`,
+  );
+}
+
 export async function stopInstalledRuntime({
   paths = installedPaths(),
   environment = process.env,
   spawnSyncProcess = spawnSync,
+  readStatus = readRuntimeStatus,
+  isRunning = processIsRunning,
+  sendControl = sendControlCommand,
+  waitProcess = wait,
 } = {}) {
-  const status = readRuntimeStatus(paths.statusPath);
-  if (!processIsRunning(status?.pid)) return { stopped: false, forced: false };
+  const status = readStatus(paths.statusPath);
+  if (!isRunning(status?.pid)) return { stopped: false, forced: false };
   try {
-    await sendControlCommand({ endpoint: controlEndpoint(installedEnvironment(paths, environment)) });
+    await sendControl({ endpoint: controlEndpoint(installedEnvironment(paths, environment)) });
     for (let attempt = 0; attempt < 20; attempt += 1) {
-      if (!processIsRunning(status.pid)) return { stopped: true, forced: false };
-      await wait(250);
+      if (!isRunning(status.pid)) return { stopped: true, forced: false };
+      await waitProcess(250);
     }
   } catch {
     // Fall back to terminating only the recorded TorPlay process tree.
@@ -43,10 +92,35 @@ export async function stopInstalledRuntime({
   if (result.error || result.status !== 0) {
     throw new Error("TorPlay could not stop its existing process. See the runtime log for details.");
   }
-  return { stopped: true, forced: true };
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (!isRunning(status.pid)) return { stopped: true, forced: true };
+    await waitProcess(250);
+  }
+  throw new Error("TorPlay process remained active after forced shutdown. See the runtime log for details.");
 }
 
-export function startInstalledRuntime({ paths = installedPaths(), spawnProcess = spawn } = {}) {
+export async function startInstalledRuntime({
+  paths = installedPaths(),
+  spawnProcess = spawn,
+  fetchProcess = fetch,
+  readStatus = readRuntimeStatus,
+  isRunning = processIsRunning,
+  waitForReady = waitForInstalledRuntime,
+} = {}) {
+  const existing = readStatus(paths.statusPath);
+  if (isRunning(existing?.pid)) {
+    if (existing.state === "ready" && await healthIsReady(fetchProcess)) {
+      return { started: false, snapshot: existing };
+    }
+    const snapshot = await waitForReady({
+      paths,
+      previousStartedAt: null,
+      fetchProcess,
+      readStatus,
+      isRunning,
+    });
+    return { started: false, snapshot };
+  }
   const child = spawnProcess("wscript.exe", [paths.launcherPath, "start"], {
     cwd: paths.installDir,
     detached: true,
@@ -54,6 +128,35 @@ export function startInstalledRuntime({ paths = installedPaths(), spawnProcess =
     windowsHide: true,
   });
   child.unref?.();
+  let onLaunchError;
+  const launchError = new Promise((_, reject) => {
+    onLaunchError = (error) => reject(new Error(`TorPlay launcher could not start: ${error.message}`));
+    child.once?.("error", onLaunchError);
+  });
+  try {
+    const snapshot = await Promise.race([
+      waitForReady({
+        paths,
+        previousStartedAt: existing?.startedAt || null,
+        fetchProcess,
+        readStatus,
+        isRunning,
+      }),
+      launchError,
+    ]);
+    return { started: true, snapshot };
+  } finally {
+    child.removeListener?.("error", onLaunchError);
+  }
+}
+
+export async function restartInstalledRuntime({
+  stopRuntime = stopInstalledRuntime,
+  startRuntime = startInstalledRuntime,
+  ...options
+} = {}) {
+  await stopRuntime(options);
+  return startRuntime(options);
 }
 
 export async function runtimeStatus({
@@ -91,7 +194,7 @@ export async function main(command = process.argv[2] || "status") {
   const paths = installedPaths();
   if (existsSync(paths.installDir)) process.chdir(paths.installDir);
   if (command === "start") {
-    startInstalledRuntime({ paths });
+    await startInstalledRuntime({ paths });
     return;
   }
   if (command === "stop") {
@@ -99,8 +202,7 @@ export async function main(command = process.argv[2] || "status") {
     return;
   }
   if (command === "restart") {
-    await stopInstalledRuntime({ paths });
-    startInstalledRuntime({ paths });
+    await restartInstalledRuntime({ paths });
     return;
   }
   if (command === "status") {
