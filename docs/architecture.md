@@ -118,6 +118,8 @@ SQLite stores local profiles, progress, history, and stale-writer protection. Me
 
 Temporary torrent files, subtitle caches, and conversion outputs are separate from persistent data. Custom Torznab configuration stays in a private server-side file. External provider applications retain and manage their own data independently of TorPlay.
 
+Public external response data uses a best-effort SQLite cache. TMDB search results expire after 5 minutes, discovery results after 15 minutes, ordinary metadata after 1 hour, genres after 24 hours, and external IDs after 30 days. Safely reusable torrent-provider results expire after 2 minutes, while remote subtitle-language catalogs expire after 24 hours. IMDb ratings retain their existing 30-day policy. Expired or corrupt entries are ignored and removed; cache read/write failures fall back to the external service. Provider results are persisted only when they can be reduced to canonical info-hash magnets, so API keys, authenticated download URLs, tracker passkeys, and other credentials are never written to the response cache.
+
 ## Runtime variants
 
 - `npm run dev` starts the Next.js development server and does not manage external provider processes.

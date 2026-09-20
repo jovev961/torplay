@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createDatabase } from "../lib/database/sqlite.js";
 import { normalizeCandidate } from "../lib/search/contract.js";
-import { searchConfiguredProvider } from "../lib/search/provider.js";
+import { PROVIDER_RESULT_CACHE_TTL_MS, searchConfiguredProvider } from "../lib/search/provider.js";
 import { findAuthorizedSources } from "../lib/search/service.js";
 import { parseJackettXml } from "../lib/search/jackett.js";
 
@@ -73,4 +74,40 @@ test("service exposes safe optional metadata and supports providers without cons
   assert.equal(results[0].resolution, "1080p");
   assert.equal(results[0].verification, "magnet");
   assert.equal(JSON.stringify(results).includes("magnet:"), false);
+});
+
+test("persists short-lived provider results without credential-bearing URLs", async () => {
+  const database = createDatabase(":memory:");
+  let calls = 0;
+  const cachedProvider = provider("cached", async () => {
+    calls += 1;
+    return [{
+      ...candidate,
+      source: { downloadUrl: "https://provider.test/torrent?apikey=server-secret" },
+    }];
+  });
+  const options = {
+    ...quiet,
+    providers: [cachedProvider],
+    usePersistentCache: true,
+    cacheDatabase: database,
+    now: 1_000,
+  };
+  try {
+    const first = await searchConfiguredProvider(context, options);
+    const second = await searchConfiguredProvider(context, { ...options, now: 2_000 });
+    assert.equal(calls, 1);
+    assert.equal(second[0].title, first[0].title);
+    assert.equal(second[0].source.downloadUrl, null);
+    const stored = database.prepare("SELECT cache_key, value_json FROM external_response_cache WHERE namespace = 'provider-results'").get();
+    assert.equal(`${stored.cache_key}${stored.value_json}`.includes("server-secret"), false);
+    assert.equal(stored.value_json.includes("provider.test"), false);
+    await searchConfiguredProvider(context, {
+      ...options,
+      now: 1_000 + PROVIDER_RESULT_CACHE_TTL_MS + 1,
+    });
+    assert.equal(calls, 2);
+  } finally {
+    database.close();
+  }
 });
