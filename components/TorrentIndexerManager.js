@@ -11,14 +11,17 @@ const statusLabels = {
   checking: "Checking…",
 };
 
-async function request(action, provider, refresh = false) {
+async function request(action, provider, refresh = false, extra = {}) {
   const response = await fetch("/api/settings/torrent-providers", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action, provider, refresh }),
+    body: JSON.stringify({ action, provider, refresh, ...extra }),
   });
   const body = await response.json();
-  if (!response.ok) throw new Error(body.error || "Provider request failed.");
+  if (!response.ok) {
+    const details = body.unsupportedFeatures?.map((item) => item.message).join(" ");
+    throw new Error([body.error || "Provider request failed.", details].filter(Boolean).join(" "));
+  }
   return body;
 }
 
@@ -57,6 +60,8 @@ export default function TorrentIndexerManager({
   const [health, setHealth] = useState({});
   const [dialogOpen, setDialogOpen] = useState(false);
   const [draft, setDraft] = useState(null);
+  const [definitionUrl, setDefinitionUrl] = useState("");
+  const [importDraft, setImportDraft] = useState(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -84,6 +89,8 @@ export default function TorrentIndexerManager({
     if (busy) return;
     setDialogOpen(false);
     setDraft(null);
+    setDefinitionUrl("");
+    setImportDraft(null);
     setMessage("");
     setError("");
   }
@@ -99,6 +106,7 @@ export default function TorrentIndexerManager({
       } else {
         setCustomProviders(data.providers);
         setDraft(null);
+        setImportDraft(null);
         setDialogOpen(false);
         setMessage(action === "remove" ? "Indexer removed." : "Indexer saved.");
         await onCustomChanged();
@@ -111,6 +119,28 @@ export default function TorrentIndexerManager({
     }
   }
 
+  async function importDefinition() {
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const data = await request("import-definition", undefined, false, { definitionUrl });
+      setImportDraft({
+        ...data,
+        enabled: true,
+        values: Object.fromEntries(data.definition.settings.map((field) => [field.name, field.default ?? (field.type === "checkbox" ? false : "")])),
+      });
+    } catch (importError) {
+      setError(importError.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveImported() {
+    await act("create-cardigann", { importId: importDraft.importId, settings: importDraft.values, enabled: importDraft.enabled });
+  }
+
   const configuredNative = nativeProviders.filter((provider) => configuredNativeIds.includes(provider.id));
   const configuredCount = configuredNative.length + customProviders.length;
 
@@ -119,7 +149,7 @@ export default function TorrentIndexerManager({
       <div className={styles.indexerHeading}>
         <div>
           <h3>Configured Indexers</h3>
-          <p>All native and Torznab-compatible sources you have added.</p>
+          <p>All native, imported Cardigann, and Torznab-compatible sources you have added.</p>
         </div>
         {canEdit ? (
           <button className={styles.saveButton} type="button" onClick={() => setDialogOpen(true)}>
@@ -164,16 +194,21 @@ export default function TorrentIndexerManager({
             return (
               <article className={styles.sourceCard} key={provider.id}>
                 <div className={styles.sourceCardHeading}>
-                  <span><strong>{provider.name}</strong><small>Torznab · {mediaLabel(provider.mediaTypes)}</small></span>
+                  <span><strong>{provider.name}</strong><small>{provider.type} · {mediaLabel(provider.mediaTypes)}</small></span>
                   {canEdit ? (
                     <div className={styles.sourceCardActions}>
-                      <button className={styles.testButton} type="button" disabled={busy} onClick={() => { setDraft({ ...provider, apiKey: "" }); setDialogOpen(true); setMessage(""); setError(""); }}>Edit</button>
-                      <button className={styles.testButton} type="button" disabled={busy} onClick={() => void act("update", { id: provider.id, enabled: !provider.enabled })}>{provider.enabled ? "Disable" : "Enable"}</button>
-                      <button className={styles.removeButton} type="button" disabled={busy} onClick={() => { if (window.confirm(`Remove ${provider.name}?`)) void act("remove", { id: provider.id }); }}>Remove</button>
+                      <button className={styles.testButton} type="button" disabled={busy} onClick={() => {
+                        if (provider.kind === "cardigann") {
+                          setImportDraft({ editId: provider.id, definition: { name: provider.name, settings: provider.settings }, enabled: provider.enabled, values: Object.fromEntries(provider.settings.map((field) => [field.name, field.value ?? (field.type === "checkbox" ? false : "")])) });
+                        } else setDraft({ ...provider, apiKey: "" });
+                        setDialogOpen(true); setMessage(""); setError("");
+                      }}>Edit</button>
+                      <button className={styles.testButton} type="button" disabled={busy} onClick={() => void act(provider.kind === "cardigann" ? "update-cardigann" : "update", { id: provider.id, enabled: !provider.enabled })}>{provider.enabled ? "Disable" : "Enable"}</button>
+                      <button className={styles.removeButton} type="button" disabled={busy} onClick={() => { if (window.confirm(`Remove ${provider.name}?`)) void act(provider.kind === "cardigann" ? "remove-cardigann" : "remove", { id: provider.id }); }}>Remove</button>
                     </div>
                   ) : null}
                 </div>
-                <p>Custom Torznab-compatible indexer.</p>
+                <p>{provider.kind === "cardigann" ? "Imported Cardigann definition." : "Custom Torznab-compatible indexer."}</p>
                 <IndexerStatus status={status} message={statusMessage} />
               </article>
             );
@@ -210,7 +245,7 @@ export default function TorrentIndexerManager({
             <div className={styles.dialogHeading}>
               <div>
                 <span className="eyebrow">Torrent Sources</span>
-                <h2 id="indexer-dialog-title">{draft?.id ? "Edit Indexer" : draft ? "Add Custom Indexer" : "Add Indexer"}</h2>
+                <h2 id="indexer-dialog-title">{draft?.id || importDraft?.editId ? "Edit Indexer" : draft ? "Add Custom Indexer" : importDraft ? "Configure Imported Indexer" : "Add Indexer"}</h2>
               </div>
               <button className={styles.dialogClose} type="button" aria-label="Close Add Indexer" disabled={busy} onClick={closeDialog}>×</button>
             </div>
@@ -218,7 +253,35 @@ export default function TorrentIndexerManager({
             {error ? <div className="notice error" role="alert">{error}</div> : null}
             {message ? <div className="notice success" role="status">{message}</div> : null}
 
-            {draft ? (
+            {importDraft ? (
+              <form onSubmit={(event) => { event.preventDefault(); void (importDraft.editId
+                ? act("update-cardigann", { id: importDraft.editId, settings: importDraft.values, enabled: importDraft.enabled })
+                : saveImported()); }}>
+                <p className={styles.dialogIntro}>Configure <strong>{importDraft.definition.name}</strong>. Secret values stay on the TorPlay server.</p>
+                <div className={styles.providerForm}>
+                  {importDraft.definition.settings.map((field) => (
+                    <div className={styles.field} key={field.name}>
+                      <label htmlFor={`cardigann-${field.name}`}>{field.label}</label>
+                      {field.type === "checkbox" ? (
+                        <label className={styles.checkboxLabel}><input id={`cardigann-${field.name}`} type="checkbox" checked={Boolean(importDraft.values[field.name])} disabled={busy} onChange={(event) => setImportDraft({ ...importDraft, values: { ...importDraft.values, [field.name]: event.target.checked } })} /> Enabled</label>
+                      ) : field.type === "select" ? (
+                        <select id={`cardigann-${field.name}`} required={field.required} disabled={busy} value={importDraft.values[field.name] || ""} onChange={(event) => setImportDraft({ ...importDraft, values: { ...importDraft.values, [field.name]: event.target.value } })}>
+                          {!field.required ? <option value="">Default</option> : null}
+                          {Object.entries(field.options || {}).map(([value, label]) => <option value={value} key={value}>{label}</option>)}
+                        </select>
+                      ) : (
+                        <div className={styles.inputRow}><input id={`cardigann-${field.name}`} type={field.secret ? "password" : "text"} required={field.required && !field.configured} disabled={busy} value={importDraft.values[field.name] || ""} placeholder={field.configured ? "Leave blank to keep existing value" : ""} autoComplete={field.secret ? "new-password" : "off"} onChange={(event) => setImportDraft({ ...importDraft, values: { ...importDraft.values, [field.name]: event.target.value } })} /></div>
+                      )}
+                    </div>
+                  ))}
+                  <label className={styles.checkboxLabel}><input type="checkbox" checked={importDraft.enabled} disabled={busy} onChange={(event) => setImportDraft({ ...importDraft, enabled: event.target.checked })} /> Enabled</label>
+                  <div className={styles.sourceActions}>
+                    <button className={styles.saveButton} type="submit" disabled={busy}>{busy ? "Verifying…" : importDraft.editId ? "Verify and save" : "Add Indexer"}</button>
+                    <button className={styles.testButton} type="button" disabled={busy} onClick={() => importDraft.editId ? closeDialog() : setImportDraft(null)}>Back</button>
+                  </div>
+                </div>
+              </form>
+            ) : draft ? (
               <form onSubmit={(event) => { event.preventDefault(); void act(draft.id ? "update" : "create", draft); }}>
                 <p className={styles.dialogIntro}>Add a Torznab-compatible source such as your own Prowlarr or Jackett configuration.</p>
                 <div className={styles.providerForm}>
@@ -261,6 +324,19 @@ export default function TorrentIndexerManager({
                   <h3>Custom Indexer</h3>
                   <p>Add a Torznab-compatible source such as your own Prowlarr or Jackett configuration.</p>
                   <button className={styles.testButton} type="button" onClick={() => setDraft({ name: "", endpoint: "", apiKey: "", enabled: true })}>+ Add Custom Indexer</button>
+                </section>
+                <section className={styles.customIndexerOption}>
+                  <h3>Import Indexer Definition</h3>
+                  <p>Paste a public HTTPS Cardigann v11 YAML definition URL or a normal GitHub definition-file page.</p>
+                  <div className={styles.providerForm}>
+                    <div className={styles.field}>
+                      <label htmlFor="cardigann-definition-url">Definition URL</label>
+                      <div className={styles.inputRow}>
+                        <input id="cardigann-definition-url" type="url" required disabled={busy} value={definitionUrl} placeholder="https://github.com/.../example.yml" onChange={(event) => setDefinitionUrl(event.target.value)} />
+                        <button className={styles.testButton} type="button" disabled={busy || !definitionUrl.trim()} onClick={() => void importDefinition()}>{busy ? "Importing…" : "Import"}</button>
+                      </div>
+                    </div>
+                  </div>
                 </section>
               </div>
             )}

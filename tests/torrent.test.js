@@ -146,6 +146,15 @@ test("inspects movie metadata and reuses the verified torrent file", async () =>
   }
 });
 
+test("resolves provider-owned torrent metadata once and reuses it for playback", async () => {
+  let resolutions = 0;
+  const source = { resolver: async () => { resolutions += 1; return { torrentInput: Buffer.from(torrentFile()) }; } };
+  assert.deepEqual(await inspectTorrentSource(source, { type: "movie" }), { playbackMode: "native" });
+  const resolved = await resolveTorrentInput(source);
+  assert.equal(resolved.metadataSource, "torrent");
+  assert.equal(resolutions, 1);
+});
+
 test("requires the requested episode inside multi-file show metadata", async () => {
   const previousFetch = globalThis.fetch;
   const source = { downloadUrl: "https://indexer.test/show" };

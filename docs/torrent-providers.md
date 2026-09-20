@@ -85,3 +85,25 @@ Use Settings → Torrent Sources → Add Custom Indexer. Enter a name, the compl
 Custom providers can be edited, enabled, disabled, or removed. Health is checked on load and refreshed manually. Disabled providers make no requests. Credentials and endpoint URLs remain server-side, except that localhost editors can see the configured endpoint. Redirects are rejected to prevent credential forwarding.
 
 Enabled custom providers join the existing provider runner and share filtering, deduplication, ranking, and failure isolation. A full `TORPLAY_SEARCH_PROVIDERS` override includes a custom provider only when its stable `custom-...` ID is listed. The ID is stored in the private configuration file. Capabilities constrain the search modes and parameters used.
+
+## Imported Cardigann definitions
+
+Use Settings → Torrent Sources → Add Indexer → Import Indexer Definition to add a
+Cardigann v11 YAML definition from a public HTTPS URL. TorPlay accepts direct YAML
+URLs and normal GitHub `blob` pages, which it converts to their raw-file URL. The
+definition is validated against a pinned v11 schema before any provider settings
+are shown or saved. TorPlay does not bundle a definition catalog or enable imported
+indexers by default.
+
+Imported definitions run entirely on the TorPlay server. Definition settings,
+cookies, passwords, magnets, torrent files, and download URLs are not exposed to
+the browser. Saved definitions live in the same private `torrent-providers.json`
+file as custom Torznab providers. Secret settings require the indexer's own links
+to use HTTPS.
+
+TorPlay supports common Cardigann search paths, HTML/JSON/XML row selectors,
+templates and filters, form/cookie login, redirects and cookies, and direct,
+magnet, or selector-based torrent downloads. Definitions that require CAPTCHA,
+FlareSolverr, custom certificates, non-UTF-8 decoding, or another unsupported
+Cardigann operation are rejected during import with a compatibility message.
+TorPlay never installs or requires an anti-bot service.
