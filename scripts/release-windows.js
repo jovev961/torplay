@@ -134,7 +134,6 @@ export function validateStage(root = stageDir) {
     path.join(root, "runtime", "windows-runner.mjs"),
     path.join(root, "runtime", "windows-control.mjs"),
     path.join(root, "app", "server.js"),
-    path.join(root, "docker-compose.yml"),
   ];
 
   for (const requiredPath of required) {
@@ -422,10 +421,6 @@ async function stageRuntime() {
   );
 
   for (const [source, destination] of [
-    [
-      "docker-compose.yml",
-      "docker-compose.yml",
-    ],
     [
       "installer/windows/torplay-launcher.vbs",
       "runtime/torplay-launcher.vbs",

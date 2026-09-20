@@ -9,7 +9,7 @@ TorPlay configuration is server-only. Never expose provider keys, Jackett downlo
 
 On a fresh launch, TorPlay redirects provider-dependent pages to **Setup** to validate and save TMDB. No torrent source is enabled automatically. Afterwards, open **Settings** to add preconfigured native providers or custom Torznab sources and to manage optional Jackett, metadata, and subtitles. Changes are permitted only through `localhost` on the TorPlay computer; household/LAN browsers can see safe provider health but cannot edit settings. A blank secret input keeps the configured value, while **Remove** explicitly deletes it.
 
-TorPlay stores Settings changes atomically in the runtime's configuration file and restricts its permissions where the operating system supports that. Credentials supplied by the host environment remain read-only. Most provider changes take effect immediately. Updating OMDb requires **Start or Restart TorPlay** so Jackett can receive the new value. Do not commit real credentials.
+TorPlay stores Settings changes atomically in the runtime's configuration file and restricts its permissions where the operating system supports that. Credentials supplied by the host environment remain read-only. Provider changes take effect immediately. Do not commit real credentials.
 
 ## Required providers
 
@@ -25,11 +25,10 @@ TorPlay stores Settings changes atomically in the runtime's configuration file a
 | --- | --- | --- |
 | `JACKETT_MOVIE_INDEXERS` | Empty | Comma-separated Jackett IDs used for movies. Empty searches all configured indexers. |
 | `JACKETT_SHOW_INDEXERS` | Empty | Comma-separated Jackett IDs used for shows. Empty searches all configured indexers. |
-| `OMDB_API_KEY` | Unset | Optional server-side OMDb key used for IMDb ratings on catalog cards and copied into Jackett for IMDb-only aggregate-search fallback. Ratings are omitted when absent; TorPlay preserves Jackett's existing key. |
+| `OMDB_API_KEY` | Unset | Optional server-side OMDb key used for IMDb ratings on catalog cards and metadata lookups. Ratings are omitted when absent. |
 | `TORPLAY_NATIVE_PROVIDERS` | Empty | Preconfigured providers currently enabled for search. Available IDs are `knaben`, `yts`, and `eztv`. |
 | `TORPLAY_CONFIGURED_NATIVE_PROVIDERS` | Falls back to enabled providers | Preconfigured providers added in Settings, including currently disabled entries. |
 | `TORPLAY_SEARCH_PROVIDERS` | Unset | Full-provider override using built-in IDs, `jackett`, and stable `custom-...` IDs. Native controls become read-only; unlisted custom sources are excluded. |
-| `TORPLAY_MANAGED_JACKETT` | `false` | Set exactly `true` to opt into managed Docker/Jackett startup. Restart the launcher after changing. |
 
 Custom Torznab sources are stored in `torrent-providers.json` beside `.env.local` or the installed `torplay.env`. This private file contains API keys; keep it out of source control and include it only in private backups. Settings writes it atomically with restrictive file permissions where supported. New endpoints and changed credentials must pass capabilities and search validation before saving; edits take effect immediately. Existing Jackett credentials are not migrated or duplicated.
 
@@ -84,9 +83,6 @@ Preferred and primary subtitle languages are configured per profile from **Manag
 | `TORPLAY_PUBLIC_HOSTNAME` | `torplay.local` | Single valid `.local` hostname advertised over mDNS. |
 | `TORPLAY_PUBLIC_PORT` | `80` | LAN-facing proxy port; must differ from `TORPLAY_PORT`. |
 | `TORPLAY_MDNS_INTERFACE` | Automatic | Optional Windows interface name or local address for systems with confusing VPN/virtual adapters. |
-| `TORPLAY_DOCKER_WAIT_SECONDS` | `600` installed, immediate failure in manual source mode | Maximum installed-runtime wait for Docker readiness. |
-| `DOCKER_CLI_PATH` | Auto-detected | Optional Docker CLI path override. |
-| `DOCKER_DESKTOP_PATH` | Auto-detected | Optional Docker Desktop executable path override. |
 
 If `TORPLAY_PUBLIC_PORT` is changed for the manual source runtime, recreate its firewall rule with the same port. The packaged installer is designed for port 80.
 

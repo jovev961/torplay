@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-export const COMPONENT_NAMES = ["Docker", "Jackett", "TorPlay", "mDNS"];
+export const COMPONENT_NAMES = ["TorPlay", "mDNS"];
 
 export function createInitialStatus({ pid = process.pid, url = "http://torplay.local", logPath = null } = {}) {
   return {

@@ -28,18 +28,18 @@ Profiles, history, configuration, and logs are kept under `%LOCALAPPDATA%\TorPla
 
 ## Development quick start
 
-For native Knaben, YTS, and EZTV discovery without starting Docker services, run
+For discovery using only native Knaben, YTS, and EZTV providers, run
 `npm run dev:native`. Configure TMDB as usual. Provider selection and endpoint
 overrides are documented in [Torrent providers](docs/torrent-providers.md).
 
-Requirements: Node.js 20.9 or newer. Docker is optional for managed Jackett.
+Requirement: Node.js 20.9 or newer. Docker is not required.
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) and complete the setup screen. No environment file or restart is required. Optional Torznab sources can be added in Settings. Set `TORPLAY_MANAGED_JACKETT=true` in `.env.local` only if you want TorPlay to start Jackett through Docker.
+Open [http://localhost:3000](http://localhost:3000) and complete the setup screen. No environment file or restart is required. Optional Torznab sources and an independently operated Jackett instance can be added in Settings.
 
 See [Development](docs/development.md) and [Configuration](docs/configuration.md) for the complete setup.
 

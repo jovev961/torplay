@@ -30,7 +30,6 @@ export function installedEnvironment(paths, environment = process.env) {
   return {
     ...environment,
     NODE_ENV: "production",
-    COMPOSE_PROJECT_NAME: environment.COMPOSE_PROJECT_NAME || "torplay",
     TORPLAY_INSTALL_DIR: paths.installDir,
     TORPLAY_DATA_DIR: paths.dataDir,
     TORPLAY_CONFIG_PATH: environment.TORPLAY_CONFIG_PATH || paths.configPath,
@@ -41,6 +40,5 @@ export function installedEnvironment(paths, environment = process.env) {
     TORPLAY_STATUS_PATH: environment.TORPLAY_STATUS_PATH || paths.statusPath,
     TORPLAY_LOG_PATH: environment.TORPLAY_LOG_PATH || paths.logPath,
     TORPLAY_SERVER_ENTRY: environment.TORPLAY_SERVER_ENTRY || paths.serverEntry,
-    TORPLAY_DOCKER_WAIT_SECONDS: environment.TORPLAY_DOCKER_WAIT_SECONDS || "600",
   };
 }

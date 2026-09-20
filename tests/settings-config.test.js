@@ -64,6 +64,19 @@ test("updates provider settings atomically while preserving unrelated configurat
   }
 });
 
+test("OMDb changes take effect without a runtime restart", async () => {
+  const { directory, filename } = await fixture("");
+  const environment = { TORPLAY_CONFIG_PATH: filename };
+  try {
+    const result = await updateProviderSettings("omdb", {
+      values: { apiKey: "omdb-secret" },
+    }, { environment, configPath: filename });
+    assert.deepEqual(result, { providerId: "omdb", restartRequired: false });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("removes secrets explicitly and never returns their values", async () => {
   const { directory, filename } = await fixture("TMDB_API_TOKEN=very-secret-token\n");
   const environment = { TORPLAY_CONFIG_PATH: filename, TMDB_API_TOKEN: "very-secret-token" };

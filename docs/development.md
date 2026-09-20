@@ -4,7 +4,6 @@
 
 - Node.js 20.9 or newer
 - npm
-- Docker with `docker compose` only when opting into managed Jackett
 - Permission to download and view the selected content
 
 TorPlay requires a persistent Node.js process. It is not designed for serverless or multi-instance deployment.
@@ -19,26 +18,18 @@ npm run dev
 Open TorPlay and complete the browser setup; a `.env.local` file and restart are not required:
 
 - TorPlay: [http://localhost:3000](http://localhost:3000)
-- Jackett: [http://localhost:9117](http://localhost:9117)
 
-Setup requires only TMDB. Torrent sources are opt-in; add preconfigured native providers or custom Torznab sources in Settings. The Jackett dashboard is available only when you start Jackett yourself or enable managed services.
+Setup requires only TMDB. Torrent sources are opt-in; add preconfigured native providers, custom Torznab sources, or an independently operated Jackett instance in Settings.
 
 ## Development runtime
 
-`npm run dev` starts Next.js without Docker by default. With `TORPLAY_MANAGED_JACKETT=true` in `.env.local`, it performs the following work:
-
-1. Starts Jackett using the existing `docker-compose.yml`.
-2. Waits for Jackett to become healthy.
-3. Preserves an existing Jackett OMDb key unless `OMDB_API_KEY` is configured.
-4. Starts the Next.js development server.
-
-Press Ctrl+C to stop Next.js and, when managed mode is enabled, Jackett. The container and named volumes are retained; the script never uses `docker compose down -v`.
+`npm run dev` starts only the Next.js development server. TorPlay does not install, start, stop, configure, or monitor Docker or external provider applications. Press Ctrl+C to stop the server.
 
 ## Commands
 
 | Command | Purpose |
 | --- | --- |
-| `npm run dev` | Start Next.js; Docker services are opt-in |
+| `npm run dev` | Start the Next.js development server |
 | `npm run build` | Create the standard production build |
 | `npm start` | Run the standard production build |
 | `npm run start:home` | Run the manual Windows LAN supervisor after a build |
@@ -55,7 +46,6 @@ Press Ctrl+C to stop Next.js and, when managed mode is enabled, Jackett. The con
 | `.data/torrents` | Managed torrent session files | Temporary, gitignored |
 | `.data/subtitles` | Subtitle cache | Re-creatable, gitignored, automatically expires after the configured retention period |
 | OS temporary directory | HLS and subtitle-conversion jobs | Temporary |
-| Docker named volumes | Jackett configuration and downloads | Persistent |
 
 Do not point `TORRENT_DOWNLOAD_PATH` at a directory containing personal files. TorPlay owns and cleans info-hash directories under that path.
 
@@ -78,6 +68,6 @@ Tests that open loopback ports or start WebTorrent may require a normal local sh
 - Preserve the separation between `app/`, `components/`, and `lib/` described in [Architecture](architecture.md).
 - Keep generated data outside source control.
 - Do not add authentication, databases beyond the existing SQLite store, or alternative streaming stacks without an explicit task.
-- Keep managed Jackett optional; native and custom providers must remain independent of Docker.
+- Keep native and custom providers independent of externally operated applications.
 
 The root `AGENTS.md` contains the complete repository-specific implementation rules.
