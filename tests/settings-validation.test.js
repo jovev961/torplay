@@ -93,3 +93,72 @@ test("uncached candidate validation does not replace the live validation cache",
   });
   assert.equal(calls, 2);
 });
+
+test("checks native provider availability with lightweight documented API requests", async () => {
+  clearSettingsValidation();
+  const requests = [];
+  const results = await validateSettingsProviders(["knaben", "yts", "eztv"], {
+    environment: {},
+    fetchImpl: async (url, options) => {
+      const address = new URL(url);
+      requests.push({ address, options });
+      if (address.hostname === "api.knaben.org") return response({ hits: [] });
+      if (address.pathname.endsWith("list_movies.json")) {
+        return response({ status: "ok", data: { movie_count: 0 } });
+      }
+      return response({ torrents_count: 0 });
+    },
+    useCache: false,
+  });
+  assert.deepEqual(results.map(({ status }) => status), ["available", "available", "available"]);
+  assert.equal(requests.length, 3);
+  const knaben = requests.find(({ address }) => address.hostname === "api.knaben.org");
+  assert.equal(JSON.parse(knaben.options.body).size, 1);
+  const yts = requests.find(({ address }) => address.pathname.endsWith("list_movies.json"));
+  assert.equal(yts.address.searchParams.get("limit"), "1");
+  const eztv = requests.find(({ address }) => address.pathname.includes("get-torrents"));
+  assert.equal(eztv.address.searchParams.get("limit"), "1");
+});
+
+test("does not contact disabled native providers and supports cached and refreshed health", async () => {
+  clearSettingsValidation();
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls += 1;
+    return response({ status: "ok", data: { movie_count: 0 } });
+  };
+  const disabled = await validateSettingsProviders(["knaben", "eztv"], {
+    environment: { TORPLAY_NATIVE_PROVIDERS: "yts" },
+    fetchImpl,
+  });
+  assert.deepEqual(disabled.map(({ status }) => status), ["disabled", "disabled"]);
+  assert.equal(calls, 0);
+
+  await validateSettingsProviders(["yts"], {
+    environment: { TORPLAY_NATIVE_PROVIDERS: "yts" }, fetchImpl, now: 1_000,
+  });
+  await validateSettingsProviders(["yts"], {
+    environment: { TORPLAY_NATIVE_PROVIDERS: "yts" }, fetchImpl, now: 2_000,
+  });
+  await validateSettingsProviders(["yts"], {
+    environment: { TORPLAY_NATIVE_PROVIDERS: "yts" }, fetchImpl, now: 2_001, useCache: false,
+  });
+  assert.equal(calls, 2);
+});
+
+test("reports malformed or failed native health responses as unavailable", async () => {
+  for (const fetchImpl of [
+    async () => response({ unexpected: true }),
+    async () => response({}, { status: 503 }),
+    async () => { throw new Error("offline"); },
+  ]) {
+    const [health] = await validateSettingsProviders(["knaben"], { fetchImpl, useCache: false });
+    assert.equal(health.status, "unavailable");
+  }
+  const [invalidEndpoint] = await validateSettingsProviders(["knaben"], {
+    environment: { KNABEN_API_URL: "file:///not-http" },
+    fetchImpl: async () => response({ hits: [] }),
+    useCache: false,
+  });
+  assert.equal(invalidEndpoint.status, "unavailable");
+});

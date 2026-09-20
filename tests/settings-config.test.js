@@ -8,6 +8,7 @@ import {
   configurationWritable,
   parseSettingsEnvironment,
   settingsState,
+  updateNativeProviderSettings,
   updateProviderSettings,
   validateAndUpdateProvidersSettings,
 } from "../lib/settings/config.js";
@@ -156,6 +157,71 @@ test("validates required providers before committing them as one configuration c
     assert.match(source, /^JACKETT_API_KEY=jackett-token$/m);
     assert.equal(environment.TMDB_API_TOKEN, "tmdb-token");
     assert.equal(environment.JACKETT_API_KEY, "jackett-token");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("persists native provider selection and reports safe source metadata", async () => {
+  const { directory, filename } = await fixture("# preserved\nJACKETT_URL=http://localhost:9117\nJACKETT_API_KEY=secret\n");
+  const environment = {
+    TORPLAY_CONFIG_PATH: filename,
+    JACKETT_URL: "http://localhost:9117",
+    JACKETT_API_KEY: "secret",
+  };
+  try {
+    const before = await settingsState({ environment, includeValues: true });
+    assert.deepEqual(before.torrentSources.providers.map(({ id, enabled }) => [id, enabled]), [
+      ["knaben", true], ["yts", true], ["eztv", true],
+    ]);
+    assert.equal(before.torrentSources.jackettActive, true);
+    assert.equal(JSON.stringify(before.torrentSources).includes("secret"), false);
+
+    await updateNativeProviderSettings(["eztv", "knaben", "eztv"], { environment, configPath: filename });
+    assert.equal(environment.TORPLAY_NATIVE_PROVIDERS, "knaben,eztv");
+    assert.match(await readFile(filename, "utf8"), /^TORPLAY_NATIVE_PROVIDERS=knaben,eztv$/m);
+    const after = await settingsState({ environment });
+    assert.deepEqual(after.torrentSources.providers.filter(({ enabled }) => enabled).map(({ id }) => id), ["knaben", "eztv"]);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("protects externally managed native settings and requires an effective search source", async () => {
+  const { directory, filename } = await fixture("");
+  try {
+    await assert.rejects(
+      updateNativeProviderSettings([], { environment: {}, configPath: filename }),
+      /Enable at least one native provider or configure Jackett/,
+    );
+    await assert.rejects(
+      updateNativeProviderSettings(["unknown"], { environment: {}, configPath: filename }),
+      /unknown provider/,
+    );
+    await assert.rejects(
+      updateNativeProviderSettings(["knaben"], {
+        environment: { TORPLAY_SEARCH_PROVIDERS: "yts" },
+        configPath: filename,
+      }),
+      (error) => error instanceof SettingsError && error.status === 409,
+    );
+    await assert.rejects(
+      updateNativeProviderSettings(["knaben"], {
+        environment: {
+          TORPLAY_EXTERNAL_CONFIG_KEYS: "TORPLAY_NATIVE_PROVIDERS",
+          TORPLAY_NATIVE_PROVIDERS: "yts",
+        },
+        configPath: filename,
+      }),
+      (error) => error instanceof SettingsError && error.status === 409,
+    );
+    const state = await settingsState({
+      environment: { TORPLAY_SEARCH_PROVIDERS: "yts,jackett" },
+      cwd: directory,
+    });
+    assert.equal(state.torrentSources.overrideActive, true);
+    assert.equal(state.torrentSources.managedExternally, true);
+    assert.deepEqual(state.torrentSources.providers.filter(({ enabled }) => enabled).map(({ id }) => id), ["yts"]);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

@@ -1,11 +1,6 @@
 name: Windows installer
 
 on:
-  pull_request:
-    branches: [main, develop]
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
 
 permissions:
@@ -13,7 +8,7 @@ permissions:
 
 concurrency:
   group: windows-installer-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: false
 
 jobs:
   build:

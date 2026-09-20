@@ -152,8 +152,7 @@ test("Windows installer workflow pins its toolchain and publishes verified artif
     "utf8",
   );
 
-  assert.match(workflow, /pull_request:\s*\n\s*branches: \[main, develop\]/);
-  assert.match(workflow, /push:\s*\n\s*tags:\s*\n\s*- "v\*"/);
+  assert.doesNotMatch(workflow, /\b(pull_request|push):/);
   assert.match(workflow, /workflow_dispatch:/);
   assert.match(workflow, /permissions:\s*\n\s*contents: read/);
   assert.match(workflow, /runs-on: windows-2025/);

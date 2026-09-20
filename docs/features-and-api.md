@@ -15,7 +15,7 @@ Key metadata endpoints:
 
 ## Source search
 
-Movie and episode pages call the provider-independent torrent search service only after the user requests sources. Jackett remains the configured adapter. Results are filtered and ranked by the service without exposing API keys, download URLs, or magnet URIs. Public results expose `hasMagnet` instead of `magnet`; opaque result IDs resolve to server-side playback references.
+Movie and episode pages call the provider-independent torrent search service only after the user requests sources. Knaben, YTS, and EZTV are native adapters, while Jackett remains available as an optional Torznab adapter. Results are filtered and ranked by the service without exposing API keys, download URLs, or magnet URIs. Public results expose `hasMagnet` instead of `magnet`; opaque result IDs resolve to server-side playback references.
 
 - Direct `.torrent` metadata is inspected for the top 20 relevant candidates.
 - Verified playable results appear before unverified magnet fallbacks.
@@ -102,10 +102,10 @@ Profile responses include `subtitlePreferences`. Update them with `PUT /api/prof
 
 ## Settings
 
-The Settings page separates General, Services, Subtitles, Playback, and About information. It explains each external provider, links to its official credential instructions, and checks configured services in the background.
+The Settings page separates General, Services, Torrent Sources, Subtitles, Playback, and About information. It explains each external provider, links to its official credential instructions, and checks configured services and enabled native torrent sources in the background.
 
 - `GET /api/settings` returns secret-free configuration and runtime status. Non-secret editable values are returned only to a localhost request.
-- `PATCH /api/settings` updates one provider from a same-origin JSON request on localhost only.
-- `POST /api/settings/validate` checks selected provider connections and returns sanitized validity states.
+- `PATCH /api/settings` updates one service or the enabled native-provider IDs from a same-origin JSON request on localhost only.
+- `POST /api/settings/validate` checks selected provider connections and returns sanitized validity or availability states. `{ "refresh": true }` bypasses the short health cache.
 
 Secret values are never returned by these endpoints. LAN clients can inspect safe status but cannot change provider configuration.
