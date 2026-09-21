@@ -140,7 +140,7 @@ export default function SourcePanel({
                 />
                 <div className="bufferStatus" aria-live="polite">
                   <div>
-                    <span>Buffering {formatFileSize(selectedFile.downloaded)} of {formatFileSize(selectedFile.size)}</span>
+                    <span>Downloaded {formatFileSize(selectedFile.downloaded)} of {formatFileSize(selectedFile.size)}</span>
                     <span>{formatSpeed(lookup.session.downloadSpeed)} · {lookup.session.peers ?? 0} peers</span>
                   </div>
                   <progress value={selectedFile.progress} max={1}>

@@ -155,6 +155,55 @@ test("resolves provider-owned torrent metadata once and reuses it for playback",
   assert.equal(resolutions, 1);
 });
 
+test("prefers provider resolution over a synthesized magnet and reuses the metadata", async () => {
+  let resolutions = 0;
+  const source = {
+    magnet,
+    resolver: async () => {
+      resolutions += 1;
+      return { torrentInput: Buffer.from(torrentFile()) };
+    },
+  };
+
+  assert.deepEqual(await inspectTorrentSource(source, { type: "movie" }), { playbackMode: "native" });
+  const resolved = await resolveTorrentInput(source);
+  assert.equal(resolved.metadataSource, "torrent");
+  assert.equal(resolutions, 1);
+});
+
+test("uses a magnet fallback when provider resolution fails", async () => {
+  const source = {
+    magnet,
+    resolver: async () => { throw new Error("provider unavailable"); },
+  };
+  const resolved = await resolveTorrentInput(source);
+  assert.equal(resolved.metadataSource, "magnet");
+  assert.equal(resolved.input, magnet);
+});
+
+test("tries provider resolution after direct torrent metadata fails", async () => {
+  const previousFetch = globalThis.fetch;
+  let resolutions = 0;
+  globalThis.fetch = async () => new Response("not a torrent", { status: 200 });
+  const source = {
+    downloadUrl: "https://indexer.test/download",
+    magnet,
+    resolver: async () => {
+      resolutions += 1;
+      return { torrentInput: Buffer.from(torrentFile()) };
+    },
+  };
+
+  try {
+    assert.deepEqual(await inspectTorrentSource(source, { type: "movie" }), { playbackMode: "native" });
+    const resolved = await resolveTorrentInput(source);
+    assert.equal(resolved.metadataSource, "torrent");
+    assert.equal(resolutions, 1);
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
 test("requires the requested episode inside multi-file show metadata", async () => {
   const previousFetch = globalThis.fetch;
   const source = { downloadUrl: "https://indexer.test/show" };

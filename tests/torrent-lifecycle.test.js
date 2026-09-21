@@ -8,6 +8,7 @@ import { POST as releaseSession } from "../app/api/torrents/[id]/release/route.j
 import {
   releaseTorrentSession,
   shouldPollTorrentSession,
+  torrentSessionPollDelay,
 } from "../components/useSourceLookup.js";
 import {
   cleanupSubtitleCacheForSessions,
@@ -233,9 +234,12 @@ test("uses a beacon for page exit and keepalive requests for fallback or explici
   ]);
 });
 
-test("polls torrent metadata only while the session is loading", () => {
+test("polls loading and ready torrent sessions at appropriate intervals", () => {
   assert.equal(shouldPollTorrentSession({ id: "session", status: "loading" }), true);
-  assert.equal(shouldPollTorrentSession({ id: "session", status: "ready" }), false);
+  assert.equal(shouldPollTorrentSession({ id: "session", status: "ready" }), true);
   assert.equal(shouldPollTorrentSession({ id: "session", status: "error" }), false);
   assert.equal(shouldPollTorrentSession(null), false);
+  assert.equal(torrentSessionPollDelay({ id: "session", status: "loading" }), 1000);
+  assert.equal(torrentSessionPollDelay({ id: "session", status: "ready" }), 2000);
+  assert.equal(torrentSessionPollDelay({ id: "session", status: "error" }), null);
 });

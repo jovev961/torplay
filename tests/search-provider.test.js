@@ -3,6 +3,7 @@ import test from "node:test";
 import { createDatabase } from "../lib/database/sqlite.js";
 import { normalizeCandidate } from "../lib/search/contract.js";
 import { PROVIDER_RESULT_CACHE_TTL_MS, searchConfiguredProvider } from "../lib/search/provider.js";
+import { uniqueResults } from "../lib/search/processing.js";
 import { findAuthorizedSources } from "../lib/search/service.js";
 import { parseJackettXml } from "../lib/search/jackett.js";
 
@@ -76,7 +77,7 @@ test("service exposes safe optional metadata and supports providers without cons
   assert.equal(JSON.stringify(results).includes("magnet:"), false);
 });
 
-test("persists short-lived provider results without credential-bearing URLs", async () => {
+test("does not cache a provider result by downgrading its direct torrent source", async () => {
   const database = createDatabase(":memory:");
   let calls = 0;
   const cachedProvider = provider("cached", async () => {
@@ -96,12 +97,35 @@ test("persists short-lived provider results without credential-bearing URLs", as
   try {
     const first = await searchConfiguredProvider(context, options);
     const second = await searchConfiguredProvider(context, { ...options, now: 2_000 });
-    assert.equal(calls, 1);
+    assert.equal(calls, 2);
     assert.equal(second[0].title, first[0].title);
-    assert.equal(second[0].source.downloadUrl, null);
+    assert.equal(second[0].source.downloadUrl, "https://provider.test/torrent?apikey=server-secret");
     const stored = database.prepare("SELECT cache_key, value_json FROM external_response_cache WHERE namespace = 'provider-results'").get();
-    assert.equal(`${stored.cache_key}${stored.value_json}`.includes("server-secret"), false);
-    assert.equal(stored.value_json.includes("provider.test"), false);
+    assert.equal(stored, undefined);
+  } finally {
+    database.close();
+  }
+});
+
+test("persists short-lived magnet-only provider results", async () => {
+  const database = createDatabase(":memory:");
+  let calls = 0;
+  const cachedProvider = provider("cached", async () => {
+    calls += 1;
+    return [candidate];
+  });
+  const options = {
+    ...quiet,
+    providers: [cachedProvider],
+    usePersistentCache: true,
+    cacheDatabase: database,
+    now: 1_000,
+  };
+  try {
+    const first = await searchConfiguredProvider(context, options);
+    const second = await searchConfiguredProvider(context, { ...options, now: 2_000 });
+    assert.equal(calls, 1);
+    assert.equal(second[0].source.magnet, first[0].source.magnet);
     await searchConfiguredProvider(context, {
       ...options,
       now: 1_000 + PROVIDER_RESULT_CACHE_TTL_MS + 1,
@@ -110,4 +134,21 @@ test("persists short-lived provider results without credential-bearing URLs", as
   } finally {
     database.close();
   }
+});
+
+test("deduplication keeps the strongest startup path for the same swarm", () => {
+  const magnetOnly = normalizeCandidate({ ...candidate, seeders: 100 }, provider("magnet"));
+  const resolvable = normalizeCandidate({
+    ...candidate,
+    seeders: 5,
+    source: { resolver: async () => ({ magnet: `magnet:?xt=urn:btih:${hash}` }) },
+  }, provider("resolver"));
+  const direct = normalizeCandidate({
+    ...candidate,
+    seeders: 1,
+    source: { downloadUrl: "https://provider.test/torrent" },
+  }, provider("direct"));
+
+  assert.equal(uniqueResults([magnetOnly, resolvable, direct])[0].providerId, "direct");
+  assert.equal(uniqueResults([magnetOnly, resolvable])[0].providerId, "resolver");
 });
