@@ -42,7 +42,14 @@ export async function releaseTorrentSession(
 }
 
 export function shouldPollTorrentSession(session) {
-  return Boolean(session?.id && session.status === "loading");
+  return torrentSessionPollDelay(session) !== null;
+}
+
+export function torrentSessionPollDelay(session) {
+  if (!session?.id) return null;
+  if (session.status === "loading") return 1000;
+  if (session.status === "ready") return 2000;
+  return null;
 }
 
 export function useSourceLookup() {
@@ -84,7 +91,8 @@ export function useSourceLookup() {
   }, []);
 
   useEffect(() => {
-    if (!shouldPollTorrentSession(session)) return undefined;
+    const pollDelay = torrentSessionPollDelay(session);
+    if (pollDelay === null) return undefined;
 
     let cancelled = false;
     const timer = setTimeout(async () => {
@@ -100,7 +108,7 @@ export function useSourceLookup() {
           setErrorCode(pollError.code || "");
         }
       }
-    }, 1000);
+    }, pollDelay);
 
     return () => {
       cancelled = true;
