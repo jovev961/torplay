@@ -2024,7 +2024,8 @@ a {
 }
 
 .videoPlayer:fullscreen,
-.videoPlayer:-webkit-full-screen {
+.videoPlayer:-webkit-full-screen,
+.videoPlayer.viewportFullscreen {
   width: 100vw;
   height: 100vh;
   height: 100dvh;
@@ -2032,35 +2033,47 @@ a {
   aspect-ratio: auto;
 }
 
+.videoPlayer.viewportFullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  border-radius: 0;
+}
+
 .videoPlayer:fullscreen video,
-.videoPlayer:-webkit-full-screen video {
+.videoPlayer:-webkit-full-screen video,
+.videoPlayer.viewportFullscreen video {
   position: absolute;
   inset: 0;
 }
 
 .videoPlayer:fullscreen .playerTopBar,
-.videoPlayer:-webkit-full-screen .playerTopBar {
+.videoPlayer:-webkit-full-screen .playerTopBar,
+.videoPlayer.viewportFullscreen .playerTopBar {
   padding-top: max(14px, env(safe-area-inset-top));
   padding-right: max(18px, env(safe-area-inset-right));
   padding-left: max(18px, env(safe-area-inset-left));
 }
 
 .videoPlayer:fullscreen .playerBottomBar,
-.videoPlayer:-webkit-full-screen .playerBottomBar {
+.videoPlayer:-webkit-full-screen .playerBottomBar,
+.videoPlayer.viewportFullscreen .playerBottomBar {
   padding-right: max(18px, env(safe-area-inset-right));
   padding-bottom: max(16px, env(safe-area-inset-bottom));
   padding-left: max(18px, env(safe-area-inset-left));
 }
 
 .videoPlayer:fullscreen .playerMenu,
-.videoPlayer:-webkit-full-screen .playerMenu {
+.videoPlayer:-webkit-full-screen .playerMenu,
+.videoPlayer.viewportFullscreen .playerMenu {
   right: max(9px, env(safe-area-inset-right));
   bottom: calc(60px + env(safe-area-inset-bottom));
   max-height: min(70dvh, calc(100dvh - 110px - env(safe-area-inset-top) - env(safe-area-inset-bottom)));
 }
 
 .videoPlayer:fullscreen .subtitleOverlay,
-.videoPlayer:-webkit-full-screen .subtitleOverlay {
+.videoPlayer:-webkit-full-screen .subtitleOverlay,
+.videoPlayer.viewportFullscreen .subtitleOverlay {
   right: max(5%, env(safe-area-inset-right));
   bottom: max(var(--subtitle-bottom-offset, 10%), calc(env(safe-area-inset-bottom) + 12px));
   left: max(5%, env(safe-area-inset-left));
@@ -3065,49 +3078,58 @@ footer {
 @media (pointer: coarse) {
   .videoPlayer:fullscreen .playerControls button,
   .videoPlayer:-webkit-full-screen .playerControls button,
+  .videoPlayer.viewportFullscreen .playerControls button,
   .videoPlayer:fullscreen .playerMenu button,
-  .videoPlayer:-webkit-full-screen .playerMenu button {
+  .videoPlayer:-webkit-full-screen .playerMenu button,
+  .videoPlayer.viewportFullscreen .playerMenu button {
     min-width: 44px;
     min-height: 44px;
   }
 
   .videoPlayer:fullscreen .volumeSlider,
-  .videoPlayer:-webkit-full-screen .volumeSlider {
+  .videoPlayer:-webkit-full-screen .volumeSlider,
+  .videoPlayer.viewportFullscreen .volumeSlider {
     display: none;
   }
 }
 
 @media (pointer: coarse) and (orientation: portrait) {
   .videoPlayer:fullscreen .playerMenu,
-  .videoPlayer:-webkit-full-screen .playerMenu {
+  .videoPlayer:-webkit-full-screen .playerMenu,
+  .videoPlayer.viewportFullscreen .playerMenu {
     bottom: calc(108px + env(safe-area-inset-bottom));
     max-height: min(70dvh, calc(100dvh - 158px - env(safe-area-inset-top) - env(safe-area-inset-bottom)));
   }
 
   .videoPlayer:fullscreen .playerControls,
-  .videoPlayer:-webkit-full-screen .playerControls {
+  .videoPlayer:-webkit-full-screen .playerControls,
+  .videoPlayer.viewportFullscreen .playerControls {
     display: grid;
     grid-template-columns: 1fr;
     gap: 2px;
   }
 
   .videoPlayer:fullscreen .controlGroup,
-  .videoPlayer:-webkit-full-screen .controlGroup {
+  .videoPlayer:-webkit-full-screen .controlGroup,
+  .videoPlayer.viewportFullscreen .controlGroup {
     width: 100%;
   }
 
   .videoPlayer:fullscreen .controlGroup:first-child,
-  .videoPlayer:-webkit-full-screen .controlGroup:first-child {
+  .videoPlayer:-webkit-full-screen .controlGroup:first-child,
+  .videoPlayer.viewportFullscreen .controlGroup:first-child {
     justify-content: flex-start;
   }
 
   .videoPlayer:fullscreen .controlGroup:last-child,
-  .videoPlayer:-webkit-full-screen .controlGroup:last-child {
+  .videoPlayer:-webkit-full-screen .controlGroup:last-child,
+  .videoPlayer.viewportFullscreen .controlGroup:last-child {
     justify-content: flex-end;
   }
 
   .videoPlayer:fullscreen .playerTime,
-  .videoPlayer:-webkit-full-screen .playerTime {
+  .videoPlayer:-webkit-full-screen .playerTime,
+  .videoPlayer.viewportFullscreen .playerTime {
     margin-right: auto;
   }
 }
