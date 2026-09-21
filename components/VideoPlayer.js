@@ -20,6 +20,7 @@ import { isRemotePlaybackSessionActive } from "../lib/remote-playback/client-sta
 import { remotePlaybackSource } from "../lib/remote-playback/source.js";
 import {
   isFullscreenActive,
+  lockFullscreenViewport,
   supportsFullscreen,
   toggleBrowserFullscreen,
 } from "../lib/video/fullscreen.js";
@@ -156,7 +157,8 @@ export default function VideoPlayer({
     tracks: [],
   });
   const [playbackRate, setPlaybackRate] = useState(1);
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [browserFullscreen, setBrowserFullscreen] = useState(false);
+  const [viewportFullscreen, setViewportFullscreen] = useState(false);
   const [fullscreenSupported, setFullscreenSupported] = useState(false);
   const [pipSupported, setPipSupported] = useState(false);
   const [progressError, setProgressError] = useState("");
@@ -167,6 +169,7 @@ export default function VideoPlayer({
   const subtitles = subtitleDiscovery.tracks;
   const subtitleUrl = `${baseUrl}/subtitles`;
   const subtitleStyleClass = subtitleAppearanceClassName(subtitleAppearance);
+  const isFullscreen = browserFullscreen || viewportFullscreen;
 
   const saveProgress = useCallback(async ({
     position = timelineRef.current.position,
@@ -378,13 +381,13 @@ export default function VideoPlayer({
     setPipSupported(Boolean(document.pictureInPictureEnabled && videoRef.current?.requestPictureInPicture));
     const video = videoRef.current;
     const updateFullscreenState = () => {
-      setIsFullscreen(isFullscreenActive(document, playerRef.current, video));
+      setBrowserFullscreen(isFullscreenActive(document, playerRef.current, video));
     };
     const updateFullscreenSupport = () => {
-      setFullscreenSupported(supportsFullscreen(playerRef.current, video));
+      setFullscreenSupported(supportsFullscreen(playerRef.current, { viewportFallback: true }));
     };
-    const onNativeFullscreenBegin = () => setIsFullscreen(true);
-    const onNativeFullscreenEnd = () => setIsFullscreen(false);
+    const onNativeFullscreenBegin = () => setBrowserFullscreen(true);
+    const onNativeFullscreenEnd = () => setBrowserFullscreen(false);
 
     updateFullscreenState();
     updateFullscreenSupport();
@@ -401,6 +404,23 @@ export default function VideoPlayer({
       video?.removeEventListener("webkitendfullscreen", onNativeFullscreenEnd);
     };
   }, []);
+
+  useEffect(() => {
+    if (!viewportFullscreen) return undefined;
+    const unlockViewport = lockFullscreenViewport(document);
+    const exitOnEscape = (event) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setViewportFullscreen(false);
+    };
+
+    document.addEventListener("keydown", exitOnEscape);
+
+    return () => {
+      document.removeEventListener("keydown", exitOnEscape);
+      unlockViewport();
+    };
+  }, [viewportFullscreen]);
 
   useEffect(() => {
     const cast = remotePlayback.castState;
@@ -725,7 +745,11 @@ export default function VideoPlayer({
 
   async function toggleFullscreen() {
     try {
-      await toggleBrowserFullscreen(document, playerRef.current, videoRef.current);
+      await toggleBrowserFullscreen(document, playerRef.current, {
+        viewportActive: viewportFullscreen,
+        enterViewport: () => setViewportFullscreen(true),
+        exitViewport: () => setViewportFullscreen(false),
+      });
     } catch (error) {
       setPlaybackError(`Fullscreen is unavailable: ${error.message}`);
     }
@@ -824,7 +848,7 @@ export default function VideoPlayer({
   return (
     <div className="playerStack">
       <div
-        className={`videoPlayer ${subtitleStyleClass} ${controlsVisible ? "controlsVisible" : "controlsHidden"}`}
+        className={`videoPlayer ${subtitleStyleClass} ${controlsVisible ? "controlsVisible" : "controlsHidden"} ${viewportFullscreen ? "viewportFullscreen" : ""}`}
         ref={playerRef}
         tabIndex="0"
         role="group"
