@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import net from "node:net";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import sharp from "sharp";
@@ -22,12 +23,14 @@ import { createStatusReporter, readRuntimeStatus } from "../platform/runtime/sta
 import { installedEnvironment, installedPaths } from "../scripts/windows-paths.js";
 import {
   restartInstalledRuntime,
+  runtimeOwnership,
+  runtimeStatusIsActive,
   startInstalledRuntime,
   stopInstalledRuntime,
   waitForInstalledRuntime,
 } from "../scripts/windows-control.js";
-import { attachInstalledRuntimeLifecycle, createRotatingLog } from "../scripts/windows-runner.js";
-import { EventEmitter } from "node:events";
+import { attachInstalledRuntimeLifecycle, createRotatingLog, runInstalledRuntime } from "../scripts/windows-runner.js";
+import { EventEmitter, once } from "node:events";
 
 test("Windows file versions are numeric and preserve beta build numbers", () => {
   assert.equal(windowsFileVersion("0.1.0-beta.2"), "0.1.0.2");
@@ -94,6 +97,7 @@ test("installed paths are writable-data based and remain configurable", () => {
   assert.equal(paths.trayScriptPath, path.join("C:\\Apps\\TorPlay", "runtime", "torplay-tray.ps1"));
   assert.equal(paths.trayLauncherPath, path.join("C:\\Apps\\TorPlay", "runtime", "torplay-tray.vbs"));
   assert.equal(paths.trayPidPath, path.join("D:\\TorPlayData", "runtime", "tray.pid"));
+  assert.equal(paths.lockPath, path.join("D:\\TorPlayData", "runtime", "home.lock"));
   assert.equal("COMPOSE_PROJECT_NAME" in environment, false);
   assert.equal("TORPLAY_DOCKER_WAIT_SECONDS" in environment, false);
 });
@@ -115,6 +119,18 @@ test("runtime status retains actionable failure details", async () => {
   }
 });
 
+test("runtime ownership rejects stale and mismatched process records", () => {
+  const status = { state: "ready", pid: 20, runnerPid: 10, instanceId: "instance" };
+  assert.equal(runtimeStatusIsActive({ ...status, state: "stopped" }), false);
+  assert.deepEqual(runtimeOwnership(status, {
+    pid: 20, runnerPid: 10, token: "instance",
+  }), { legacy: false, supervisorPid: 20, runnerPid: 10 });
+  assert.equal(runtimeOwnership(status, { pid: 20, runnerPid: 10, token: "other" }), null);
+  assert.deepEqual(runtimeOwnership({ state: "ready", pid: 20 }, null), {
+    legacy: true, supervisorPid: 20, runnerPid: null,
+  });
+});
+
 test("the control channel requests a graceful supervisor stop", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "torplay-control-"));
   const endpoint = path.join(directory, "control.sock");
@@ -122,9 +138,26 @@ test("the control channel requests a graceful supervisor stop", async () => {
   const control = await startControlServer({ endpoint, onStop: () => { stops += 1; } });
   try {
     assert.match(await sendControlCommand({ endpoint }), /^OK stopping/);
+    assert.match(await sendControlCommand({ endpoint }), /^OK stopping/);
     assert.equal(stops, 1);
   } finally {
     await control.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("the control channel bounds shutdown when a client keeps its socket open", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "torplay-control-drain-"));
+  const endpoint = path.join(directory, "control.sock");
+  const control = await startControlServer({ endpoint, closeDrainMs: 5 });
+  const socket = net.createConnection(endpoint);
+  try {
+    await once(socket, "connect");
+    await control.close();
+    if (!socket.destroyed) await once(socket, "close");
+    assert.equal(socket.destroyed, true);
+  } finally {
+    socket.destroy();
     await rm(directory, { recursive: true, force: true });
   }
 });
@@ -165,6 +198,48 @@ test("installed startup waits for a new healthy supervisor", async () => {
   assert.equal(readinessOptions.previousStartedAt, "old");
   assert.equal(result.started, true);
   assert.equal(result.snapshot.pid, 20);
+});
+
+test("installed startup ignores a reused PID from a stopped runtime", async () => {
+  const child = new EventEmitter();
+  child.unref = () => {};
+  let spawned = 0;
+  const result = await startInstalledRuntime({
+    paths: { statusPath: "status.json", launcherPath: "launcher.vbs", installDir: "C:\\TorPlay" },
+    spawnProcess: () => { spawned += 1; return child; },
+    readStatus: () => ({ pid: 10, startedAt: "old", state: "stopped" }),
+    isRunning: () => true,
+    waitForReady: async () => ({ pid: 20, startedAt: "new", state: "ready" }),
+  });
+  assert.equal(spawned, 1);
+  assert.equal(result.started, true);
+});
+
+test("installed startup refuses an unverified active process", async () => {
+  await assert.rejects(() => startInstalledRuntime({
+    paths: { statusPath: "status.json", lockPath: "home.lock" },
+    spawnProcess: () => assert.fail("an unverified runtime must not be duplicated"),
+    readStatus: () => ({ state: "ready", pid: 20, runnerPid: 10, instanceId: "instance" }),
+    readLock: () => ({ pid: 20, runnerPid: 10, token: "different" }),
+    isRunning: () => true,
+  }), /ownership could not be verified/);
+});
+
+test("installed startup cleans a partially orphaned runtime before launching", async () => {
+  const child = new EventEmitter();
+  child.unref = () => {};
+  const order = [];
+  const result = await startInstalledRuntime({
+    paths: { statusPath: "status.json", lockPath: "home.lock", launcherPath: "launcher.vbs", installDir: "C:\\TorPlay" },
+    readStatus: () => ({ state: "ready", pid: 20, runnerPid: 10, instanceId: "instance", startedAt: "old" }),
+    readLock: () => ({ pid: 20, runnerPid: 10, token: "instance" }),
+    isRunning: (pid) => pid === 20,
+    stopRuntime: async () => { order.push("stop"); },
+    spawnProcess: () => { order.push("start"); return child; },
+    waitForReady: async () => ({ pid: 30, state: "ready", startedAt: "new" }),
+  });
+  assert.deepEqual(order, ["stop", "start"]);
+  assert.equal(result.started, true);
 });
 
 test("installed startup reuses an existing healthy runtime", async () => {
@@ -233,6 +308,87 @@ test("installed stop is idempotent and restart finishes stop before start", asyn
   assert.deepEqual(order, ["stop", "start"]);
 });
 
+test("installed stop force-kills the validated runner process tree", async () => {
+  const running = new Set([10, 20]);
+  let invocation;
+  const result = await stopInstalledRuntime({
+    paths: { statusPath: "status.json", lockPath: "home.lock" },
+    readStatus: () => ({ state: "ready", pid: 20, runnerPid: 10, instanceId: "instance" }),
+    readLock: () => ({ pid: 20, runnerPid: 10, token: "instance" }),
+    isRunning: (pid) => running.has(pid),
+    sendControl: async () => { throw new Error("pipe unavailable"); },
+    spawnSyncProcess: (command, args) => {
+      invocation = [command, args];
+      running.clear();
+      return { status: 0 };
+    },
+    waitProcess: async () => {},
+  });
+  assert.deepEqual(invocation, ["taskkill.exe", ["/PID", "10", "/T", "/F"]]);
+  assert.deepEqual(result, { stopped: true, forced: true });
+});
+
+test("installed stop targets an orphaned supervisor when its runner is already gone", async () => {
+  const running = new Set([20]);
+  let targetPid;
+  const result = await stopInstalledRuntime({
+    paths: { statusPath: "status.json", lockPath: "home.lock" },
+    readStatus: () => ({ state: "ready", pid: 20, runnerPid: 10, instanceId: "instance" }),
+    readLock: () => ({ pid: 20, runnerPid: 10, token: "instance" }),
+    isRunning: (pid) => running.has(pid),
+    sendControl: async () => { throw new Error("pipe unavailable"); },
+    spawnSyncProcess: (_command, args) => {
+      targetPid = args[1];
+      running.clear();
+      return { status: 0 };
+    },
+    waitProcess: async () => {},
+  });
+  assert.equal(targetPid, "20");
+  assert.deepEqual(result, { stopped: true, forced: true });
+});
+
+test("installed stop waits for both supervisor and runner to exit", async () => {
+  const running = new Set([10, 20]);
+  let waits = 0;
+  const result = await stopInstalledRuntime({
+    paths: { statusPath: "status.json", lockPath: "home.lock" },
+    readStatus: () => ({ state: "ready", pid: 20, runnerPid: 10, instanceId: "instance" }),
+    readLock: () => ({ pid: 20, runnerPid: 10, token: "instance" }),
+    isRunning: (pid) => running.has(pid),
+    sendControl: async () => {},
+    waitProcess: async () => {
+      waits += 1;
+      if (waits === 1) running.delete(20);
+      if (waits === 2) running.delete(10);
+    },
+    spawnSyncProcess: () => assert.fail("graceful stop must not force termination"),
+  });
+  assert.deepEqual(result, { stopped: true, forced: false });
+  assert.equal(waits, 2);
+});
+
+test("installed stop never kills an unverified or stopped PID", async () => {
+  let kills = 0;
+  const dependencies = {
+    paths: { statusPath: "status.json", lockPath: "home.lock" },
+    isRunning: () => true,
+    sendControl: async () => { throw new Error("pipe unavailable"); },
+    spawnSyncProcess: () => { kills += 1; return { status: 0 }; },
+    waitProcess: async () => {},
+  };
+  assert.deepEqual(await stopInstalledRuntime({
+    ...dependencies,
+    readStatus: () => ({ state: "stopped", pid: 20 }),
+  }), { stopped: false, forced: false });
+  await assert.rejects(() => stopInstalledRuntime({
+    ...dependencies,
+    readStatus: () => ({ state: "ready", pid: 20, runnerPid: 10, instanceId: "instance" }),
+    readLock: () => ({ pid: 20, runnerPid: 10, token: "different" }),
+  }), /ownership could not be verified/);
+  assert.equal(kills, 0);
+});
+
 test("the Windows runner forwards termination once and detaches after exit", async () => {
   const processRef = new EventEmitter();
   processRef.exitCode = 0;
@@ -252,6 +408,44 @@ test("the Windows runner forwards termination once and detaches after exit", asy
   assert.equal(kills, 0);
   child.emit("exit", 0, null);
   assert.equal(processRef.listenerCount("SIGHUP"), 0);
+});
+
+test("the Windows runner identifies its process tree and exits with its supervisor", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "torplay-runner-"));
+  const child = new EventEmitter();
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+  child.exitCode = null;
+  const processRef = new EventEmitter();
+  processRef.pid = 10;
+  let exitCode = null;
+  processRef.exit = (code) => { exitCode = code; };
+  processRef.exitCode = 0;
+  try {
+    let childEnvironment;
+    runInstalledRuntime({
+      paths: {
+        installDir: directory,
+        dataDir: directory,
+        logPath: path.join(directory, "torplay.log"),
+        nodePath: "node.exe",
+        homeEntry: "home.mjs",
+      },
+      processRef,
+      createInstanceId: () => "instance",
+      spawnProcess: (_command, _args, options) => {
+        childEnvironment = options.env;
+        return child;
+      },
+    });
+    assert.equal(childEnvironment.TORPLAY_RUNNER_PID, "10");
+    assert.equal(childEnvironment.TORPLAY_RUNTIME_INSTANCE_ID, "instance");
+    child.exitCode = 0;
+    child.emit("exit", 0, null);
+    assert.equal(exitCode, 0);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test("release validation requires the packaged runtime and Windows native tools", async () => {
@@ -366,7 +560,11 @@ test("Windows tray controls the existing runtime without starting a second backe
   assert.doesNotMatch(tray, /TorPlayNativeIcon|FillEllipse|FillPolygon/);
   assert.match(tray, /Local\\TorPlayTray/);
   assert.match(tray, /Stop-TorPlayAndExit/);
-  assert.match(tray, /Invoke-TorPlayControl "stop"/);
+  assert.match(tray, /Start-TorPlayControl "stop"/);
+  assert.match(tray, /Windows\.Forms\.Timer/);
+  assert.match(tray, /controlProcess\.HasExited/);
+  assert.match(tray, /controlDeadline/);
+  assert.doesNotMatch(tray, /Start-Process[^\n]+-Wait/);
   assert.match(tray, /SystemEvents\]::add_SessionEnding/);
   assert.doesNotMatch(tray, /next start|server\.js|WebTorrent/);
   assert.match(launcher, /torplay-tray\.ps1/);

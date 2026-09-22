@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { controlEndpoint, sendControlCommand } from "./runtime-control.js";
@@ -20,6 +20,50 @@ function wait(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
+export function runtimeStatusIsActive(status) {
+  return Boolean(status?.pid && status.state !== "stopped");
+}
+
+function readRuntimeLock(lockPath) {
+  if (!lockPath || !existsSync(lockPath)) return null;
+  try {
+    return JSON.parse(readFileSync(lockPath, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+export function runtimeOwnership(status, lock) {
+  if (!runtimeStatusIsActive(status)) return null;
+  const modern = Boolean(status.instanceId || status.runnerPid);
+  if (modern && (!status.instanceId
+    || status.instanceId !== lock?.token
+    || status.pid !== lock?.pid
+    || status.runnerPid !== lock?.runnerPid)) return null;
+  return {
+    legacy: !modern,
+    supervisorPid: status.pid,
+    runnerPid: modern ? status.runnerPid : null,
+  };
+}
+
+function ownershipProcessesStopped(ownership, isRunning) {
+  return [ownership.supervisorPid, ownership.runnerPid]
+    .filter((pid, index, values) => pid && values.indexOf(pid) === index)
+    .every((pid) => !isRunning(pid));
+}
+
+function ownershipProcessesRunning(ownership, isRunning) {
+  return Boolean(ownership) && [ownership.supervisorPid, ownership.runnerPid]
+    .filter((pid, index, values) => pid && values.indexOf(pid) === index)
+    .every((pid) => isRunning(pid));
+}
+
+function ownershipHasRunningProcess(ownership, isRunning) {
+  return Boolean(ownership) && [ownership.supervisorPid, ownership.runnerPid]
+    .some((pid) => pid && isRunning(pid));
+}
+
 async function healthIsReady(fetchProcess) {
   try {
     const response = await fetchProcess("http://127.0.0.1/api/health", {
@@ -37,6 +81,7 @@ export async function waitForInstalledRuntime({
   previousStartedAt = null,
   fetchProcess = fetch,
   readStatus = readRuntimeStatus,
+  readLock = readRuntimeLock,
   isRunning = processIsRunning,
   waitProcess = wait,
   timeoutMs = 60_000,
@@ -52,7 +97,8 @@ export async function waitForInstalledRuntime({
     if (belongsToNewStart && snapshot.state === "error") {
       throw new Error(snapshot.lastError || "TorPlay failed while starting.");
     }
-    if (belongsToNewStart && snapshot.state === "ready" && isRunning(snapshot.pid)) {
+    const ownership = runtimeOwnership(snapshot, readLock(paths.lockPath));
+    if (belongsToNewStart && snapshot.state === "ready" && ownershipProcessesRunning(ownership, isRunning)) {
       if (await healthIsReady(fetchProcess)) return snapshot;
       lastFailure = "the health check is not ready";
     } else if (snapshot?.state) {
@@ -70,30 +116,46 @@ export async function stopInstalledRuntime({
   environment = process.env,
   spawnSyncProcess = spawnSync,
   readStatus = readRuntimeStatus,
+  readLock = readRuntimeLock,
   isRunning = processIsRunning,
   sendControl = sendControlCommand,
   waitProcess = wait,
 } = {}) {
   const status = readStatus(paths.statusPath);
-  if (!isRunning(status?.pid)) return { stopped: false, forced: false };
+  if (!runtimeStatusIsActive(status)) {
+    return { stopped: false, forced: false };
+  }
+  const ownership = runtimeOwnership(status, readLock(paths.lockPath));
+  if (ownership ? !ownershipHasRunningProcess(ownership, isRunning) : !isRunning(status.pid)) {
+    return { stopped: false, forced: false };
+  }
   try {
     await sendControl({ endpoint: controlEndpoint(installedEnvironment(paths, environment)) });
     for (let attempt = 0; attempt < 20; attempt += 1) {
-      if (!isRunning(status.pid)) return { stopped: true, forced: false };
+      const processesStopped = ownership
+        ? ownershipProcessesStopped(ownership, isRunning)
+        : !isRunning(status.pid);
+      if (processesStopped) return { stopped: true, forced: false };
       await waitProcess(250);
     }
   } catch {
-    // Fall back to terminating only the recorded TorPlay process tree.
+    // Fall back only when the recorded process ownership is trustworthy.
   }
-  const result = spawnSyncProcess("taskkill.exe", ["/PID", String(status.pid), "/T", "/F"], {
+  if (!ownership) {
+    throw new Error("TorPlay runtime ownership could not be verified. No process was terminated.");
+  }
+  const rootPid = ownership.runnerPid && isRunning(ownership.runnerPid)
+    ? ownership.runnerPid
+    : ownership.supervisorPid;
+  const result = spawnSyncProcess("taskkill.exe", ["/PID", String(rootPid), "/T", "/F"], {
     windowsHide: true,
     stdio: "ignore",
   });
-  if (result.error || result.status !== 0) {
+  if ((result.error || result.status !== 0) && !ownershipProcessesStopped(ownership, isRunning)) {
     throw new Error("TorPlay could not stop its existing process. See the runtime log for details.");
   }
   for (let attempt = 0; attempt < 20; attempt += 1) {
-    if (!isRunning(status.pid)) return { stopped: true, forced: true };
+    if (ownershipProcessesStopped(ownership, isRunning)) return { stopped: true, forced: true };
     await waitProcess(250);
   }
   throw new Error("TorPlay process remained active after forced shutdown. See the runtime log for details.");
@@ -104,22 +166,35 @@ export async function startInstalledRuntime({
   spawnProcess = spawn,
   fetchProcess = fetch,
   readStatus = readRuntimeStatus,
+  readLock = readRuntimeLock,
   isRunning = processIsRunning,
   waitForReady = waitForInstalledRuntime,
+  stopRuntime = stopInstalledRuntime,
 } = {}) {
   const existing = readStatus(paths.statusPath);
-  if (isRunning(existing?.pid)) {
-    if (existing.state === "ready" && await healthIsReady(fetchProcess)) {
-      return { started: false, snapshot: existing };
+  if (runtimeStatusIsActive(existing)) {
+    const ownership = runtimeOwnership(existing, readLock(paths.lockPath));
+    if (!ownership && isRunning(existing.pid)) {
+      throw new Error("TorPlay runtime ownership could not be verified. No new process was started.");
     }
-    const snapshot = await waitForReady({
-      paths,
-      previousStartedAt: null,
-      fetchProcess,
-      readStatus,
-      isRunning,
-    });
-    return { started: false, snapshot };
+    if (ownershipHasRunningProcess(ownership, isRunning)) {
+      if (!ownershipProcessesRunning(ownership, isRunning)) {
+        await stopRuntime({ paths, readStatus, readLock, isRunning });
+      } else {
+        if (existing.state === "ready" && await healthIsReady(fetchProcess)) {
+          return { started: false, snapshot: existing };
+        }
+        const snapshot = await waitForReady({
+          paths,
+          previousStartedAt: null,
+          fetchProcess,
+          readStatus,
+          readLock,
+          isRunning,
+        });
+        return { started: false, snapshot };
+      }
+    }
   }
   const child = spawnProcess("wscript.exe", [paths.launcherPath, "start"], {
     cwd: paths.installDir,
@@ -140,6 +215,7 @@ export async function startInstalledRuntime({
         previousStartedAt: existing?.startedAt || null,
         fetchProcess,
         readStatus,
+        readLock,
         isRunning,
       }),
       launchError,
@@ -164,7 +240,7 @@ export async function runtimeStatus({
   fetchProcess = fetch,
 } = {}) {
   const snapshot = readRuntimeStatus(paths.statusPath);
-  const running = processIsRunning(snapshot?.pid);
+  const running = runtimeStatusIsActive(snapshot) && processIsRunning(snapshot.pid);
   const components = {
     TorPlay: "ERROR",
     "LAN proxy": "ERROR",
@@ -219,8 +295,10 @@ export async function main(command = process.argv[2] || "status") {
 const isMain = process.argv[1]
   && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isMain) {
-  main().catch((error) => {
+  main().then(() => {
+    process.exit(0);
+  }, (error) => {
     console.error(`[TorPlay] ${error.message}`);
-    process.exitCode = 1;
+    process.exit(1);
   });
 }

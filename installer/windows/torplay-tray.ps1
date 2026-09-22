@@ -11,6 +11,7 @@ $installDir = Split-Path -Parent $runtimeDir
 $dataDir = Join-Path $env:LOCALAPPDATA "TorPlay"
 $stateDir = Join-Path $dataDir "runtime"
 $statusPath = Join-Path $stateDir "status.json"
+$lockPath = Join-Path $stateDir "home.lock"
 $trayPidPath = Join-Path $stateDir "tray.pid"
 $logPath = Join-Path $dataDir "logs\torplay.log"
 $nodePath = Join-Path $runtimeDir "node.exe"
@@ -84,8 +85,23 @@ function Get-TorPlayRuntimeStatus {
     }
     $status = Get-Content -LiteralPath $statusPath -Raw | ConvertFrom-Json
     $runtimePid = [int]$status.pid
-    if ($runtimePid -le 0) {
+    if ($runtimePid -le 0 -or [string]$status.state -eq "stopped") {
       return $null
+    }
+    $instanceProperty = $status.PSObject.Properties["instanceId"]
+    if ($null -ne $instanceProperty -and -not [string]::IsNullOrWhiteSpace([string]$instanceProperty.Value)) {
+      if (-not (Test-Path -LiteralPath $lockPath -PathType Leaf)) {
+        return $null
+      }
+      $lock = Get-Content -LiteralPath $lockPath -Raw | ConvertFrom-Json
+      if ([string]$lock.token -ne [string]$instanceProperty.Value -or [int]$lock.pid -ne $runtimePid) {
+        return $null
+      }
+      $runnerProperty = $status.PSObject.Properties["runnerPid"]
+      if ($null -eq $runnerProperty -or [int]$lock.runnerPid -ne [int]$runnerProperty.Value) {
+        return $null
+      }
+      Get-Process -Id ([int]$runnerProperty.Value) -ErrorAction Stop | Out-Null
     }
     Get-Process -Id $runtimePid -ErrorAction Stop | Out-Null
     return $status
@@ -96,20 +112,6 @@ function Get-TorPlayRuntimeStatus {
 
 function Test-TorPlayRunning {
   return $null -ne (Get-TorPlayRuntimeStatus)
-}
-
-function Invoke-TorPlayControl([string]$Command) {
-  if (-not (Test-Path -LiteralPath $nodePath -PathType Leaf)) {
-    throw "The TorPlay Node runtime is missing."
-  }
-  if (-not (Test-Path -LiteralPath $controlPath -PathType Leaf)) {
-    throw "The TorPlay control script is missing."
-  }
-  $arguments = '"{0}" {1}' -f $controlPath, $Command
-  $process = Start-Process -FilePath $nodePath -ArgumentList $arguments -WorkingDirectory $installDir -WindowStyle Hidden -Wait -PassThru
-  if ($process.ExitCode -ne 0) {
-    throw "TorPlay could not $Command. Open Logs for details."
-  }
 }
 
 function Test-StartWithWindows {
@@ -149,6 +151,14 @@ $startupItem.CheckOnClick = $false
 $menu.Items.Add([Windows.Forms.ToolStripSeparator]::new()) | Out-Null
 $exitItem = $menu.Items.Add("Exit")
 
+$script:controlProcess = $null
+$script:controlCommand = $null
+$script:controlDeadline = [DateTime]::MinValue
+$script:exitRequested = $false
+$script:exitStarted = $false
+$controlTimer = [Windows.Forms.Timer]::new()
+$controlTimer.Interval = 250
+
 $notifyIcon = [Windows.Forms.NotifyIcon]::new()
 $notifyIcon.Icon = $icon
 $notifyIcon.ContextMenuStrip = $menu
@@ -161,6 +171,90 @@ function Show-TrayError([string]$Message) {
   $notifyIcon.BalloonTipIcon = [Windows.Forms.ToolTipIcon]::Error
   $notifyIcon.ShowBalloonTip(5000)
 }
+
+function Set-ControlBusy([string]$Command) {
+  $runtimeItem.Enabled = $false
+  $stopItem.Enabled = $false
+  $statusItem.Text = switch ($Command) {
+    "start" { "Status: Starting..." }
+    "restart" { "Status: Restarting..." }
+    default { "Status: Stopping..." }
+  }
+}
+
+function Start-TorPlayControl([string]$Command) {
+  if ($null -ne $script:controlProcess) {
+    return $false
+  }
+  if (-not (Test-Path -LiteralPath $nodePath -PathType Leaf)) {
+    throw "The TorPlay Node runtime is missing."
+  }
+  if (-not (Test-Path -LiteralPath $controlPath -PathType Leaf)) {
+    throw "The TorPlay control script is missing."
+  }
+  $arguments = '"{0}" {1}' -f $controlPath, $Command
+  $script:controlProcess = Start-Process -FilePath $nodePath -ArgumentList $arguments -WorkingDirectory $installDir -WindowStyle Hidden -PassThru
+  $script:controlCommand = $Command
+  $timeoutSeconds = if ($Command -eq "stop") { 20 } else { 75 }
+  $script:controlDeadline = [DateTime]::UtcNow.AddSeconds($timeoutSeconds)
+  Set-ControlBusy $Command
+  $controlTimer.Start()
+  return $true
+}
+
+function Clear-TorPlayControl {
+  $controlTimer.Stop()
+  if ($null -ne $script:controlProcess) {
+    $script:controlProcess.Dispose()
+  }
+  $script:controlProcess = $null
+  $script:controlCommand = $null
+  $script:controlDeadline = [DateTime]::MinValue
+}
+
+function Complete-TorPlayControl([int]$ExitCode, [bool]$TimedOut) {
+  $completedCommand = $script:controlCommand
+  Clear-TorPlayControl
+  if ($TimedOut) {
+    Show-TrayError "TorPlay could not $completedCommand before the operation timed out. Open Logs for details."
+  } elseif ($ExitCode -ne 0) {
+    Show-TrayError "TorPlay could not $completedCommand. Open Logs for details."
+  }
+
+  if ($script:exitRequested) {
+    if ($completedCommand -eq "stop") {
+      [Windows.Forms.Application]::Exit()
+      return
+    }
+    try {
+      Start-TorPlayControl "stop" | Out-Null
+    } catch {
+      [Windows.Forms.Application]::Exit()
+    }
+    return
+  }
+  Update-TrayStatus
+}
+
+$controlTimer.add_Tick({
+  if ($null -eq $script:controlProcess) {
+    $controlTimer.Stop()
+    return
+  }
+  if ($script:controlProcess.HasExited) {
+    Complete-TorPlayControl $script:controlProcess.ExitCode $false
+    return
+  }
+  if ([DateTime]::UtcNow -ge $script:controlDeadline) {
+    try {
+      $script:controlProcess.Kill()
+      $script:controlProcess.WaitForExit(2000) | Out-Null
+    } catch {
+      # The helper may have exited between the timeout check and termination.
+    }
+    Complete-TorPlayControl -1 $true
+  }
+})
 
 function Update-TrayStatus {
   $runtimeStatus = Get-TorPlayRuntimeStatus
@@ -175,6 +269,9 @@ function Update-TrayStatus {
   } elseif ($state -eq "starting") {
     $statusItem.Text = "Status: Starting..."
     $runtimeItem.Text = "Restart TorPlay"
+  } elseif ($state -eq "stopping") {
+    $statusItem.Text = "Status: Stopping..."
+    $runtimeItem.Text = "Start TorPlay"
   } elseif ($running) {
     $statusItem.Text = "Status: Running"
     $runtimeItem.Text = "Restart TorPlay"
@@ -182,6 +279,7 @@ function Update-TrayStatus {
     $statusItem.Text = "Status: Stopped"
     $runtimeItem.Text = "Start TorPlay"
   }
+  $runtimeItem.Enabled = $true
   $stopItem.Enabled = $running
   $startupItem.Checked = Test-StartWithWindows
   $notifyIcon.Text = if ($state -eq "error") {
@@ -195,23 +293,27 @@ function Update-TrayStatus {
   }
 }
 
-$script:exitStarted = $false
-function Stop-TorPlayAndExit([bool]$ShowError) {
+function Stop-TorPlayAndExit {
   if ($script:exitStarted) {
     return
   }
   $script:exitStarted = $true
-  try {
-    Invoke-TorPlayControl "stop"
-  } catch {
-    if ($ShowError) {
-      Show-TrayError $_.Exception.Message
-    }
+  $script:exitRequested = $true
+  $statusItem.Text = "Status: Exiting..."
+  $runtimeItem.Enabled = $false
+  $stopItem.Enabled = $false
+  if ($null -ne $script:controlProcess) {
+    return
   }
-  [Windows.Forms.Application]::Exit()
+  try {
+    Start-TorPlayControl "stop" | Out-Null
+  } catch {
+    Show-TrayError $_.Exception.Message
+    [Windows.Forms.Application]::Exit()
+  }
 }
 
-$menu.add_Opening({ Update-TrayStatus })
+$menu.add_Opening({ if ($null -eq $script:controlProcess) { Update-TrayStatus } })
 $openItem.add_Click({ Start-Process "http://localhost" })
 $notifyIcon.add_DoubleClick({ Start-Process "http://localhost" })
 $logsItem.add_Click({
@@ -228,25 +330,23 @@ $logsItem.add_Click({
   }
 })
 $runtimeItem.add_Click({
+  if ($null -ne $script:controlProcess) { return }
   $command = if (Test-TorPlayRunning) { "restart" } else { "start" }
-  $statusItem.Text = "Status: Working..."
-  [Windows.Forms.Application]::DoEvents()
   try {
-    Invoke-TorPlayControl $command
+    Start-TorPlayControl $command | Out-Null
   } catch {
     Show-TrayError $_.Exception.Message
+    Update-TrayStatus
   }
-  Update-TrayStatus
 })
 $stopItem.add_Click({
-  $statusItem.Text = "Status: Stopping..."
-  [Windows.Forms.Application]::DoEvents()
+  if ($null -ne $script:controlProcess) { return }
   try {
-    Invoke-TorPlayControl "stop"
+    Start-TorPlayControl "stop" | Out-Null
   } catch {
     Show-TrayError $_.Exception.Message
+    Update-TrayStatus
   }
-  Update-TrayStatus
 })
 $startupItem.add_Click({
   try {
@@ -256,24 +356,35 @@ $startupItem.add_Click({
   }
   Update-TrayStatus
 })
-$exitItem.add_Click({ Stop-TorPlayAndExit $true })
+$exitItem.add_Click({ Stop-TorPlayAndExit })
 $sessionEndingHandler = [Microsoft.Win32.SessionEndingEventHandler]{
   param($sender, $eventArgs)
-  Stop-TorPlayAndExit $false
+  $script:exitRequested = $true
+  if ($null -eq $script:controlProcess) {
+    try {
+      Start-TorPlayControl "stop" | Out-Null
+    } catch {
+      # Windows is ending the session; do not block shutdown with UI.
+    }
+  }
 }
 [Microsoft.Win32.SystemEvents]::add_SessionEnding($sessionEndingHandler)
 
 try {
   if (-not (Test-TorPlayRunning)) {
     try {
-      Invoke-TorPlayControl "start"
+      Start-TorPlayControl "start" | Out-Null
     } catch {
       Show-TrayError $_.Exception.Message
     }
   }
-  Update-TrayStatus
+  if ($null -eq $script:controlProcess) {
+    Update-TrayStatus
+  }
   [Windows.Forms.Application]::Run()
 } finally {
+  $controlTimer.Stop()
+  $controlTimer.Dispose()
   [Microsoft.Win32.SystemEvents]::remove_SessionEnding($sessionEndingHandler)
   $notifyIcon.Visible = $false
   $notifyIcon.Dispose()

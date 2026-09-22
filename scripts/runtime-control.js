@@ -63,11 +63,16 @@ export function normalizeControlEndpoint(
 export function startControlServer({
   endpoint = controlEndpoint(),
   onStop,
+  closeDrainMs = 1_000,
 } = {}) {
   const resolvedEndpoint = normalizeControlEndpoint(endpoint);
+  const sockets = new Set();
+  let stopRequested = false;
 
   const server = net.createServer((socket) => {
     let input = "";
+    sockets.add(socket);
+    socket.once("close", () => sockets.delete(socket));
 
     socket.setEncoding("utf8");
 
@@ -83,8 +88,14 @@ export function startControlServer({
         return;
       }
 
-      socket.end("OK stopping\n");
-      void onStop?.();
+      if (stopRequested) {
+        socket.end("OK stopping\n");
+        return;
+      }
+      stopRequested = true;
+      socket.end("OK stopping\n", () => {
+        void onStop?.();
+      });
     });
   });
 
@@ -95,10 +106,21 @@ export function startControlServer({
       resolve({
         server,
         endpoint: resolvedEndpoint,
-        close: () =>
-          new Promise((done) => {
-            server.close(done);
-          }),
+        close: () => new Promise((done) => {
+          let finished = false;
+          const finish = () => {
+            if (finished) return;
+            finished = true;
+            clearTimeout(timer);
+            done();
+          };
+          const timer = setTimeout(() => {
+            for (const socket of sockets) socket.destroy();
+            finish();
+          }, closeDrainMs);
+          timer.unref?.();
+          server.close(finish);
+        }),
       });
     });
   });
