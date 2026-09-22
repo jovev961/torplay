@@ -105,15 +105,16 @@ function processIsRunning(pid, killProcess = process.kill) {
 export async function acquireRuntimeLock({
   lockPath = path.join(process.cwd(), ".data", "runtime", "home.lock"),
   pid = process.pid,
+  runnerPid = null,
+  token = randomUUID(),
   killProcess = process.kill,
 } = {}) {
   await mkdir(path.dirname(lockPath), { recursive: true });
-  const token = randomUUID();
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
       const handle = await open(lockPath, "wx");
-      await handle.writeFile(JSON.stringify({ pid, token, startedAt: new Date().toISOString() }));
+      await handle.writeFile(JSON.stringify({ pid, runnerPid, token, startedAt: new Date().toISOString() }));
       await handle.close();
       let released = false;
       return async () => {
@@ -305,7 +306,12 @@ export async function startHomeRuntime({
     url: formatHttpUrl(config.publicHostname, config.publicPort),
     logPath: environment.TORPLAY_LOG_PATH || null,
   });
-  const releaseLock = await acquireLockProcess({ lockPath: path.join(runtimeDir, "home.lock") });
+  const releaseLock = await acquireLockProcess({
+    lockPath: path.join(runtimeDir, "home.lock"),
+    pid: process.pid,
+    runnerPid: Number(environment.TORPLAY_RUNNER_PID) || null,
+    token: environment.TORPLAY_RUNTIME_INSTANCE_ID || undefined,
+  });
   const componentStates = { TorPlay: "WAITING", "LAN proxy": "WAITING", "mDNS": "WAITING" };
   const componentErrors = {};
   let nextProcess = null;
@@ -484,6 +490,7 @@ export async function startHomeRuntime({
     if (stopped) return;
     stopped = true;
     supervisionStarted = false;
+    reporter.write({ state: "stopping", lastError: null });
     healthMonitor?.stop();
     Object.values(recoveries).forEach((recovery) => recovery.disable());
     log("[TorPlay] Shutting down...");
@@ -579,6 +586,8 @@ async function main() {
   const environment = loadHomeEnvironment();
   const reporter = createStatusReporter(environment.TORPLAY_STATUS_PATH, {
     logPath: environment.TORPLAY_LOG_PATH || null,
+    runnerPid: Number(environment.TORPLAY_RUNNER_PID) || null,
+    instanceId: environment.TORPLAY_RUNTIME_INSTANCE_ID || null,
   });
   try {
     runtime = await startHomeRuntime({ environment, statusReporter: reporter });

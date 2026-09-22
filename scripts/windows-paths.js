@@ -15,6 +15,7 @@ export function installedPaths({
     torrentPath: path.join(resolvedData, "cache", "torrents"),
     subtitlePath: path.join(resolvedData, "cache", "subtitles"),
     runtimeDir: path.join(resolvedData, "runtime"),
+    lockPath: path.join(resolvedData, "runtime", "home.lock"),
     statusPath: path.join(resolvedData, "runtime", "status.json"),
     logPath: path.join(resolvedData, "logs", "torplay.log"),
     serverEntry: path.join(resolvedInstall, "app", "server.js"),

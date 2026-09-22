@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -123,7 +123,15 @@ test("runtime locks reject a live duplicate and release cleanly", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "torplay-home-lock-"));
   const lockPath = path.join(directory, "home.lock");
   try {
-    const release = await acquireRuntimeLock({ lockPath, pid: 1234, killProcess: () => {} });
+    const release = await acquireRuntimeLock({
+      lockPath, pid: 1234, runnerPid: 1200, token: "instance", killProcess: () => {},
+    });
+    const lock = JSON.parse(await readFile(lockPath, "utf8"));
+    assert.deepEqual(
+      { pid: lock.pid, runnerPid: lock.runnerPid, token: lock.token },
+      { pid: 1234, runnerPid: 1200, token: "instance" },
+    );
+    assert.match(lock.startedAt, /^\d{4}-\d{2}-\d{2}T/);
     await assert.rejects(
       () => acquireRuntimeLock({ lockPath, pid: 5678, killProcess: () => {} }),
       /already running/,
