@@ -58,12 +58,13 @@ export default function SourcePanel({
         </div>
       ) : lookup.error ? <div className="notice error" role="alert">{lookup.error}</div> : null}
       {lookup.searching ? <div className="notice">Searching sources…</div> : null}
-      {!lookup.searching && lookup.hasSearched && lookup.results.length === 0 && !lookup.error ? (
+      {!lookup.searching && lookup.hasSearched && lookup.results.length === 0 && !lookup.usenetResults?.length && !lookup.error ? (
         <div className="notice">No usable authorized sources were found.</div>
       ) : null}
 
       {lookup.results.length > 0 && !lookup.session ? (
         <div className="sourceResults" aria-live="polite">
+          <h3>Torrents</h3>
           {lookup.results.map((result) => (
             <article className="sourceResult" key={result.id}>
               <div>
@@ -92,6 +93,56 @@ export default function SourcePanel({
               </button>
             </article>
           ))}
+        </div>
+      ) : null}
+
+      {!lookup.session && (lookup.usenetEnabled || lookup.usenetJobs?.length > 0) ? (
+        <div className="sourceResults" aria-live="polite">
+          <h3>Usenet</h3>
+          {lookup.usenetEnabled ? <label>
+            Upload NZB
+            <input type="file" accept=".nzb,application/x-nzb,application/xml"
+              disabled={lookup.startingId !== null}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) void lookup.uploadNzb(file);
+                event.target.value = "";
+              }} />
+          </label> : null}
+          {lookup.usenetResults?.map((result) => (
+            <article className="sourceResult" key={result.id}>
+              <div><h3>{result.title}</h3><div className="metadata">
+                <span>NZB · {result.indexer}</span>
+                {result.size ? <span>{formatFileSize(result.size)}</span> : null}
+                {result.category ? <span>{result.category}</span> : null}
+              </div></div>
+              <button className="primaryButton compact" type="button"
+                disabled={lookup.startingId !== null} onClick={() => lookup.startUsenet(result.id)}>
+                {lookup.startingId === result.id ? "Submitting…" : "Prepare with TorBox"}
+              </button>
+            </article>
+          ))}
+          {lookup.usenetJobs?.map((job) => (
+            <article className="sourceResult" key={job.id}>
+              <div><h3>{job.title}</h3><span>TorBox Usenet job</span></div>
+              <div>
+                <button type="button" onClick={() => lookup.resumeUsenet(job.id)}>Resume</button>
+                <button type="button" onClick={() => lookup.deleteUsenet(job.id)}>Delete job</button>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : null}
+      {!lookup.session && lookup.usenetJob ? (
+        <div className="notice" role="status">
+          Preparing Usenet media through TorBox: {lookup.usenetJob.status}
+          {lookup.usenetJob.progress != null ? ` · ${Math.round(lookup.usenetJob.progress * 100)}%` : ""}
+          {lookup.usenetJob.message ? ` · ${lookup.usenetJob.message}` : ""}
+          {lookup.usenetJob.status === "timed-out"
+            ? " · Preparation is taking too long. Resume later to check the job." : ""}
+          <button type="button" onClick={() => lookup.deleteUsenet(lookup.usenetJob.id)}>
+            {lookup.usenetJob.status === "ready" ? "Delete job" : "Cancel and delete job"}
+          </button>
         </div>
       ) : null}
 
@@ -145,7 +196,8 @@ export default function SourcePanel({
                 />
                 {lookup.session.backend === "debrid" ? (
                   <div className="bufferStatus" aria-live="polite">
-                    Ready through {lookup.session.provider === "torbox" ? "TorBox" : "Real-Debrid"}
+                    Ready through {lookup.session.sourceType === "usenet" ? "TorBox Usenet"
+                      : lookup.session.provider === "torbox" ? "TorBox" : "Real-Debrid"}
                   </div>
                 ) : <div className="bufferStatus" aria-live="polite">
                   <div>

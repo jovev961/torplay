@@ -109,3 +109,10 @@ If `TORPLAY_PUBLIC_PORT` is changed for the manual source runtime, recreate its 
 | `TORPLAY_STANDALONE_BUILD` | Unset | Internal release flag used by `npm run release:windows`; do not set for ordinary builds. |
 
 Variables such as `TORPLAY_INSTALL_DIR`, `TORPLAY_DATA_DIR`, `TORPLAY_SERVER_ENTRY`, `TORPLAY_RUNTIME_DIR`, `TORPLAY_STATUS_PATH`, `TORPLAY_LOG_PATH`, and `TORPLAY_CONTROL_ENDPOINT` are installer/runtime integration details. The Windows launcher supplies them automatically and normal users should not add them to `torplay.env`.
+# Optional Usenet through TorBox
+
+Usenet is disabled by default. Connect a TorBox API key in Settings → Services, then enable Usenet in the optional Usenet card. A TorBox account with Usenet support is required. Add a public HTTPS Newznab indexer with its API key to search NZBs, or upload a lawful `.nzb` file from the source panel. Torrent and Usenet results appear separately; TorPlay does not provide an indexer or a Usenet subscription.
+
+After you select an NZB, TorBox downloads and processes it remotely. Preparation can take time. Once ready, TorPlay streams only requested byte ranges of the chosen video file through its existing media endpoint, including to LAN clients. TorPlay does not store the complete video locally. TorPlay stores its job reference in the existing SQLite database so it can resume after restart. Stop releases the playback session; **Delete job** removes the TorBox job. Only jobs created by TorPlay can be deleted from TorPlay.
+
+Newznab API keys and TorBox credentials stay on the server in private configuration files. Newznab URLs must use public HTTPS hosts; local/private indexer URLs and cross-origin NZB download redirects are rejected. NZB files are limited to 2 MB. If TorBox reports that Usenet is unavailable for the account, the settings status and job action show that state. Indexer authentication, processing failure, and missing requested media are reported separately where TorBox provides enough information.

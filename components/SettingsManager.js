@@ -11,6 +11,7 @@ import styles from "./SettingsManager.module.css";
 import NetworkAccess from "./NetworkAccess.js";
 import TorrentIndexerManager from "./TorrentIndexerManager.js";
 import DebridSettings from "./DebridSettings.js";
+import UsenetSettings from "./UsenetSettings.js";
 
 const statusLabels = {
   valid: "Valid",
@@ -349,6 +350,7 @@ export default function SettingsManager() {
           <div className={styles.sectionHeading}><span>02</span><div><h2>Services</h2><p>Metadata, source discovery, debrid playback, and external search integrations.</p></div></div>
           <div className={styles.providerGrid}>{serviceProviders.map(providerCard)}</div>
           <DebridSettings canEdit={snapshot.canEdit} section="services" />
+          <UsenetSettings />
         </section> : null}
 
         {selectedSection === "torrent-sources" ? <section className={styles.settingsSection} id="torrent-sources">
