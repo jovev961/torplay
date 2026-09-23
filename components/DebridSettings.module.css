@@ -1,0 +1,12 @@
+.layout { display: grid; gap: 1.25rem; margin-top: 1.5rem; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 1rem; }
+.card { border: 1px solid var(--border, #4b5563); border-radius: 1rem; padding: 1.25rem; display: grid; gap: .8rem; }
+.card h3, .card p { margin: 0; }
+.card label { display: grid; gap: .35rem; }
+.card select, .card input[type="password"] { width: 100%; padding: .65rem; border-radius: .5rem; }
+.check { display: flex !important; align-items: center; }
+.actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+.actions button, .card > button, .key button { padding: .55rem .85rem; border-radius: .5rem; cursor: pointer; }
+.key { display: grid; gap: .5rem; }
+.code { padding: .75rem; border-radius: .5rem; background: rgba(128, 128, 128, .12); }
+.code strong { font-size: 1.35rem; letter-spacing: .12em; }

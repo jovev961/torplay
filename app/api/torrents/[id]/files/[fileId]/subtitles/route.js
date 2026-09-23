@@ -1,4 +1,4 @@
-import { getVideoFile } from "../../../../../../../lib/torrent/manager.js";
+import { getPlaybackVideoFile } from "../../../../../../../lib/debrid/session.js";
 import {
   getSubtitleDiscovery,
   publicSubtitleDiscovery,
@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 
 async function match(context) {
   const { id, fileId } = await context.params;
-  return { id, fileId, match: getVideoFile(id, fileId) };
+  return { id, fileId, match: getPlaybackVideoFile(id, fileId) };
 }
 
 export async function POST(request, context) {

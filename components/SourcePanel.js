@@ -87,7 +87,7 @@ export default function SourcePanel({
                 onClick={() => lookup.start(result.id)}
               >
                 {lookup.startingId === result.id
-                  ? "Starting…"
+                  ? "Resolving playback…"
                   : result.verification === "verified" ? "Use source" : "Verify & use"}
               </button>
             </article>
@@ -99,6 +99,11 @@ export default function SourcePanel({
         <div className="notice">
           Connecting to peers and loading torrent metadata… {lookup.session.peers ?? 0} peers connected
           {discovery ? ` · ${discovery.trackerCount} trackers · DHT ${discovery.dhtAnnounced ? "active" : "starting"}` : ""}.
+        </div>
+      ) : null}
+      {lookup.session?.resolution?.length ? (
+        <div className="notice" role="status">
+          {lookup.session.resolution.map((step) => `${step.provider === "local" ? "Local BitTorrent" : step.provider === "torbox" ? "TorBox" : "Real-Debrid"}: ${step.status}`).join(" · ")}
         </div>
       ) : null}
       {noReachablePeers ? (
@@ -138,7 +143,11 @@ export default function SourcePanel({
                   title={playerTitle}
                   {...playback}
                 />
-                <div className="bufferStatus" aria-live="polite">
+                {lookup.session.backend === "debrid" ? (
+                  <div className="bufferStatus" aria-live="polite">
+                    Ready through {lookup.session.provider === "torbox" ? "TorBox" : "Real-Debrid"}
+                  </div>
+                ) : <div className="bufferStatus" aria-live="polite">
                   <div>
                     <span>Downloaded {formatFileSize(selectedFile.downloaded)} of {formatFileSize(selectedFile.size)}</span>
                     <span>{formatSpeed(lookup.session.downloadSpeed)} · {lookup.session.peers ?? 0} peers</span>
@@ -146,7 +155,7 @@ export default function SourcePanel({
                   <progress value={selectedFile.progress} max={1}>
                     {Math.round(selectedFile.progress * 100)}%
                   </progress>
-                </div>
+                </div>}
               </div>
             ) : (
               <div className="videoPlaceholder">Choose a video file to begin.</div>

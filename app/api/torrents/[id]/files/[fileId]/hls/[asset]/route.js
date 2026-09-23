@@ -4,8 +4,8 @@ import path from "node:path";
 import { Readable } from "node:stream";
 import {
   getActiveConversion,
-  getVideoFile,
 } from "../../../../../../../../lib/torrent/manager.js";
+import { getPlaybackVideoFile } from "../../../../../../../../lib/debrid/session.js";
 import { parseByteRange } from "../../../../../../../../lib/video/range.js";
 import { hlsAssetExists } from "../../../../../../../../lib/video/transcode.js";
 import {
@@ -24,7 +24,7 @@ async function respond(request, context, includeBody) {
     return Response.json({ code: "INVALID_ASSET", error: "Invalid HLS asset." }, { status: 400 });
   }
 
-  const match = getVideoFile(id, fileId);
+  const match = getPlaybackVideoFile(id, fileId);
   if (!match) {
     return Response.json({ code: "NOT_FOUND", error: "Playable video file not found." }, { status: 404 });
   }

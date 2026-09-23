@@ -10,6 +10,7 @@ import {
 import styles from "./SettingsManager.module.css";
 import NetworkAccess from "./NetworkAccess.js";
 import TorrentIndexerManager from "./TorrentIndexerManager.js";
+import DebridSettings from "./DebridSettings.js";
 
 const statusLabels = {
   valid: "Valid",
@@ -381,6 +382,7 @@ export default function SettingsManager() {
             <div><span>Buffer target</span><strong>{snapshot.playback.bufferAheadSeconds} seconds</strong></div>
             <div><span>Subtitle cache</span><strong>{snapshot.playback.subtitleCacheDays} days</strong></div>
           </div>
+          <DebridSettings canEdit={snapshot.canEdit} />
           <p className={styles.sectionNote}>Network ports, storage paths, trackers, and executable overrides remain owner-managed runtime configuration.</p>
         </section> : null}
 

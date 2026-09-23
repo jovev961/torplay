@@ -2,7 +2,7 @@
 
 TorPlay is a self-hosted web app for discovering and streaming public-domain, Creative Commons, or otherwise authorized torrent video. Search, torrent traffic, media conversion, provider credentials, profiles, and watch history remain on the TorPlay computer; browsers connect only to the web app.
 
-TorPlay includes movie and TV discovery, optional TorPlay Tested Sources, community Cardigann and custom Torznab sources, server-side WebTorrent streaming, profiles and Continue Watching, subtitles, autoplay, Google Cast and AirPlay controls, native HTTP Range playback, and FFmpeg-backed playback for additional video formats.
+TorPlay includes movie and TV discovery, optional TorPlay Tested Sources, community Cardigann and custom Torznab sources, server-side WebTorrent streaming, optional Real-Debrid and TorBox playback, profiles and Continue Watching, subtitles, autoplay, Google Cast and AirPlay controls, native HTTP Range playback, and FFmpeg-backed playback for additional video formats.
 
 > Use TorPlay only with content you are legally permitted to download and view.
 
@@ -15,6 +15,8 @@ The self-contained Windows installer does not require Node.js, npm, Docker, Jack
 3. Wait while TorPlay starts. The installer opens the first-time setup page automatically.
 4. Paste a TMDB **API Read Access Token** from [TMDB API settings](https://www.themoviedb.org/settings/api), test it, and finish setup.
 5. When you are ready to search authorized content, open **Settings → Torrent Sources** and choose a TorPlay Tested Source, explore community Cardigann indexers, or add a custom Torznab source. None are added automatically.
+
+Optional debrid accounts can be connected under **Settings → Playback**. TorPlay still uses your selected torrent sources, and local BitTorrent remains the default. See [Configuration](docs/configuration.md) for playback modes and cache behavior.
 
 TorPlay then opens at [http://localhost](http://localhost). Other devices on the same private household network can use [http://torplay.local](http://torplay.local). The system-tray icon provides Open, Logs, Start/Restart, Stop, login-startup, Retry, and Exit controls.
 

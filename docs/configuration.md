@@ -11,6 +11,16 @@ On a fresh launch, TorPlay redirects provider-dependent pages to **Setup** to va
 
 TorPlay stores service Settings in the runtime configuration file and source choices in adjacent private files. Writes are atomic, with restricted permissions where the operating system supports them. Credentials supplied by the host environment remain read-only. Provider changes take effect immediately. Do not commit real credentials.
 
+## Optional debrid playback
+
+Open **Settings → Playback** to connect Real-Debrid or TorBox and choose a method. **Local BitTorrent Only** is the default and makes no debrid calls. **Prefer Debrid** checks the selected provider first, then the other provider; if neither has the requested file, it uses local BitTorrent when local fallback is enabled. **Debrid Only** never starts a local torrent. Provider order can be reversed. Debrid services are playback backends, not torrent sources; keep your existing source choices.
+
+TorPlay uses only immediately available remote files. A TorBox cache hit may create an account resource with TorBox's cached-only flag before requesting the exact movie or episode file. Real-Debrid's documented API does not currently provide a global cache lookup, so TorPlay uses a matching **completed torrent already in your account** and skips unknown hashes. An uncached result continues to the next backend under your selected method; TorPlay does not start an uncached remote download. Multi-file packs are matched by the requested episode, and an ambiguous match is never selected automatically.
+
+Real-Debrid uses its official open-source device authorization flow. TorBox supports device authorization and a manually entered API key. Connection and test status are shown without returning credentials to the browser. TorPlay stores debrid credentials and playback policy in a private, atomic `debrid-config.json` beside the runtime configuration file; in development this is beside `.env.local`, and in installed Windows or Linux runtimes it is in the persistent configuration directory. Keep that file in private backups and never commit it. TorBox requires an API token in its download-link request; TorPlay sends it only to TorBox from the server, never to the browser or logs. The browser and LAN receivers stream through TorPlay's session URLs.
+
+Neither TorPlay nor a debrid connection includes a provider subscription or guarantees a torrent is cached. Connecting a provider does not change the legal status of content.
+
 ## Required providers
 
 Create a TMDB account, follow the official [TMDB API getting-started guide](https://developer.themoviedb.org/docs/getting-started), and copy the **API Read Access Token** from [TMDB API settings](https://www.themoviedb.org/settings/api). TorPlay does not accept the shorter v3 API key in this field.
