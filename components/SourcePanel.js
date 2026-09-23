@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { findEpisodeFile, findLargestFile } from "../lib/video/episode.js";
-import { episodeFilePresentation, formatFileSize } from "../lib/video/episode-display.js";
+import { episodeFileCardModel, episodeFilePresentation, formatFileSize } from "../lib/video/episode-display.js";
 import VideoPlayer from "./VideoPlayer.js";
 
 function formatSpeed(value) {
@@ -18,9 +18,16 @@ export default function SourcePanel({
   episodeChoices = [],
   playback = {},
 }) {
-  const [packScope, setPackScope] = useState("episode");
+  const [downloadFileIds, setDownloadFileIds] = useState(null);
+  const [requestedDownloadFileId, setRequestedDownloadFileId] = useState(null);
+  const [expandedFileId, setExpandedFileId] = useState(null);
+  const reviewId = lookup.debridJob?.resourceId;
+  const selectedDownloadIds = downloadFileIds?.resourceId === reviewId ? downloadFileIds.ids : null;
+  const selectedRequestedFileId = requestedDownloadFileId?.resourceId === reviewId
+    ? requestedDownloadFileId.id : null;
   const suggestedFile = lookup.session?.status === "ready" && episode
-    ? findEpisodeFile(lookup.session.files, episode.season, episode.number)
+    ? lookup.session.files.find((file) => file.id === lookup.session.suggestedFileId)
+      || findEpisodeFile(lookup.session.files, episode.season, episode.number)
     : null;
   const defaultMovieFile = lookup.session?.status === "ready" && !episode
     ? findLargestFile(lookup.session.files)
@@ -82,19 +89,18 @@ export default function SourcePanel({
                   <h4>Download with {provider === "torbox" ? "TorBox" : "Real-Debrid"}</h4>
                   <p>Prepare this release in your provider account. You can leave this page while it downloads.</p>
                 </div>
-                {provider === "real-debrid" && lookup.debridChoice.seasonPack ? (
-                  <label className="debridChoiceScope">What to download
-                    <select value={packScope} onChange={(event) => setPackScope(event.target.value)}>
-                      <option value="episode">Only the current episode</option>
-                      <option value="all">All identified episodes</option>
-                    </select>
-                  </label>
-                ) : null}
+                {provider === "real-debrid" && lookup.debridChoice.seasonPack
+                  ? <p className="debridChoiceHint">Review the pack&apos;s video files before Real-Debrid starts downloading them.</p> : null}
                 {provider === "torbox" && lookup.debridChoice.seasonPack
-                  ? <p className="debridChoiceHint">TorBox may download the whole pack. Playback will select this episode.</p> : null}
+                  ? <p className="debridChoiceHint">TorBox downloads the pack as one resource. You can choose an episode file when it is ready.</p> : null}
                 <button className="debridChoiceSecondary" type="button" disabled={lookup.startingId !== null}
-                  onClick={() => lookup.start(lookup.debridChoice.resultId, "remote", provider,
-                    provider === "real-debrid" ? packScope : "episode")}>
+                  onClick={() => {
+                    if (provider === "torbox" && lookup.debridChoice.seasonPack
+                      && !window.confirm("TorBox may download this entire pack. Continue?")) return;
+                    lookup.start(lookup.debridChoice.resultId, "remote", provider,
+                      provider === "real-debrid" && lookup.debridChoice.seasonPack ? "all" : "episode",
+                      provider === "torbox" && lookup.debridChoice.seasonPack);
+                  }}>
                   Download with {provider === "torbox" ? "TorBox" : "Real-Debrid"}
                 </button>
               </div>
@@ -109,6 +115,35 @@ export default function SourcePanel({
             {lookup.debridJob.progress != null ? ` · ${Math.round(lookup.debridJob.progress * 100)}%` : ""}
           </p>
           <p>You can leave this page. The provider job remains in <Link href="/debrid-library">Debrid Library</Link>.</p>
+          {lookup.debridJob.status === "awaiting-selection" ? <div className="debridFileReview">
+            <strong>Choose video files for Real-Debrid</strong>
+            <p>Video files are preselected. Review the list, identify the requested episode, then confirm. Real-Debrid starts downloading after confirmation.</p>
+            {lookup.debridJob.files.filter((file) => lookup.debridJob.suggestedSelectionIds.includes(file.providerId))
+              .map((file) => {
+                const checked = (selectedDownloadIds || lookup.debridJob.suggestedSelectionIds).includes(file.providerId);
+                return <div className="debridFileReviewRow" key={file.providerId}>
+                  <label><input type="checkbox" checked={checked} onChange={() => setDownloadFileIds(() => {
+                    const ids = selectedDownloadIds || lookup.debridJob.suggestedSelectionIds;
+                    return { resourceId: reviewId, ids: checked
+                      ? ids.filter((id) => id !== file.providerId) : [...ids, file.providerId] };
+                  })} /> {file.path} · {formatFileSize(file.size)}</label>
+                  <label><input type="radio" name="requested-debrid-episode" checked={selectedRequestedFileId === file.providerId}
+                    onChange={() => setRequestedDownloadFileId({ resourceId: reviewId, id: file.providerId })} /> Requested episode</label>
+                </div>;
+              })}
+            <button className="primaryButton compact" type="button"
+              disabled={!selectedRequestedFileId || !(selectedDownloadIds || lookup.debridJob.suggestedSelectionIds).includes(selectedRequestedFileId)}
+              onClick={() => void lookup.confirmDebridFiles(selectedDownloadIds || lookup.debridJob.suggestedSelectionIds,
+                selectedRequestedFileId)}>Confirm and download</button>
+          </div> : null}
+          {lookup.debridJob.status === "ready" && !lookup.debridJob.selectedFileId
+            && lookup.debridJob.mediaContext?.type === "show" ? <div className="debridFileReview">
+              <strong>Choose the requested episode file</strong>
+              {lookup.debridJob.files.map((file) => <div className="debridFileReviewRow" key={file.providerId}>
+                <span>{file.path} · {formatFileSize(file.size)}{file.selected ? "" : " · Not downloaded by Real-Debrid"}</span>
+                <button type="button" onClick={() => void lookup.mapDebridFile(file.providerId)}>Use for this episode</button>
+              </div>)}
+            </div> : null}
           {lookup.debridChoice?.localAllowed ? <button type="button" onClick={() => lookup.start(lookup.debridChoice.resultId, "local")}>Watch Now with TorPlay instead</button> : null}
         </div>
       ) : null}
@@ -271,24 +306,32 @@ export default function SourcePanel({
             <div className="episodeFileList" aria-label="Episodes in this source">
               {episodeFiles.map(({ file, display }) => {
                 const active = selectedFile?.id === file.id;
-                const primary = `${display.code ? `${display.code} · ` : ""}${display.title}`;
+                const { primary, expandable } = episodeFileCardModel(display);
+                const expansionKey = `${lookup.session.id}:${file.id}`;
+                const expanded = expandedFileId === expansionKey;
                 return (
-                  <button
+                  <div
                     className={active ? "episodeFileChoice active" : "episodeFileChoice"}
-                    type="button"
                     key={file.id}
-                    title={display.fullPath}
-                    aria-current={active ? "true" : undefined}
-                    aria-label={`${primary}. ${display.technical.join(", ")}. ${display.filename}`}
-                    onClick={() => lookup.setSelectedFileId(file.id)}
                   >
-                    <span className="episodeFileHeading">
-                      <strong>{primary}</strong>
-                      {active ? <span className="playingBadge">Playing</span> : null}
-                    </span>
-                    <small>{display.technical.join(" · ")}</small>
-                    <span className="episodeFilename">{display.filename}</span>
-                  </button>
+                    <button className="episodeFileSelect" type="button"
+                      aria-current={active ? "true" : undefined}
+                      aria-label={`${primary}. ${display.technical.join(", ")}. Select file`}
+                      onClick={() => void (lookup.selectEpisodeFile || lookup.setSelectedFileId)(file.id)}>
+                      <span className="episodeFileHeading">
+                        <strong className={!display.recognized ? "unidentifiedFileName" : ""}>{primary}</strong>
+                        {active ? <span className="playingBadge">Playing</span> : null}
+                      </span>
+                      <small>{display.technical.join(" · ")}</small>
+                      {display.recognized ? <span className="episodeFilename">{display.filename}</span>
+                        : <span className="episodeFilename">Unidentified episode</span>}
+                    </button>
+                    {expandable ? <button className="episodeFileExpand" type="button"
+                      aria-expanded={expanded} onClick={() => setExpandedFileId(expanded ? null : expansionKey)}>
+                      {expanded ? "Hide full name" : "Show full name"}
+                    </button> : null}
+                    {expanded ? <div className="episodeFileFullName">{display.fullPath}</div> : null}
+                  </div>
                 );
               })}
             </div>

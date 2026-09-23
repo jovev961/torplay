@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  episodeFileCardModel,
   episodeFilePresentation,
   formatEpisodeCode,
   formatFileSize,
@@ -17,6 +18,19 @@ test("recognizes common episode filename and directory conventions", () => {
   );
   assert.equal(parseEpisodeIdentity("Show/bonus-feature.mkv"), null);
   assert.equal(formatEpisodeCode(1, 2), "S01E02");
+});
+
+test("unidentified cards lead with the real filename and reveal long paths only", () => {
+  const short = episodeFilePresentation({ name: "OP-1.mkv", size: 40_000_000 });
+  assert.deepEqual(episodeFileCardModel(short), { primary: "OP-1.mkv", expandable: false });
+  const long = episodeFilePresentation({ name: "OP-29 L@mBerT.mkv",
+    relativePath: "One Piece Season 1 2 3 [Eng Subbed]/Season_1 First_Voyage/OP-29 L@mBerT.mkv",
+    size: 40_000_000 });
+  assert.equal(episodeFileCardModel(long).primary, "OP-29 L@mBerT.mkv");
+  assert.equal(episodeFileCardModel(long).expandable, true);
+  assert.match(long.fullPath, /Season_1 First_Voyage/);
+  const identified = episodeFilePresentation({ name: "Show.S01E01.mp4", size: 40_000_000 });
+  assert.deepEqual(episodeFileCardModel(identified), { primary: "S01E01 · Episode 1", expandable: false });
 });
 
 test("cleans episode titles without repeating release metadata", () => {

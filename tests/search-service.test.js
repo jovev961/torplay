@@ -85,6 +85,19 @@ test("automatic playback tries ranked verified sources using server-side referen
   assert.equal(outcome.session.id, "session");
 });
 
+test("unidentified pack stays visible but automatic next-episode start waits for manual mapping", async () => {
+  const options = {
+    searchProvider: async () => [candidate("Example S01 Complete")],
+    inspectSource: async () => ({ manualSelectionRequired: true }),
+    startSource: async () => assert.fail("Manual selection is required"),
+  };
+  const context = { title: "Example", type: "show", season: 1, episode: 1 };
+  const results = await findAuthorizedSources(context, options);
+  assert.equal(results[0].manualSelectionRequired, true);
+  assert.equal(results[0].verification, "verified");
+  assert.equal(await startBestVerifiedSource(context, options), null);
+});
+
 test("shared search preserves empty results and provider failure status", async () => {
   assert.deepEqual(await findAuthorizedSources({ title: "Nothing" }, { searchProvider: async () => [] }), []);
   await assert.rejects(findAuthorizedSources({ title: "Example" }, {

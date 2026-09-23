@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { createDatabase } from "../lib/database/sqlite.js";
-import { createDebridJob, deleteDebridItem, getDebridItem, listDebridLibrary, playDebridItem } from "../lib/debrid/library.js";
+import { confirmRealDebridFiles, createDebridJob, deleteDebridItem, getDebridItem, listDebridLibrary, playDebridItem } from "../lib/debrid/library.js";
 import { stopPlayback } from "../lib/debrid/session.js";
 
 const hash = "d".repeat(40);
@@ -15,7 +15,7 @@ const descriptor = { infoHash: hash, magnet: `magnet:?xt=urn:btih:${hash}`,
 const config = { mode: "prefer-debrid", priority: ["real-debrid", "torbox"],
   localFallback: true, unavailableAction: "ask", credentials: { "real-debrid": { apiKey: "secret" } } };
 
-test("Real-Debrid empty account submits, selects the requested episode, recovers, and retains it after stop", async () => {
+test("Real-Debrid season pack waits for one confirmed selection and reuses it for another episode", async () => {
   const database = createDatabase(":memory:");
   const calls = { submit: 0, selections: [], deletes: 0 };
   let raw = null;
@@ -45,9 +45,12 @@ test("Real-Debrid empty account submits, selects the requested episode, recovers
   const dependencies = { database, config, providerFactory: () => provider, probe: async () => {} };
   try {
     const started = await createDebridJob("real-debrid", descriptor, {}, dependencies);
-    assert.equal(started.status, "downloading");
-    assert.deepEqual(calls.selections, [["3"]]);
-    assert.equal(started.selectedFileId, "3");
+    assert.equal(started.status, "awaiting-selection");
+    assert.deepEqual(calls.selections, []);
+    const confirmed = await confirmRealDebridFiles("rd-1", ["1", "2", "3", "4"], "3", dependencies);
+    assert.equal(confirmed.status, "downloading");
+    assert.deepEqual(calls.selections, [["1", "2", "3", "4"]]);
+    assert.equal(confirmed.selectedFileId, "3");
     const repeated = await createDebridJob("real-debrid", descriptor, {}, dependencies);
     assert.equal(repeated.resourceId, "rd-1");
     assert.equal(calls.submit, 1);
@@ -57,6 +60,12 @@ test("Real-Debrid empty account submits, selects the requested episode, recovers
     const ready = await getDebridItem("real-debrid", "rd-1", dependencies);
     assert.equal(ready.status, "ready");
     assert.equal(ready.progress, 1);
+    const next = await createDebridJob("real-debrid", { ...descriptor,
+      mediaContext: { ...context, episode: 4 } }, {}, dependencies);
+    assert.equal(next.resourceId, "rd-1");
+    assert.equal(next.selectedFileId, "4");
+    assert.equal(calls.submit, 1);
+    assert.equal(calls.selections.length, 1);
     const session = await playDebridItem("real-debrid", "rd-1", "3", dependencies);
     assert.equal(session.backend, "debrid");
     await stopPlayback(session.id);
@@ -91,10 +100,79 @@ test("Real-Debrid full-season choice selects episode videos, excluding samples",
     const item = await createDebridJob("real-debrid", descriptor, { scope: "all" }, {
       database, config, providerFactory: () => provider,
     });
+    assert.equal(item.status, "awaiting-selection");
+    assert.deepEqual(item.suggestedSelectionIds, ["1", "2"]);
+    await confirmRealDebridFiles("rd-all", item.suggestedSelectionIds, "2", {
+      database, config, providerFactory: () => provider,
+    });
     assert.deepEqual(selected, ["1", "2"]);
-    assert.equal(item.selectedFileId, "2");
     assert.equal(item.progress, null);
   } finally { database.close(); }
+});
+
+test("a legacy partial Real-Debrid pack is reused without submitting a duplicate", async () => {
+  const database = createDatabase(":memory:");
+  const raw = { id: "partial-1", hash, filename: "Example", status: "downloaded",
+    links: ["https://host.example/episode-1"], files: [
+      { id: 1, path: "/OP-1.mkv", bytes: 1000, selected: 1 },
+      { id: 2, path: "/OP-2.mkv", bytes: 1000, selected: 0 },
+    ] };
+  let submissions = 0;
+  const provider = {
+    async getAccountInfo() { return { id: 83 }; },
+    async listResources() { return [raw]; },
+    async getResource() { return structuredClone(raw); },
+    async submit() { submissions += 1; },
+  };
+  try {
+    const item = await createDebridJob("real-debrid", { ...descriptor,
+      mediaContext: { ...context, episode: 2 } }, {}, {
+      database, config, providerFactory: () => provider,
+    });
+    assert.equal(item.resourceId, "partial-1");
+    assert.equal(item.status, "ready");
+    assert.equal(item.selectedFileId, null);
+    assert.equal(item.missingEpisode, true);
+    assert.equal(submissions, 0);
+  } finally { database.close(); }
+});
+
+test("pending Real-Debrid season selection survives a database restart", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "torplay-rd-pending-"));
+  const filename = path.join(directory, "state.db");
+  let database = createDatabase(filename);
+  let raw = null;
+  let selections = 0;
+  const provider = {
+    async getAccountInfo() { return { id: 84 }; },
+    async listResources() { return raw ? [raw] : []; },
+    async submit() {
+      raw = { id: "pending-1", hash, filename: "Pack", status: "waiting_files_selection",
+        links: [], files: [
+          { id: 1, path: "/OP-1.mkv", bytes: 1000, selected: 0 },
+          { id: 2, path: "/OP-2.mkv", bytes: 1000, selected: 0 },
+        ] };
+      return raw.id;
+    },
+    async getResource() { return structuredClone(raw); },
+    async selectFiles(_id, ids) {
+      selections += 1;
+      raw.status = "downloading";
+      raw.files.forEach((file) => { file.selected = ids.includes(String(file.id)) ? 1 : 0; });
+    },
+  };
+  try {
+    const options = { config, providerFactory: () => provider };
+    const pending = await createDebridJob("real-debrid", descriptor, {}, { ...options, database });
+    assert.equal(pending.status, "awaiting-selection");
+    database.close();
+    database = createDatabase(filename);
+    const recovered = await listDebridLibrary({ provider: "real-debrid" }, { ...options, database });
+    assert.equal(recovered.items[0].status, "awaiting-selection");
+    const confirmed = await confirmRealDebridFiles("pending-1", ["1", "2"], "1", { ...options, database });
+    assert.equal(confirmed.status, "downloading");
+    assert.equal(selections, 1);
+  } finally { database.close(); await rm(directory, { recursive: true, force: true }); }
 });
 
 test("concurrent database connections share one provider submission", async () => {

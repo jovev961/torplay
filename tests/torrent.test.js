@@ -42,6 +42,15 @@ function torrentPack(files) {
   });
 }
 
+test("keeps unidentified multi-file show packs available for manual selection", async () => {
+  const source = { torrentInput: Buffer.from(torrentPack([
+    { path: "OP-1.mkv", length: 1000 },
+    { path: "OP-2.mkv", length: 1000 },
+  ])) };
+  assert.deepEqual(await inspectTorrentSource(source, { type: "show", season: 1, episode: 1 }),
+    { playbackMode: null, manualSelectionRequired: true });
+});
+
 test("validates a magnet and returns its normalized info hash", async () => {
   const hash = await validateTorrentInput(
     magnet,
@@ -204,7 +213,7 @@ test("tries provider resolution after direct torrent metadata fails", async () =
   }
 });
 
-test("requires the requested episode inside multi-file show metadata", async () => {
+test("verifies a matched show episode and keeps unmatched packs for manual selection", async () => {
   const previousFetch = globalThis.fetch;
   const source = { downloadUrl: "https://indexer.test/show" };
   globalThis.fetch = async () => new Response(torrentPack([
@@ -218,12 +227,12 @@ test("requires the requested episode inside multi-file show metadata", async () 
       await inspectTorrentSource(source, { type: "show", season: 1, episode: 2 }),
       { playbackMode: "transcode" },
     );
-    assert.equal(
+    assert.deepEqual(
       await inspectTorrentSource(
         { downloadUrl: "https://indexer.test/show" },
         { type: "show", season: 1, episode: 3 },
       ),
-      null,
+      { playbackMode: null, manualSelectionRequired: true },
     );
   } finally {
     globalThis.fetch = previousFetch;
