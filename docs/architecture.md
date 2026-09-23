@@ -10,11 +10,13 @@ Browser / future client
         v
 Next.js pages and API routes
         |
-        +--> TMDB metadata and catalog discovery
+        +--> TMDB metadata and catalog discovery --> optional OMDb IMDb ratings
         +--> SQLite profiles, history, and progress
-        +--> Torrent search service --> imported Cardigann providers
-        |                          +--> custom Torznab providers
-        |                          +--> optional FlareSolverr for marked Cardigann definitions
+        +--> Torrent search service --> TorPlay Tested Sources (optional)
+        |                          +--> Community Sources (Cardigann v11)
+        |                          |    +--> direct HTTP or optional FlareSolverr when marked
+        |                          +--> Custom Indexers (Torznab-compatible)
+        |                               +--> external Jackett indexers or Prowlarr endpoints
         +--> WebTorrent session manager --> torrent swarm
         +--> subtitle providers and torrent sidecars
         +--> native Range stream or FFmpeg-prepared playback
@@ -57,7 +59,7 @@ Next.js-only setup redirects and settings-response composition stay in `app/_lib
 | Persistence | SQLite through `better-sqlite3` |
 | Metadata | TMDB API |
 | Source search | Provider-independent adapters, Cardigann definitions, Torznab XML through Fast XML Parser |
-| Search support | User-configured Cardigann/Torznab sources, optional FlareSolverr, optional OMDb |
+| Search support | Optional Tested Sources, Cardigann and Torznab sources; FlareSolverr for marked Cardigann definitions |
 | Torrent runtime | WebTorrent and `parse-torrent` |
 | Playback | HTML5 video, HTTP Range, HLS.js |
 | Conversion | FFmpeg and FFprobe static packages |
@@ -89,7 +91,7 @@ The browser-facing application never imports or controls the torrent client dire
 
 ## Search flow
 
-TMDB provides title metadata and discovery. Selecting a movie or episode calls the server-side torrent search service. Provider selection is isolated in `lib/search/provider.js`. It selects user-configured Cardigann, Jackett-backed, and custom Torznab sources; Jackett is an external service and Prowlarr is supported as a custom Torznab endpoint. TorPlay does not bundle torrent indexers.
+TMDB provides title metadata and discovery; optional OMDb data supplies IMDb ratings independently of torrent search. Selecting a movie or episode calls the server-side torrent search service. Provider selection is isolated in `lib/search/provider.js`. Users explicitly add optional TorPlay Tested Sources, community Cardigann definitions, or custom Torznab-compatible endpoints. Jackett is an external service whose configured indexers are added individually after its credentials are validated; Prowlarr is supported through a custom Torznab endpoint. No source is added automatically. The community definition directory is loaded on demand, not bundled as an enabled catalog.
 
 Adapters implement the [common provider contract](torrent-providers.md) and execute concurrently. Their candidates are normalized while individual provider failures remain isolated. Shared processing validates search context, filters titles and episodes, deduplicates, and ranks candidates using the existing rules. The service allocates expiring result IDs and validates streamability before returning an explicit public projection. Magnets and credential-bearing download URLs remain in the server-side result store. Search routes and automatic next-episode playback use the same service without importing adapters. When no provider is available, the application directs the user to provider settings instead of requiring Jackett.
 
@@ -126,7 +128,7 @@ Remote playback is transport-neutral at the media boundary. The player builds a 
 
 SQLite stores local profiles, progress, history, and stale-writer protection. Media identity is based on profile plus TMDB title/episode identity rather than torrent identity. Writer tokens and monotonically increasing sequences prevent older players or delayed requests from overwriting current progress.
 
-Temporary torrent files, subtitle caches, and conversion outputs are separate from persistent data. Custom Torznab configuration stays in a private server-side file. External provider applications retain and manage their own data independently of TorPlay.
+Temporary torrent files, subtitle caches, and conversion outputs are separate from persistent data. Added Tested Sources and custom, Jackett, and Cardigann source records stay in private server-side files. External provider applications retain and manage their own data independently of TorPlay.
 
 Public external response data uses a best-effort SQLite cache. TMDB search results expire after 5 minutes, discovery results after 15 minutes, ordinary metadata after 1 hour, genres after 24 hours, and external IDs after 30 days. Safely reusable torrent-provider results expire after 2 minutes, while remote subtitle-language catalogs expire after 24 hours. IMDb ratings retain their existing 30-day policy. Expired or corrupt entries are ignored and removed; cache read/write failures fall back to the external service. Provider results are persisted only when they can be reduced to canonical info-hash magnets, so API keys, authenticated download URLs, tracker passkeys, and other credentials are never written to the response cache.
 

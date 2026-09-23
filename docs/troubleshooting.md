@@ -25,7 +25,7 @@ TorPlay automatically retries an application, LAN proxy, or mDNS component after
 
 ## A Cardigann source needs FlareSolverr
 
-Run FlareSolverr independently on the TorPlay computer or a private LAN host, then configure its base URL under **Settings → Services**. Only Cardigann definitions marked `info_flaresolverr` use it. Check its service status in Settings and the source health under **Torrent Sources**. Other sources continue to work if it is unavailable.
+Run FlareSolverr independently on the TorPlay computer or a private LAN host, then configure and test its base URL under **Settings → Services**. Only Cardigann definitions marked `info_flaresolverr` send compatible search-page requests through it; torrent downloads stay direct. Check its service status, then use **Test** on the added source under **Torrent Sources**. If FlareSolverr is missing or unreachable, marked definitions cannot search successfully, but other sources continue to work. An **Add Anyway** source is saved as unverified after a connection failure; it is not proof the indexer works.
 
 ## Metadata is unavailable
 
@@ -33,13 +33,17 @@ Open [http://torplay.local/settings](http://torplay.local/settings), Settings th
 
 ## Setup keeps reopening
 
-Open [http://torplay.local/setup](http://torplay.local/setup), the displayed private LAN address, or [http://localhost/setup](http://localhost/setup) on the TorPlay computer. Setup requires a valid TMDB API Read Access Token rather than TMDB's v3 key. TorPlay does not include torrent indexers; test configured custom or imported sources under Settings → Torrent Sources.
+Open [http://torplay.local/setup](http://torplay.local/setup), the displayed private LAN address, or [http://localhost/setup](http://localhost/setup) on the TorPlay computer. Setup requires a valid TMDB API Read Access Token rather than TMDB's v3 key. Torrent sources are optional and do not control setup readiness. Once setup succeeds, add or test sources under **Settings → Torrent Sources**.
 
 ## Settings cannot be changed
 
 Provider settings can be changed from [http://torplay.local/settings](http://torplay.local/settings), the displayed private LAN address, or [http://localhost/settings](http://localhost/settings) on the TorPlay computer. Requests from outside the private local network and values supplied by the host environment remain read-only.
 
 Provider credential changes are used by new requests without a restart.
+
+## A torrent source is unavailable
+
+Distinguish a failed optional service connection from an indexer search failure. Test Jackett or FlareSolverr under **Services** when applicable, then test a Cardigann source or use **Refresh availability** under **Torrent Sources**. A Cardigann definition can be compatible but unverified; check its own login/settings and response before assuming FlareSolverr is the cause. Disabled sources are not searched.
 
 ## `torplay.local` does not open
 

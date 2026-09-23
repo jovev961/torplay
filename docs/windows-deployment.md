@@ -53,7 +53,7 @@ The credential is stored only on the TorPlay computer. Provider settings can be 
 
 ### Add torrent sources
 
-After setup, open **Settings → Torrent Sources** and add a compatible third-party source. TorPlay does not include torrent indexers. You can configure a custom Torznab endpoint, import a compatible Cardigann definition, or add an indexer from a validated external Jackett service. External services are not installed or managed by TorPlay. See [Torrent providers](torrent-providers.md) for details.
+After setup, open **Settings → Torrent Sources**. No torrent source is added automatically. Choose an optional TorPlay Tested Source, explore community Cardigann definitions, or add a custom Torznab-compatible endpoint. To use Jackett, first configure and test your independently operated instance under **Settings → Services**, then add its indexers individually under **Torrent Sources**. External services are not installed or managed by TorPlay. See [Torrent providers](torrent-providers.md) for details.
 
 ### Optional API services
 

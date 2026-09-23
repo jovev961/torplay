@@ -21,7 +21,8 @@ System tray:
 Configuration:
   Open http://localhost/settings on the TorPlay computer to manage provider keys.
   For manual fallback, edit %LOCALAPPDATA%\TorPlay\config\torplay.env.
-  Settings opened through torplay.local are intentionally read-only.
+  Settings can also be changed through torplay.local or a private LAN address.
+  Requests from outside the private local network are read-only.
 
 Runtime logs:
   %LOCALAPPDATA%\TorPlay\logs\torplay.log
@@ -29,8 +30,11 @@ Runtime logs:
 Persistent profiles and watch history:
   %LOCALAPPDATA%\TorPlay\data\torplay.db
 
-TorPlay does not include torrent indexers. Add a compatible third-party source in Settings.
-An independently operated Jackett or Prowlarr instance can be added as a custom Torznab source in Settings.
+No torrent source is added automatically. In Settings > Torrent Sources, add an
+optional TorPlay Tested Source, explore community Cardigann definitions, or add
+a custom Torznab endpoint. Configure an independently operated Jackett instance
+under Services before adding its indexers individually under Torrent Sources.
+Prowlarr can be used as a custom Torznab endpoint.
 
 Migration from the source-checkout runtime:
   1. Stop the old TorPlay runtime.
