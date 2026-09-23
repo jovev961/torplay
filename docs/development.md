@@ -19,7 +19,7 @@ Open TorPlay and complete the browser setup; a `.env.local` file and restart are
 
 - TorPlay: [http://localhost:3000](http://localhost:3000)
 
-Setup requires only TMDB. TorPlay includes no torrent indexers; add a compatible custom Torznab or imported Cardigann source. Jackett and Prowlarr can be connected as user-managed custom Torznab endpoints.
+Setup requires only TMDB. Torrent sources are optional and none are added automatically: add a TorPlay Tested Source, explore community Cardigann indexers, or configure a custom Torznab endpoint. Jackett is an optional external service configured under **Settings → Services**; its configured indexers can then be added individually under **Torrent Sources**. Prowlarr can be used as a custom Torznab endpoint.
 
 ## Development runtime
 
@@ -66,6 +66,7 @@ The command rejects non-Windows and non-x64 hosts rather than producing an incom
 | Path | Purpose | Persistence |
 | --- | --- | --- |
 | `persistent-data/torplay.db` | Profiles, history, progress, writer state | Persistent, gitignored |
+| `native-sources.json` and `torrent-providers.json` beside the runtime configuration file | Added Tested Sources and custom/Jackett/Cardigann sources | Persistent, private, gitignored |
 | `.data/torrents` | Managed torrent session files | Temporary, gitignored |
 | `.data/subtitles` | Subtitle cache | Re-creatable, gitignored, automatically expires after the configured retention period |
 | OS temporary directory | HLS and subtitle-conversion jobs | Temporary |
@@ -91,6 +92,6 @@ Tests that open loopback ports or start WebTorrent may require a normal local sh
 - Preserve the separation between `app/`, `components/`, and `lib/` described in [Architecture](architecture.md).
 - Keep generated data outside source control.
 - Do not add authentication, databases beyond the existing SQLite store, or alternative streaming stacks without an explicit task.
-- Keep native and custom providers independent of externally operated applications.
+- Keep external provider applications user-operated; TorPlay should not install or manage them.
 
 The root `AGENTS.md` contains the complete repository-specific implementation rules.

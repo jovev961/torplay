@@ -15,7 +15,7 @@ Key metadata endpoints:
 
 ## Source search
 
-Movie and episode pages call the provider-independent torrent search service only after the user requests sources. TorPlay does not bundle torrent indexers; users can add custom Torznab, external Jackett indexers, or imported Cardigann sources. Results are filtered and ranked by the service without exposing API keys, download URLs, or magnet URIs. Public results expose `hasMagnet` instead of `magnet`; opaque result IDs resolve to server-side playback references.
+Movie and episode pages call the provider-independent torrent search service only after the user requests sources. Users explicitly add optional TorPlay Tested Sources, community Cardigann definitions, custom Torznab endpoints, or individual indexers from a configured external Jackett service. None are added automatically. Results are filtered and ranked by the service without exposing API keys, download URLs, or magnet URIs. Public results expose `hasMagnet` instead of `magnet`; opaque result IDs resolve to server-side playback references.
 
 - Direct `.torrent` metadata is inspected for the top 20 relevant candidates.
 - Verified playable results appear before unverified magnet fallbacks.
@@ -107,13 +107,13 @@ Profile responses include `subtitlePreferences`. Update them with `PUT /api/prof
 
 ## Settings
 
-The Settings page separates General, Services, Torrent Sources, Subtitles, Playback, and About information. General shows the current `torplay.local` and detected private-LAN URLs with copy actions and a QR code for devices that cannot resolve mDNS. It explains each external provider, links to its official credential instructions, and checks configured services only when their relevant section is viewed. User-configured torrent source health is checked by the Torrent Sources manager.
+The Settings page separates General, Services, Torrent Sources, Subtitles, Playback, and About information. TMDB is required; Jackett, FlareSolverr, OMDb, and external subtitle services are optional. General shows the current `torplay.local` and detected private-LAN URLs with copy actions and a QR code for devices that cannot resolve mDNS. Services explains external providers and checks configured services only when that section is viewed. Torrent Sources shows added sources, their enabled and availability states, and an Add source dialog for Tested Sources, community Cardigann definitions, Jackett indexers, and advanced custom Torznab setup. The community list loads on demand, excludes already-added indexers, and filters by Movies, TV / Series, Anime, and access type. Source health is checked by the Torrent Sources manager.
 
 - `GET /api/network-access` dynamically reports the current preferred hostname and usable LAN IPv4 URL without persisting the detected address.
 
-- `GET /api/settings` returns secret-free configuration and runtime status. Non-secret editable values are returned only to a localhost request.
-- `PATCH /api/settings` updates one service or the enabled native-provider IDs from a same-origin JSON request on localhost only.
+- `GET /api/settings` returns secret-free configuration and runtime status. Editable non-secret values are returned only on a trusted private-network request.
+- `PATCH /api/settings` updates one service through a same-origin JSON request from the private local network.
 - `POST /api/settings/validate` checks selected provider connections and returns sanitized validity or availability states. `{ "refresh": true }` bypasses the short health cache.
-- `POST /api/settings/torrent-providers` accepts `action` (`create`, `update`, `remove`, `test`, or `health`) and a `provider` object. Saved-provider actions use its stable `id`; connection fields are `name`, `endpoint`, and optional `apiKey`. Blank keys keep existing credentials; `clearApiKey` removes them. Mutations and draft tests require localhost. Health returns safe status for saved sources and supports `refresh`.
+- `POST /api/settings/torrent-providers` accepts an `action` and, where needed, a `provider` object. Actions cover Tested Source add/update/remove, community listing/import, Cardigann import/create/update/test/remove, Jackett listing/capabilities/create/update, custom Torznab create/update/remove/test, and `health`. Saved-source actions use a stable `id`. Custom Torznab connection fields are `name`, `endpoint`, and optional `apiKey`; blank keys keep existing credentials, and `clearApiKey` removes one. Mutations and draft tests require a same-origin private-network request. Health returns safe status for saved sources and supports `refresh`.
 
-Secret values are never returned by these endpoints. LAN clients can inspect safe status but cannot change provider configuration.
+Secret values are never returned by these endpoints. Trusted private-LAN clients can edit Settings; requests outside the private local network can inspect safe status but cannot change provider configuration.
