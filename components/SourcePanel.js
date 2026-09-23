@@ -22,8 +22,9 @@ export default function SourcePanel({
   const [requestedDownloadFileId, setRequestedDownloadFileId] = useState(null);
   const [expandedFileId, setExpandedFileId] = useState(null);
   const reviewId = lookup.debridJob?.resourceId;
-  const selectedDownloadIds = downloadFileIds?.resourceId === reviewId ? downloadFileIds.ids : null;
-  const selectedRequestedFileId = requestedDownloadFileId?.resourceId === reviewId
+  const selectedDownloadIds = downloadFileIds && downloadFileIds.resourceId === reviewId
+    ? downloadFileIds.ids : null;
+  const selectedRequestedFileId = requestedDownloadFileId && requestedDownloadFileId.resourceId === reviewId
     ? requestedDownloadFileId.id : null;
   const suggestedFile = lookup.session?.status === "ready" && episode
     ? lookup.session.files.find((file) => file.id === lookup.session.suggestedFileId)
