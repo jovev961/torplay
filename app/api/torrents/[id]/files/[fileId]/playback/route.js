@@ -2,10 +2,10 @@ import {
   bufferVideoFile,
   getActiveConversion,
   getInternalFileUrl,
-  getVideoFile,
   registerActiveConversion,
   stopActiveConversionForFile,
 } from "../../../../../../../lib/torrent/manager.js";
+import { getPlaybackVideoFile, getRemoteInternalFileUrl } from "../../../../../../../lib/debrid/session.js";
 import {
   createHlsPlaybackJob,
   PlaybackError,
@@ -50,7 +50,7 @@ function playbackDetails(id, fileId, job, file, playbackMode) {
 
 async function findMatch(context) {
   const { id, fileId } = await context.params;
-  return { id, fileId, match: getVideoFile(id, fileId) };
+  return { id, fileId, match: getPlaybackVideoFile(id, fileId) };
 }
 
 export async function POST(request, context) {
@@ -85,7 +85,7 @@ export async function POST(request, context) {
   const aheadBytes = bytesPerSecond
     ? Math.max(4 * 1024 * 1024, Math.min(64 * 1024 * 1024, bytesPerSecond * subtitleConfig().bufferAheadSeconds))
     : 16 * 1024 * 1024;
-  bufferVideoFile(match.session, match.file, {
+  if (match.backend !== "debrid") bufferVideoFile(match.session, match.file, {
     start: startByte,
     end: Math.min(match.file.length - 1, Math.ceil(startByte + aheadBytes)),
   });
@@ -100,8 +100,10 @@ export async function POST(request, context) {
   }
   if (!job) {
     job = createHlsPlaybackJob(match.file, {
-      context: `torrent=${id} file=${fileId} name=${match.file.name}`,
-      inputUrl: getInternalFileUrl(match.session, match.file),
+      context: `session=${id} file=${fileId} name=${match.file.name}`,
+      inputUrl: match.backend === "debrid"
+        ? await getRemoteInternalFileUrl(match.session, match.file)
+        : getInternalFileUrl(match.session, match.file),
       media,
       startTime,
     });

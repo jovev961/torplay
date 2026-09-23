@@ -1,8 +1,9 @@
 import {
   beginStream,
   bufferVideoFile,
-  getVideoFile,
 } from "../../../../../../../lib/torrent/manager.js";
+import { getPlaybackVideoFile, resolveRemoteUrl } from "../../../../../../../lib/debrid/session.js";
+import { proxyRemoteFile } from "../../../../../../../lib/debrid/stream.js";
 import { parseByteRange } from "../../../../../../../lib/video/range.js";
 import {
   remoteMediaOptionsResponse,
@@ -14,7 +15,7 @@ export const dynamic = "force-dynamic";
 
 async function respond(request, context, includeBody) {
   const { id, fileId } = await context.params;
-  const match = getVideoFile(id, fileId);
+  const match = getPlaybackVideoFile(id, fileId);
   if (!match) {
     return Response.json({ error: "Playable video file not found." }, { status: 404 });
   }
@@ -31,6 +32,43 @@ export async function streamVideoFile(request, match, includeBody = true) {
       },
       { status: 409 },
     );
+  }
+  if (match.backend === "debrid") {
+    if (!includeBody) {
+      try {
+        return await proxyRemoteFile(new Request(request.url, {
+          method: "HEAD", headers: request.headers, signal: request.signal,
+        }), match.file, (force) => resolveRemoteUrl(match.session, match.file, force));
+      } catch {
+        return Response.json({ code: "REMOTE_STREAM_UNAVAILABLE", error: "The remote stream is unavailable." }, { status: 502 });
+      }
+    }
+    const finish = beginStream(match.session);
+    const controller = new AbortController();
+    match.session.activeControllers.add(controller);
+    request.signal.addEventListener("abort", () => controller.abort(), { once: true });
+    const method = includeBody ? "GET" : "HEAD";
+    const proxyRequest = new Request(request.url, {
+      method, headers: request.headers, signal: controller.signal,
+    });
+    try {
+      const response = await proxyRemoteFile(proxyRequest, match.file,
+        (force) => resolveRemoteUrl(match.session, match.file, force), {
+          onClose: () => {
+            finish();
+            match.session.activeControllers.delete(controller);
+          },
+        });
+      if (!response.body) {
+        finish();
+        match.session.activeControllers.delete(controller);
+      }
+      return response;
+    } catch {
+      finish();
+      match.session.activeControllers.delete(controller);
+      return Response.json({ code: "REMOTE_STREAM_UNAVAILABLE", error: "The remote stream is unavailable." }, { status: 502 });
+    }
   }
 
   const range = parseByteRange(request.headers.get("range"), match.file.length);

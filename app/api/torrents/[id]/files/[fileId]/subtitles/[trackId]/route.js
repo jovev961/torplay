@@ -1,7 +1,7 @@
 import {
   beginStream,
-  getVideoFile,
 } from "../../../../../../../../lib/torrent/manager.js";
+import { getPlaybackVideoFile } from "../../../../../../../../lib/debrid/session.js";
 import { subtitleConfig } from "../../../../../../../../lib/subtitles/config.js";
 import { loadSubtitleTrack } from "../../../../../../../../lib/subtitles/service.js";
 import { embeddedSubtitleExtractor } from "../../../../../../../../lib/video/media-info.js";
@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
 
 async function respond(context) {
   const { id, fileId, trackId } = await context.params;
-  const match = getVideoFile(id, fileId);
+  const match = getPlaybackVideoFile(id, fileId);
   if (!match) return Response.json({ error: "Playable video file not found." }, { status: 404 });
 
   const finish = beginStream(match.session);

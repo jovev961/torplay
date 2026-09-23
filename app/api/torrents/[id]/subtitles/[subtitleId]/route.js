@@ -1,7 +1,7 @@
 import {
   beginStream,
-  getSubtitleFile,
 } from "../../../../../../lib/torrent/manager.js";
+import { getPlaybackSubtitleFile } from "../../../../../../lib/debrid/session.js";
 import {
   MAX_SUBTITLE_BYTES,
   SubtitleError,
@@ -17,12 +17,22 @@ export const dynamic = "force-dynamic";
 
 async function respond(request, context) {
   const { id, subtitleId } = await context.params;
-  const match = getSubtitleFile(id, subtitleId);
+  const match = getPlaybackSubtitleFile(id, subtitleId);
   if (!match) {
     return Response.json({ error: "Subtitle file not found." }, { status: 404 });
   }
   if (match.file.length > MAX_SUBTITLE_BYTES) {
     return Response.json({ error: "The subtitle file is too large." }, { status: 413 });
+  }
+  if (match.backend === "debrid") {
+    try {
+      const bytes = new Uint8Array(await match.file.arrayBuffer());
+      return new Response(subtitleToWebVtt(bytes, match.format), {
+        headers: { "Cache-Control": "no-store", "Content-Type": match.mimeType },
+      });
+    } catch {
+      return Response.json({ error: "The subtitle file could not be downloaded." }, { status: 502 });
+    }
   }
 
   const finish = beginStream(match.session);

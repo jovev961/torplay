@@ -1,5 +1,5 @@
 import { getSearchResult } from "../../../lib/search/result-store.js";
-import { startTorrent } from "../../../lib/torrent/manager.js";
+import { startPlaybackSource } from "../../../lib/debrid/session.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,12 +21,15 @@ export async function POST(request) {
   }
 
   try {
-    const session = await startTorrent(source);
+    const session = await startPlaybackSource(source);
     return Response.json(session, {
       status: session.status === "loading" ? 202 : 200,
       headers: { "Cache-Control": "no-store" },
     });
   } catch (error) {
-    return Response.json({ error: error.message || "Could not start the torrent." }, { status: 422 });
+    return Response.json({
+      code: error.code || "PLAYBACK_START_FAILED",
+      error: error.message || "Could not start playback.",
+    }, { status: Number.isInteger(error.status) ? error.status : 422 });
   }
 }
