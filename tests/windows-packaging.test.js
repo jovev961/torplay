@@ -150,13 +150,18 @@ test("the control channel bounds shutdown when a client keeps its socket open", 
   const directory = await mkdtemp(path.join(os.tmpdir(), "torplay-control-drain-"));
   const endpoint = path.join(directory, "control.sock");
   const control = await startControlServer({ endpoint, closeDrainMs: 5 });
-  const socket = net.createConnection(endpoint);
+  const socket = net.createConnection(control.endpoint);
+  const connectTimeout = setTimeout(() => {
+    socket.destroy(new Error("Timed out connecting to the control server."));
+  }, 5_000);
   try {
     await once(socket, "connect");
+    clearTimeout(connectTimeout);
     await control.close();
     if (!socket.destroyed) await once(socket, "close");
     assert.equal(socket.destroyed, true);
   } finally {
+    clearTimeout(connectTimeout);
     socket.destroy();
     await rm(directory, { recursive: true, force: true });
   }
