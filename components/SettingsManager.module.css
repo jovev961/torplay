@@ -592,6 +592,15 @@
   gap: 7px;
 }
 
+.communityAccess {
+  display: grid;
+  gap: 6px;
+  max-width: 210px;
+  color: #dce2e8;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
 .communityFilter {
   display: inline-flex;
   align-items: center;
