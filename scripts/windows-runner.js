@@ -11,7 +11,7 @@ import {
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { installedEnvironment, installedPaths } from "./windows-paths.js";
-import { stopInstalledRuntime } from "./windows-control.js";
+import { stopInstalledRuntime } from "./windows-control-runtime.js";
 
 const DEFAULT_MAX_BYTES = 5 * 1024 * 1024;
 const DEFAULT_BACKUPS = 3;
