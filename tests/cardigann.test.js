@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { stringify } from "yaml";
-import { cardigannAdapter, testCardigannProvider } from "../lib/search/cardigann/engine.js";
+import { cardigannAdapter, classifyCardigannVerificationFailure, testCardigannProvider } from "../lib/search/cardigann/engine.js";
 import {
   importDefinition,
   normalizeDefinitionUrl,
@@ -139,6 +139,9 @@ test("Cardigann templates and filters render supported expressions without evalu
   assert.equal(renderTemplate("{{ range .Items }}{{.}},{{ end }}", { Items: ["a", "b"] }), "a,b,");
   assert.equal(renderTemplate("{{ if .Config.missing }}wrong{{ else }}empty{{ end }}", { Config: {} }), "empty");
   assert.equal(applyFilters("SINTÉL", [{ name: "tolower" }, { name: "diacritics" }, { name: "append", args: " 2010" }]), "sintel 2010");
+  assert.equal(applyFilters("S02 EP 3 4", [{ name: "re_replace", args: ["(?i)\\sEP\\s(\\d{1,2})\\s(E?\\s?\\d{1,2})\\s?", " E$1-$2 "] }]), "S02 E3-4 ");
+  assert.equal(applyFilters("Sintel", [{ name: "regexp", args: "(?i)(sintel)" }]), "Sintel");
+  assert.equal(classifyCardigannVerificationFailure(new SyntaxError("Invalid regular expression")).code, "CARDIGANN_DEFINITION_EVALUATION_FAILED");
   assert.throws(() => renderTemplate("{{ dangerous .Query }}", {}), /Unsupported Cardigann template function/);
 });
 
