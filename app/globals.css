@@ -436,6 +436,10 @@ a {
   padding-bottom: 36px;
 }
 
+.settingsHero { max-width: 720px; padding: 48px 0 30px; }
+.settingsHero h1 { margin: 8px 0 10px; font-size: clamp(2.4rem, 5vw, 3.6rem); letter-spacing: -.05em; }
+.settingsHero p { margin: 0; color: var(--muted); line-height: 1.55; }
+
 .catalogFilters {
   display: grid;
   grid-template-columns: minmax(220px, 1fr) minmax(150px, 0.35fr) minmax(180px, 0.45fr) auto;
@@ -1824,6 +1828,28 @@ a {
   background: rgba(255, 157, 157, 0.06);
 }
 
+.debridChoice {
+  display: grid;
+  gap: 20px;
+  padding: clamp(18px, 3vw, 28px);
+  border: 1px solid #39434e;
+  border-radius: 16px;
+  background: #10151b;
+}
+
+.debridChoiceIntro h3 { margin: 8px 0; font-size: clamp(1.15rem, 2vw, 1.45rem); }
+.debridChoiceIntro p, .debridChoiceOption p { margin: 0; color: var(--muted); line-height: 1.5; }
+.debridChoiceError { margin: 0; color: var(--danger); }
+.debridChoiceOptions { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 12px; }
+.debridChoiceOption { display: flex; flex-direction: column; align-items: flex-start; gap: 16px; min-width: 0; padding: 20px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); }
+.debridChoiceOption h4 { margin: 0 0 5px; font-size: 1rem; }
+.debridChoiceOption button { margin-top: auto; }
+.debridChoiceScope { display: grid; gap: 8px; width: 100%; color: var(--text); font-size: .85rem; font-weight: 700; }
+.debridChoiceScope select { width: 100%; }
+.debridChoiceOption .debridChoiceHint { font-size: .82rem; }
+.debridChoiceSecondary { min-height: 44px; padding: 10px 15px; border: 1px solid #697582; border-radius: 9px; color: var(--text); background: #252d36; font-weight: 700; }
+.debridChoiceSecondary:hover:not(:disabled), .debridChoiceSecondary:focus-visible { border-color: var(--text); background: #323d49; }
+
 .results {
   display: grid;
   margin-top: 22px;
@@ -3133,14 +3159,42 @@ footer {
     margin-right: auto;
   }
 }
-.debridLibrary { padding: 2rem 0 4rem; }
-.debridLibrary > p { max-width: 70ch; color: var(--muted, #aeb8c9); }
-.debridLibraryToolbar, .debridLibraryActions { display: flex; gap: .65rem; flex-wrap: wrap; margin: 1rem 0; }
-.debridLibraryToolbar button.active { border-color: #e4bd68; color: #fff; }
-.debridLibraryGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 19rem), 1fr)); gap: 1rem; margin: 1.5rem 0; }
-.debridLibraryCard { min-width: 0; padding: 1.25rem; }
-.debridLibraryCard h2 { font-size: 1.1rem; overflow-wrap: anywhere; }
-.debridLibraryCard progress { width: 100%; }
-.debridLibraryDetail { padding: 1.5rem; margin-top: 2rem; }
-.debridLibraryFile { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: .8rem 0; border-bottom: 1px solid #ffffff25; }
+.debridLibrary { padding: clamp(32px, 5vw, 60px) 0 64px; }
+.debridLibraryHeading h1 { margin: 10px 0; font-size: clamp(2rem, 4vw, 3rem); letter-spacing: -.04em; }
+.debridLibraryHeading p { max-width: 65ch; margin: 0; color: var(--muted); line-height: 1.55; }
+.debridLibraryToolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 28px 0 20px; }
+.debridLibraryFilters { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; border: 1px solid var(--border); border-radius: 11px; background: #101419; }
+.debridLibraryFilters button { min-height: 40px; padding: 9px 13px; border: 0; border-radius: 8px; color: var(--muted); background: transparent; font-size: .88rem; font-weight: 700; }
+.debridLibraryFilters button:hover, .debridLibraryFilters button:focus-visible { color: var(--text); background: #252d36; }
+.debridLibraryFilters button.active { color: white; background: #7d2228; }
+.debridLibraryRefresh, .debridLibraryMore, .debridLibraryOpen, .debridLibraryDelete, .debridLibraryConnection a { min-height: 40px; padding: 9px 13px; border: 1px solid var(--border); border-radius: 9px; color: var(--text); background: #20262e; font-size: .86rem; font-weight: 700; }
+.debridLibraryRefresh:hover:not(:disabled), .debridLibraryMore:hover:not(:disabled), .debridLibraryOpen:hover, .debridLibraryDelete:hover, .debridLibraryConnection a:hover { border-color: #687582; background: #2a333d; }
+.debridLibraryConnection { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 18px 20px; border: 1px solid #4d4240; border-radius: 12px; background: #211b1c; }
+.debridLibraryConnection strong { color: var(--text); }
+.debridLibraryConnection p { margin: 5px 0 0; color: var(--muted); font-size: .88rem; }
+.debridLibraryConnection a { display: inline-flex; align-items: center; }
+.debridLibraryEmpty { display: grid; justify-items: center; gap: 7px; margin-top: 16px; padding: 36px 20px; border: 1px solid var(--border); border-radius: 12px; color: var(--muted); background: #11161b; text-align: center; }
+.debridLibraryEmpty strong { color: var(--text); }
+.debridLibraryEmpty p { margin: 0; }
+.debridLibraryEmpty a { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+.debridLibraryGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 19rem), 1fr)); gap: 14px; margin: 16px 0; }
+.debridLibraryCard { display: flex; flex-direction: column; min-width: 0; padding: 20px; border: 1px solid var(--border); border-radius: 13px; background: var(--panel); }
+.debridLibraryCard h2 { margin: 10px 0; font-size: 1.05rem; line-height: 1.35; overflow-wrap: anywhere; }
+.debridLibraryCard p { margin: 0 0 14px; color: var(--muted); font-size: .84rem; }
+.debridLibraryCard progress { width: 100%; accent-color: var(--accent); }
+.debridLibraryActions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: auto; padding-top: 18px; }
+.debridLibraryOpen { border-color: #8c383b; background: #3d171b; }
+.debridLibraryDelete { color: #ffb7b7; background: transparent; }
+.debridLibraryMore { display: block; margin: 24px auto; }
+.debridLibraryDetail { padding: 24px; margin-top: 24px; border: 1px solid var(--border); border-radius: 13px; background: var(--panel); }
+.debridLibraryDetail h2 { margin: 0 0 7px; overflow-wrap: anywhere; }
+.debridLibraryDetail > p { color: var(--muted); }
+.debridLibraryFile { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 12px 0; border-bottom: 1px solid var(--border); }
 .debridLibraryFile span { overflow-wrap: anywhere; }
+
+@media (max-width: 560px) {
+  .debridLibraryToolbar, .debridLibraryRefresh { width: 100%; }
+  .debridLibraryFilters { width: 100%; }
+  .debridLibraryFilters button { flex: 1; }
+  .debridLibraryFile { align-items: flex-start; flex-direction: column; }
+}

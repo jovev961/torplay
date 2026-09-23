@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { useCallback, useEffect, useRef, useState } from "react";
 import VideoPlayer from "./VideoPlayer.js";
 import { useProfile } from "./ProfileProvider.js";
 import { releaseTorrentSession } from "./useSourceLookup.js";
@@ -44,19 +45,21 @@ export default function DebridLibraryClient() {
   const [playingFile, setPlayingFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const requestId = useRef(0);
 
   const refresh = useCallback(async (nextPage = 1, fresh = false) => {
+    const currentRequest = ++requestId.current;
     setLoading(true);
     setError("");
     try {
       const params = new URLSearchParams({ provider: filter, page: String(nextPage), fresh: fresh ? "1" : "0" });
       const result = await json(await fetch(`/api/debrid/library?${params}`, { cache: "no-store" }));
+      if (currentRequest !== requestId.current) return;
       setProviders(result.providers);
       setItems((current) => nextPage === 1 ? result.items : [...current, ...result.items]);
       setPage(nextPage);
-      if (result.providers.every((entry) => entry.error)) setError(result.providers.map((entry) => entry.error).join(" · "));
-    } catch (loadError) { setError(loadError.message); }
-    finally { setLoading(false); }
+    } catch (loadError) { if (currentRequest === requestId.current) setError(loadError.message); }
+    finally { if (currentRequest === requestId.current) setLoading(false); }
   }, [filter]);
 
   useEffect(() => {
@@ -126,24 +129,51 @@ export default function DebridLibraryClient() {
     } catch (deleteError) { setError(deleteError.message); }
   }
 
+  const disconnected = providers.filter((entry) => entry.disconnected);
+  const connected = providers.filter((entry) => !entry.disconnected && !entry.error);
+  const failed = providers.filter((entry) => entry.error);
+
   return <section className="debridLibrary">
-    <span className="eyebrow">Your provider accounts</span>
-    <h1>Debrid Library</h1>
-    <p>Downloads continue at Real-Debrid or TorBox when you leave TorPlay. Deleting an item removes it from that provider account.</p>
+    <div className="debridLibraryHeading">
+      <span className="eyebrow">Your provider accounts</span>
+      <h1>Debrid Library</h1>
+      <p>Find downloads saved to Real-Debrid and TorBox. Downloads continue when you leave TorPlay.</p>
+    </div>
     <div className="debridLibraryToolbar">
-      {["all", "real-debrid", "torbox"].map((value) => <button type="button" key={value}
-        className={filter === value ? "active" : ""} onClick={() => { setSelected(null); setFilter(value); }}>
-        {value === "all" ? "All" : label[value]}
-      </button>)}
-      <button type="button" disabled={loading} onClick={() => void refresh(1, true)}>Refresh</button>
+      <div className="debridLibraryFilters" role="group" aria-label="Filter by provider">
+        {["all", "real-debrid", "torbox"].map((value) => <button type="button" key={value}
+          className={filter === value ? "active" : ""} aria-pressed={filter === value}
+          onClick={() => {
+            if (value === filter) return;
+            requestId.current += 1;
+            setSelected(null);
+            setItems([]);
+            setProviders([]);
+            setFilter(value);
+          }}>
+          {value === "all" ? "All downloads" : label[value]}
+        </button>)}
+      </div>
+      <button className="debridLibraryRefresh" type="button" disabled={loading}
+        onClick={() => void refresh(1, true)}>{loading ? "Refreshing…" : "Refresh"}</button>
     </div>
     {error ? <div className="notice error" role="alert">{error}</div> : null}
-    {providers.map((entry) => entry.error ? <div className="notice error" key={entry.provider}>
+    {failed.map((entry) => <div className="notice error" key={entry.provider} role="alert">
       {label[entry.provider]}: {entry.error}
-    </div> : entry.disconnected ? <div className="notice" key={entry.provider}>
-      {label[entry.provider]} is not connected. Connect it in Settings → Services to view its account resources.
-    </div> : null)}
-    {!loading && !items.length ? <div className="notice">No provider torrents found. Connected provider resources will appear here.</div> : null}
+    </div>)}
+    {disconnected.length > 0 && (items.length > 0 || connected.length === 0) ? <div className="debridLibraryConnection" role="status">
+      <div>
+        <strong>{disconnected.map((entry) => label[entry.provider]).join(" and ")} {disconnected.length === 1 ? "is" : "are"} not connected</strong>
+        <p>Connect {disconnected.length === 1 ? "this provider" : "a provider"} to see its downloads here.</p>
+      </div>
+      <Link href="/settings#services">Connect in Settings →</Link>
+    </div> : null}
+    {loading && !items.length ? <div className="debridLibraryEmpty" role="status">Loading your downloads…</div> : null}
+    {!loading && !items.length && connected.length > 0 && !error ? <div className="debridLibraryEmpty">
+      <strong>No downloads yet</strong>
+      <p>Downloads from your connected {connected.length === 1 ? "provider" : "providers"} will appear here.</p>
+      {disconnected.length > 0 ? <p>{disconnected.map((entry) => label[entry.provider]).join(" and ")} {disconnected.length === 1 ? "is" : "are"} not connected. <Link href="/settings#services">Connect in Settings →</Link></p> : null}
+    </div> : null}
     <div className="debridLibraryGrid">
       {items.map((item) => <article className="panel debridLibraryCard" key={`${item.provider}:${item.resourceId}`}>
         <span className="eyebrow">{label[item.provider]} · {item.ownership === "external" ? "Provider account item" : "Added by TorPlay"}</span>
@@ -152,19 +182,19 @@ export default function DebridLibraryClient() {
           {item.size ? ` · ${formatFileSize(item.size)}` : ""}</p>
         {item.progress != null && item.status !== "ready" ? <progress max={1} value={item.progress} /> : null}
         <div className="debridLibraryActions">
-          <button type="button" onClick={() => void open(item)}>Open</button>
-          <button type="button" onClick={() => void remove(item)}>{active.has(item.status) ? "Cancel and delete" : "Delete"}</button>
+          <button className="debridLibraryOpen" type="button" onClick={() => void open(item)}>View files</button>
+          <button className="debridLibraryDelete" type="button" onClick={() => void remove(item)}>{active.has(item.status) ? "Cancel and delete" : "Delete"}</button>
         </div>
       </article>)}
     </div>
-    {providers.some((entry) => entry.hasMore) ? <button type="button" disabled={loading}
+    {providers.some((entry) => entry.hasMore) ? <button className="debridLibraryMore" type="button" disabled={loading}
       onClick={() => void refresh(page + 1)}>Load more</button> : null}
     {selected ? <section className="panel debridLibraryDetail">
       <h2>{selected.name}</h2>
       <p>{label[selected.provider]} · {selected.status}</p>
       {selected.files.length ? selected.files.map((file) => <div className="debridLibraryFile" key={file.providerId}>
         <span>{file.name} · {formatFileSize(file.size)}</span>
-        {selected.status === "ready" && file.selected ? <button type="button" onClick={() => void play(file)}>Play</button> : null}
+        {selected.status === "ready" && file.selected ? <button className="primaryButton compact" type="button" onClick={() => void play(file)}>Play</button> : null}
       </div>) : <p>File details are not available yet.</p>}
       {session && playingFile ? <div className="videoFrame"><VideoPlayer key={`${session.id}:${playingFile.id}`}
         sessionId={session.id} file={playingFile} title={selected.name}
