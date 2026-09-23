@@ -7,27 +7,35 @@ TorPlay configuration is server-only. Never expose provider keys, Jackett downlo
 - Development and source runtime: `.env.local` when advanced manual configuration is desired
 - Installed Windows runtime: `%LOCALAPPDATA%\TorPlay\config\torplay.env`
 
-On a fresh launch, TorPlay redirects provider-dependent pages to **Setup**. Setup validates TMDB and Jackett and saves both together before opening the catalog; no configuration file or restart is required. Afterwards, open **Settings** to manage TMDB, Jackett, OMDb, OpenSubtitles, and SubDL. Changes are permitted only through `localhost` on the TorPlay computer; household/LAN browsers can see secret-free provider health but cannot edit settings. A blank secret input keeps the configured value, while **Remove** explicitly deletes it.
+On a fresh launch, TorPlay redirects provider-dependent pages to **Setup** to validate and save TMDB. Afterwards, open **Settings → Torrent Sources** to explicitly add an optional TorPlay Tested Source, explore community Cardigann definitions, or add a custom Torznab endpoint. No torrent source is added automatically. Optional services and subtitles have their own Settings sections. Setup and Settings can be changed through `localhost`, the configured `.local` hostname, or a private LAN address. A blank secret input keeps the configured value, while **Remove** explicitly deletes it.
 
-TorPlay stores Settings changes atomically in the runtime's configuration file and restricts its permissions where the operating system supports that. Credentials supplied by the host environment remain read-only. Most provider changes take effect immediately. Updating OMDb requires **Start or Restart TorPlay** so Jackett can receive the new value. Do not commit real credentials.
+TorPlay stores service Settings in the runtime configuration file and source choices in adjacent private files. Writes are atomic, with restricted permissions where the operating system supports them. Credentials supplied by the host environment remain read-only. Provider changes take effect immediately. Do not commit real credentials.
 
 ## Required providers
+
+Create a TMDB account, follow the official [TMDB API getting-started guide](https://developer.themoviedb.org/docs/getting-started), and copy the **API Read Access Token** from [TMDB API settings](https://www.themoviedb.org/settings/api). TorPlay does not accept the shorter v3 API key in this field.
 
 | Variable | Required | Default | Description |
 | --- | --- | --- | --- |
 | `TMDB_API_TOKEN` | Yes | None | TMDB API Read Access Token used for metadata. A v3 API key is not accepted here. |
-| `JACKETT_URL` | Yes for source search | `http://localhost:9117` in templates | Jackett base URL. Must use HTTP or HTTPS. |
-| `JACKETT_API_KEY` | Yes for source search | None | API key shown in the Jackett dashboard. |
 
-## Search and Jackett
+## Search and optional services
+
+OMDb is optional and used directly by TorPlay for IMDb ratings; it is not a Jackett integration. Request a key from the official [OMDb API key page](https://www.omdbapi.com/apikey.aspx). Jackett is an optional externally run service: configure and test its URL and API key under **Settings → Services**, then add individual configured indexers under **Torrent Sources**. Prowlarr remains available as a custom Torznab source. FlareSolverr is optional for Cardigann definitions marked `info_flaresolverr`; it is not needed for other source types.
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `JACKETT_MOVIE_INDEXERS` | Empty | Comma-separated Jackett IDs used for movies. Empty searches all configured indexers. |
-| `JACKETT_SHOW_INDEXERS` | Empty | Comma-separated Jackett IDs used for shows. Empty searches all configured indexers. |
-| `OMDB_API_KEY` | Unset | Optional server-side OMDb key used for IMDb ratings on catalog cards and copied into Jackett for IMDb-only aggregate-search fallback. Ratings are omitted when absent; TorPlay preserves Jackett's existing key. |
+| `JACKETT_URL` | Unset | Base URL of an independently operated Jackett service. |
+| `JACKETT_API_KEY` | Unset | Server-only Jackett API key. |
+| `FLARESOLVERR_URL` | Unset | URL of an external FlareSolverr service on this computer or a private LAN, such as `http://localhost:8191`. |
+| `OMDB_API_KEY` | Unset | Optional server-side OMDb key used for IMDb ratings on catalog cards and metadata lookups. Ratings are omitted when absent. |
+| `TORPLAY_SEARCH_PROVIDERS` | Unset | Optional full-provider allowlist using stable source IDs. A legacy `jackett` entry still selects Jackett sources. |
 
-Every explicitly named indexer must already be enabled and configured in Jackett. TorPlay queries media-specific lists independently and retains results from healthy indexers when another fails.
+Added TorPlay Tested Sources are stored in `native-sources.json`; custom Torznab, Jackett, and imported Cardigann sources are stored in `torrent-providers.json`. Both files sit beside `.env.local` or the installed `torplay.env`. Jackett sources reference the Services credentials rather than copying the key. For Cardigann sources, the private file includes the complete imported YAML and its integrity hash. These files can contain other API keys and settings; keep them out of source control and include them only in private backups. Settings writes them atomically with restrictive file permissions where supported. New custom endpoints and changed credentials must pass validation before saving. Cardigann import checks definition compatibility and attempts a live search; if only connection verification fails, the UI can explicitly save the source with **Add Anyway** and mark it unverified. Edits take effect immediately. Old `JACKETT_MOVIE_INDEXERS` and `JACKETT_SHOW_INDEXERS` values are read only to migrate older installations into individual source records; they are no longer used by search.
+
+Every explicitly named Jackett indexer must already be enabled and configured in Jackett. TorPlay queries configured providers independently and retains results from healthy sources when another fails. Custom and imported source health can be refreshed from Settings.
+
+**Required** and **Optional** in Services describe whether TorPlay needs the service for setup, not whether every source can use it. An optional service shows **Unconfigured** until its values are supplied; validation can then report a verified connection, invalid values, or an unreachable service. A Cardigann source marked for FlareSolverr depends on that service for its own searches, while other sources do not. In Torrent Sources, **Disabled** means the source is not searched; **Unavailable** means its current connection or search could not be verified. An explicitly added unverified Cardigann source should be tested again after its indexer and optional service settings are corrected.
 
 ## Persistent and temporary storage
 
@@ -59,6 +67,8 @@ MP4, M4V, and WebM use native browser playback with HTTP Range seeking. Other re
 
 ## Subtitles
 
+External subtitle services are optional. Obtain credentials through the official [OpenSubtitles API consumers](https://www.opensubtitles.com/en/consumers) or [SubDL API panel](https://subdl.com/panel/api).
+
 | Variable | Default | Description |
 | --- | --- | --- |
 | `SUBTITLE_CACHE_TTL_DAYS` | `30` | Days since last use before a cached subtitle becomes eligible for automatic cleanup. |
@@ -78,9 +88,6 @@ Preferred and primary subtitle languages are configured per profile from **Manag
 | `TORPLAY_PUBLIC_HOSTNAME` | `torplay.local` | Single valid `.local` hostname advertised over mDNS. |
 | `TORPLAY_PUBLIC_PORT` | `80` | LAN-facing proxy port; must differ from `TORPLAY_PORT`. |
 | `TORPLAY_MDNS_INTERFACE` | Automatic | Optional Windows interface name or local address for systems with confusing VPN/virtual adapters. |
-| `TORPLAY_DOCKER_WAIT_SECONDS` | `600` installed, immediate failure in manual source mode | Maximum installed-runtime wait for Docker readiness. |
-| `DOCKER_CLI_PATH` | Auto-detected | Optional Docker CLI path override. |
-| `DOCKER_DESKTOP_PATH` | Auto-detected | Optional Docker Desktop executable path override. |
 
 If `TORPLAY_PUBLIC_PORT` is changed for the manual source runtime, recreate its firewall rule with the same port. The packaged installer is designed for port 80.
 

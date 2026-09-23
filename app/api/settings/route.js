@@ -1,12 +1,12 @@
-import { SettingsError, updateProviderSettings } from "../../../lib/settings/config.js";
+import {
+  SettingsError,
+  updateProviderSettings,
+} from "../../../lib/settings/config.js";
 import {
   assertSettingsMutationRequest,
-  isLoopbackSettingsRequest,
+  isLocalNetworkSettingsRequest,
 } from "../../../lib/settings/security.js";
-import {
-  getSettingsSnapshot,
-  requireSettingsRestart,
-} from "../../../lib/settings/snapshot.js";
+import { getSettingsSnapshot } from "../../_lib/settings-snapshot.js";
 import { clearSettingsValidation } from "../../../lib/settings/validation.js";
 
 export const runtime = "nodejs";
@@ -24,7 +24,7 @@ function errorResponse(error) {
 
 export async function GET(request) {
   try {
-    const snapshot = await getSettingsSnapshot({ canEdit: isLoopbackSettingsRequest(request) });
+    const snapshot = await getSettingsSnapshot({ canEdit: isLocalNetworkSettingsRequest(request) });
     return Response.json(snapshot, { headers: { "Cache-Control": "no-store" } });
   } catch {
     return Response.json(
@@ -46,9 +46,8 @@ export async function PATCH(request) {
     if (!body || typeof body.provider !== "string") {
       throw new SettingsError("A settings provider is required.");
     }
-    const change = await updateProviderSettings(body.provider, body);
+    await updateProviderSettings(body.provider, body);
     clearSettingsValidation(body.provider);
-    if (change.restartRequired) requireSettingsRestart();
     const snapshot = await getSettingsSnapshot({ canEdit: true });
     return Response.json(snapshot, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {

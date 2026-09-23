@@ -5,11 +5,15 @@ import {
 import { subtitleConfig } from "../../../../../../../../lib/subtitles/config.js";
 import { loadSubtitleTrack } from "../../../../../../../../lib/subtitles/service.js";
 import { embeddedSubtitleExtractor } from "../../../../../../../../lib/video/media-info.js";
+import {
+  remoteMediaOptionsResponse,
+  withRemoteMediaCors,
+} from "../../../../../../../../lib/remote-playback/cors.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(_request, context) {
+async function respond(context) {
   const { id, fileId, trackId } = await context.params;
   const match = getVideoFile(id, fileId);
   if (!match) return Response.json({ error: "Playable video file not found." }, { status: 404 });
@@ -34,4 +38,16 @@ export async function GET(_request, context) {
   } finally {
     finish();
   }
+}
+
+export async function GET(_request, context) {
+  return withRemoteMediaCors(await respond(context));
+}
+
+export async function HEAD(_request, context) {
+  return withRemoteMediaCors(await respond(context), { includeBody: false });
+}
+
+export function OPTIONS() {
+  return remoteMediaOptionsResponse();
 }

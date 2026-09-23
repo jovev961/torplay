@@ -6,7 +6,7 @@ import SourcePanel from "./SourcePanel.js";
 import { releaseTorrentSession, useSourceLookup } from "./useSourceLookup.js";
 import useSavedProgress from "./useSavedProgress.js";
 import { useProfile } from "./ProfileProvider.js";
-import { formatPlaybackTime } from "./HistoryShelf.js";
+import { formatPlaybackTime } from "../lib/history/presentation.js";
 import { findEpisodeFile } from "../lib/video/episode.js";
 import { autoplayReducer } from "../lib/playback/autoplay.js";
 
@@ -131,6 +131,7 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
       type: "show",
       query: show.title,
       tmdbId: show.id,
+      imdbId: show.imdbId,
       year: show.year,
       season: episode.season,
       episode: episode.number,
@@ -298,6 +299,7 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
         type: "show",
         query: show.title,
         tmdbId: show.id,
+        imdbId: show.imdbId,
         year: show.year,
         season: nextEpisode.season,
         episode: nextEpisode.number,

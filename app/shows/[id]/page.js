@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import AppHeader from "../../../components/AppHeader.js";
 import ShowDetails from "../../../components/ShowDetails.js";
 import { getSeasonDetails, getShowDetails } from "../../../lib/metadata/tmdb.js";
-import { requireSetupReady } from "../../../lib/settings/gate.js";
+import { requireSetupReady } from "../../_lib/require-setup.js";
 
 export const dynamic = "force-dynamic";
 

@@ -1,12 +1,13 @@
 # TorPlay Documentation
 
-Use these guides for the current application. Files under [`tasks/`](tasks/) are historical implementation specifications rather than setup instructions.
+Use these guides for the current application.
 
 ## Household owners
 
-- [Windows deployment](windows-deployment.md) — install, configure, start automatically, upgrade, uninstall, and build releases.
+- [Windows installation and first run](windows-deployment.md) — download, verify, install, configure APIs, use tray controls, troubleshoot, update, and uninstall.
 - [Configuration](configuration.md) — provider credentials, storage, playback, subtitles, search, and network settings.
-- [Troubleshooting](troubleshooting.md) — Docker, Jackett, `torplay.local`, firewall, ports, playback, and logs.
+- [Torrent sources](torrent-providers.md) — Tested Sources, community Cardigann, Jackett, custom Torznab, and FlareSolverr behavior.
+- [Troubleshooting](troubleshooting.md) — optional Jackett, `torplay.local`, firewall, ports, playback, and logs.
 
 ## Contributors
 
@@ -16,7 +17,8 @@ Use these guides for the current application. Files under [`tasks/`](tasks/) are
 
 ## Quick links
 
-- Installed TorPlay owner/setup: [http://localhost](http://localhost)
+- Installer downloads: [TorPlay Releases](https://github.com/jovev961/torplay/releases)
+- Installed TorPlay owner/setup: [http://torplay.local](http://torplay.local)
+- Installed TorPlay settings: [http://torplay.local/settings](http://torplay.local/settings)
 - Installed TorPlay household access: [http://torplay.local](http://torplay.local)
 - Development server: [http://localhost:3000](http://localhost:3000)
-- Jackett dashboard: [http://localhost:9117](http://localhost:9117)

@@ -62,7 +62,7 @@ export default function SetupManager() {
         body: JSON.stringify({ providers }),
       }));
       setResults(Object.fromEntries(data.results.map((item) => [item.provider, item])));
-      router.replace("/");
+      router.replace("/setup/sources");
       router.refresh();
     } catch (setupError) {
       setError(setupError.message);
@@ -77,7 +77,7 @@ export default function SetupManager() {
   if (error && !snapshot) return <div className="notice error" role="alert">{error}</div>;
   if (!snapshot) return <div className="notice">Loading setup…</div>;
   if (!snapshot.canEdit) {
-    return <div className="notice" role="status">Setup is available only on the TorPlay computer. Open <strong>http://localhost/setup</strong> there to continue.</div>;
+    return <div className="notice" role="status">Setup is available only through TorPlay on your private local network.</div>;
   }
   const providers = snapshot.providers.filter((provider) => provider.required);
 
@@ -120,8 +120,8 @@ export default function SetupManager() {
         );
       })}
       <div className={styles.finishRow}>
-        <p>TorPlay will test both services, save them together, and open the catalog.</p>
-        <button type="submit" disabled={busy}>{busy ? "Verifying connections…" : "Verify and finish"}</button>
+        <p>TorPlay will verify TMDB, then help you choose a source for videos.</p>
+        <button type="submit" disabled={busy}>{busy ? "Verifying connections…" : "Verify and continue"}</button>
       </div>
     </form>
   );

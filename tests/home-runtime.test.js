@@ -1,19 +1,21 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import {
   acquireRuntimeLock,
-  checkDocker,
   formatHttpUrl,
   loadHomeEnvironment,
   parseHomeConfig,
   serverStart,
   startHomeRuntime,
-  waitForDockerReady,
 } from "../scripts/home.js";
+import {
+  exitIfSupervisorStopped,
+  supervisorIsRunning,
+} from "../scripts/runtime-watchdog.js";
 
 class FakeChild extends EventEmitter {
   constructor(autoExit) {
@@ -62,30 +64,34 @@ test("home configuration uses safe defaults and validates public settings", () =
   );
 });
 
-test("installed startup uses the standalone server without the Next CLI", () => {
+test("installed startup uses the standalone server with supervisor ownership", () => {
   const config = parseHomeConfig({ TORPLAY_PORT: "3456" });
-  const server = serverStart({ TORPLAY_SERVER_ENTRY: "C:\\TorPlay\\app\\server.js" }, config);
+  const server = serverStart({
+    TORPLAY_SERVER_ENTRY: "C:\\TorPlay\\app\\server.js",
+    TORPLAY_WATCHDOG_ENTRY: "C:\\TorPlay\\runtime\\runtime-watchdog.mjs",
+    NODE_OPTIONS: "--trace-warnings",
+  }, config);
   assert.deepEqual(server.args, ["C:\\TorPlay\\app\\server.js"]);
   assert.equal(server.environment.HOSTNAME, "127.0.0.1");
   assert.equal(server.environment.PORT, "3456");
   assert.equal(server.environment.NODE_ENV, "production");
+  assert.equal(server.environment.TORPLAY_SUPERVISOR_PID, String(process.pid));
+  assert.match(server.environment.NODE_OPTIONS, /^--trace-warnings --import=file:/);
+  assert.match(server.environment.NODE_OPTIONS, /runtime-watchdog\.mjs$/);
 });
 
-test("Docker failures distinguish a missing client from a stopped daemon", () => {
-  assert.throws(
-    () => checkDocker({
-      spawnSyncProcess: () => ({ status: null, error: Object.assign(new Error("missing"), { code: "ENOENT" }) }),
-    }),
-    /not installed or docker is not on PATH/,
-  );
+test("the server watchdog exits only after its supervisor disappears", () => {
+  const running = () => {};
+  const missing = () => { throw Object.assign(new Error("missing"), { code: "ESRCH" }); };
+  const denied = () => { throw Object.assign(new Error("denied"), { code: "EPERM" }); };
+  let exits = 0;
 
-  let call = 0;
-  assert.throws(
-    () => checkDocker({
-      spawnSyncProcess: () => (++call === 1 ? { status: 0 } : { status: 1, stderr: "daemon unavailable" }),
-    }),
-    /Docker is not running/,
-  );
+  assert.equal(supervisorIsRunning(42, running), true);
+  assert.equal(supervisorIsRunning(42, denied), true);
+  assert.equal(supervisorIsRunning(42, missing), false);
+  assert.equal(exitIfSupervisorStopped({ supervisorPid: 42, killProcess: running, exitProcess: () => { exits += 1; } }), false);
+  assert.equal(exitIfSupervisorStopped({ supervisorPid: 42, killProcess: missing, exitProcess: () => { exits += 1; } }), true);
+  assert.equal(exits, 1);
 });
 
 test("installed configuration keeps process overrides and uses its explicit config file", async () => {
@@ -113,50 +119,19 @@ test("installed configuration keeps process overrides and uses its explicit conf
   }
 });
 
-test("Docker readiness launches Desktop once and uses bounded retries", async () => {
-  let checks = 0;
-  let launches = 0;
-  const waits = [];
-  const version = await waitForDockerReady({
-    dockerDesktopCommand: "Docker Desktop.exe",
-    timeoutMs: 60_000,
-    spawnSyncProcess: (_command, args) => {
-      if (args[0] === "--version") return { status: 0, stdout: "Docker test" };
-      checks += 1;
-      return checks < 3 ? { status: 1 } : { status: 0, stdout: "29.0" };
-    },
-    spawnProcess: () => ({
-      unref() { launches += 1; },
-    }),
-    delayProcess: async (milliseconds) => waits.push(milliseconds),
-    log: () => {},
-  });
-  assert.equal(version, "29.0");
-  assert.equal(launches, 1);
-  assert.deepEqual(waits, [5_000, 10_000]);
-});
-
-test("Docker readiness does not retry a missing installation", async () => {
-  let waits = 0;
-  await assert.rejects(
-    () => waitForDockerReady({
-      timeoutMs: 60_000,
-      spawnSyncProcess: () => ({
-        status: null,
-        error: Object.assign(new Error("missing"), { code: "ENOENT" }),
-      }),
-      delayProcess: async () => { waits += 1; },
-    }),
-    /not installed/,
-  );
-  assert.equal(waits, 0);
-});
-
 test("runtime locks reject a live duplicate and release cleanly", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "torplay-home-lock-"));
   const lockPath = path.join(directory, "home.lock");
   try {
-    const release = await acquireRuntimeLock({ lockPath, pid: 1234, killProcess: () => {} });
+    const release = await acquireRuntimeLock({
+      lockPath, pid: 1234, runnerPid: 1200, token: "instance", killProcess: () => {},
+    });
+    const lock = JSON.parse(await readFile(lockPath, "utf8"));
+    assert.deepEqual(
+      { pid: lock.pid, runnerPid: lock.runnerPid, token: lock.token },
+      { pid: 1234, runnerPid: 1200, token: "instance" },
+    );
+    assert.match(lock.startedAt, /^\d{4}-\d{2}-\d{2}T/);
     await assert.rejects(
       () => acquireRuntimeLock({ lockPath, pid: 5678, killProcess: () => {} }),
       /already running/,
@@ -175,84 +150,107 @@ test("runtime locks reject a live duplicate and release cleanly", async () => {
   }
 });
 
-test("the supervisor starts in order and shuts down only services it started", async () => {
-  const events = [];
-  let statusCalls = 0;
+test("Windows startup ignores obsolete managed-service settings and does not invoke Docker", async () => {
   const next = new FakeChild();
-  const spawnSyncProcess = (_command, args) => {
-    if (args[0] === "--version") return { status: 0, stdout: "Docker version test" };
-    if (args[0] === "info") return { status: 0, stdout: "29.0" };
-    if (args[0] === "compose" && args[1] === "ps" && args[2] === "--status") {
-      statusCalls += 1;
-      return { status: 0, stdout: statusCalls === 1 ? "jackett\n" : "jackett\nflaresolverr\n" };
-    }
-    if (args[0] === "compose" && args[1] === "ps" && args[2] === "-q") {
-      return { status: 0, stdout: `${args[3]}-id\n` };
-    }
-    if (args[0] === "inspect") return { status: 0, stdout: "healthy\n" };
-    throw new Error(`Unexpected sync command: ${args.join(" ")}`);
-  };
-  const spawnProcess = (_command, args) => {
-    if (args[0] === "compose" && args[1] === "up") {
-      events.push("compose-up");
-      return new FakeChild(0);
-    }
-    if (args[0] === "compose" && args[1] === "stop") {
-      events.push(`compose-stop:${args.slice(2).join(",")}`);
-      return new FakeChild(0);
-    }
-    if (args[0] === "/PID") {
-      events.push("taskkill");
-      queueMicrotask(() => {
-        next.exitCode = 0;
-        next.emit("exit", 0, null);
-      });
-      return new FakeChild(0);
-    }
-    events.push("next-start");
-    return next;
-  };
-
+  const calls = [];
+  let proxyStops = 0;
+  let mdnsStops = 0;
   const runtime = await startHomeRuntime({
-    platform: "win32",
-    cwd: process.cwd(),
-    environment: { PATH: process.env.PATH },
-    dockerCommand: "docker",
-    spawnProcess,
-    spawnSyncProcess,
+    platform: "win32", environment: { TORPLAY_MANAGED_JACKETT: "true" }, buildExists: () => true,
+    spawnProcess: (_command, args) => {
+      calls.push(args);
+      if (args.includes("/T")) {
+        queueMicrotask(() => { next.exitCode = 0; next.emit("exit", 0, null); });
+        return new FakeChild(0);
+      }
+      return next;
+    },
+    spawnSyncProcess: () => { throw new Error("Docker must not be called"); },
     fetchProcess: async () => ({ ok: true }),
-    buildExists: () => true,
-    checkPortProcess: async (_port, host) => events.push(`port:${host}`),
-    acquireLockProcess: async () => async () => events.push("lock-release"),
-    configureJackettProcess: () => events.push("jackett-config"),
-    startProxyProcess: async () => {
-      events.push("proxy-start");
-      return { stop: async () => events.push("proxy-stop") };
+    checkPortProcess: async () => {}, acquireLockProcess: async () => async () => {},
+    startProxyProcess: async () => ({ stop: async () => { proxyStops += 1; } }),
+    startMdnsProcess: async () => ({ stop: async () => { mdnsStops += 1; } }),
+    statusReporter: { write() {} }, log() {},
+  });
+  await runtime.stop();
+  await runtime.stop();
+  assert.equal(calls.some((args) => args.includes("compose")), false);
+  assert.equal(proxyStops, 1);
+  assert.equal(mdnsStops, 1);
+});
+
+test("the supervisor recovers an unexpectedly exited application process", async () => {
+  const children = [];
+  const statusUpdates = [];
+  const logs = [];
+  let activeChild;
+  const runtime = await startHomeRuntime({
+    platform: "win32", environment: {}, buildExists: () => true,
+    spawnProcess: (_command, args) => {
+      if (args.includes("/T")) {
+        queueMicrotask(() => {
+          activeChild.exitCode = 0;
+          activeChild.emit("exit", 0, null);
+        });
+        return new FakeChild(0);
+      }
+      activeChild = new FakeChild();
+      children.push(activeChild);
+      return activeChild;
     },
-    startMdnsProcess: async () => {
-      events.push("mdns-start");
-      return { stop: async () => events.push("mdns-stop") };
-    },
-    log: () => {},
+    fetchProcess: async () => ({ ok: true }),
+    checkPortProcess: async () => {}, acquireLockProcess: async () => async () => {},
+    startProxyProcess: async () => ({ isHealthy: () => true, stop: async () => {} }),
+    startMdnsProcess: async () => ({ isHealthy: () => true, stop: async () => {} }),
+    statusReporter: { write(update) { statusUpdates.push(update); } },
+    log: (message) => logs.push(message),
   });
 
-  assert.deepEqual(events.slice(0, 7), [
-    "port:127.0.0.1",
-    "port:0.0.0.0",
-    "compose-up",
-    "jackett-config",
-    "next-start",
-    "proxy-start",
-    "mdns-start",
-  ]);
+  const failedChild = children[0];
+  failedChild.exitCode = 1;
+  failedChild.emit("exit", 1, null);
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(children.length, 2);
+  assert.equal(statusUpdates.some((update) => update.components?.TorPlay === "RECOVERING"), true);
+  assert.equal(statusUpdates.at(-1).components.TorPlay, "OK");
+  assert.equal(logs.some((message) => message.includes("TorPlay recovered")), true);
   await runtime.stop();
-  assert.deepEqual(events.slice(-5), [
-    "mdns-stop",
-    "proxy-stop",
-    "taskkill",
-    "compose-stop:flaresolverr",
-    "lock-release",
-  ]);
-  assert.deepEqual(next.signals, []);
-  assert.equal(events.some((event) => event === "compose-stop:jackett"), false);
+});
+
+test("the supervisor restarts an unexpectedly closed LAN proxy", async () => {
+  const child = new FakeChild();
+  const proxies = [];
+  const runtime = await startHomeRuntime({
+    platform: "win32", environment: {}, buildExists: () => true,
+    spawnProcess: (_command, args) => {
+      if (args.includes("/T")) {
+        queueMicrotask(() => {
+          child.exitCode = 0;
+          child.emit("exit", 0, null);
+        });
+        return new FakeChild(0);
+      }
+      return child;
+    },
+    fetchProcess: async () => ({ ok: true }),
+    checkPortProcess: async () => {}, acquireLockProcess: async () => async () => {},
+    startProxyProcess: async () => {
+      const server = new EventEmitter();
+      const instance = {
+        server,
+        isHealthy: () => true,
+        stop: async () => { server.emit("close"); },
+      };
+      proxies.push(instance);
+      return instance;
+    },
+    startMdnsProcess: async () => ({ isHealthy: () => true, stop: async () => {} }),
+    statusReporter: { write() {} }, log() {},
+  });
+
+  proxies[0].server.emit("close");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(proxies.length, 2);
+  await runtime.stop();
 });

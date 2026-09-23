@@ -1,26 +1,9 @@
 import http from "node:http";
-import net from "node:net";
 import { getResponder, ServiceEvent, ServiceType } from "@homebridge/ciao";
 import { createProxyServer as createDefaultProxyServer } from "http-proxy-3";
+import { isPrivateNetworkAddress } from "../lib/network/private-address.js";
 
-export function isPrivateClientAddress(value) {
-  let address = String(value || "").split("%")[0].toLowerCase();
-  if (address.startsWith("::ffff:")) address = address.slice(7);
-
-  if (net.isIP(address) === 4) {
-    const octets = address.split(".").map(Number);
-    return octets[0] === 10
-      || octets[0] === 127
-      || (octets[0] === 169 && octets[1] === 254)
-      || (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31)
-      || (octets[0] === 192 && octets[1] === 168);
-  }
-
-  return address === "::1"
-    || address.startsWith("fc")
-    || address.startsWith("fd")
-    || /^fe[89ab]/.test(address);
-}
+export const isPrivateClientAddress = isPrivateNetworkAddress;
 
 function listen(server, port, host) {
   return new Promise((resolve, reject) => {
@@ -95,6 +78,9 @@ export async function startReverseProxy({
 
   return {
     server,
+    isHealthy() {
+      return server.listening;
+    },
     async stop() {
       await closeServer(server);
       proxy.removeAllListeners?.();
@@ -149,6 +135,9 @@ export async function startMdnsAdvertisement({
   let stopped = false;
   return {
     service,
+    isHealthy() {
+      return !stopped && (!service.serviceState || service.serviceState === "announced");
+    },
     async stop() {
       if (stopped) return;
       stopped = true;

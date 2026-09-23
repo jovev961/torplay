@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getSetupStatus } from "./readiness.js";
+import { getSetupStatus } from "../../lib/settings/readiness.js";
 
 export async function requireSetupReady() {
   const status = await getSetupStatus();

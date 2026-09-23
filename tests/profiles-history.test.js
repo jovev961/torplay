@@ -3,7 +3,13 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import Database from "better-sqlite3";
 import { createDatabase } from "../lib/database/sqlite.js";
+import {
+  defaultProfileAvatarId,
+  isProfileAvatarId,
+  PROFILE_AVATARS,
+} from "../lib/profiles/avatars.js";
 import {
   beginPlaybackSession,
   calculateCompleted,
@@ -20,6 +26,7 @@ import {
   getProfile,
   listProfiles,
   renameProfile,
+  updateProfile,
   updateSubtitlePreferences,
 } from "../lib/profiles/service.js";
 
@@ -48,13 +55,26 @@ function save(database, profileId, media, position, duration, sequence = 1) {
   }, database);
 }
 
+test("built-in profile avatars have stable unique identifiers", () => {
+  assert.ok(PROFILE_AVATARS.length >= 6);
+  assert.equal(new Set(PROFILE_AVATARS.map((avatar) => avatar.id)).size, PROFILE_AVATARS.length);
+  assert.equal(PROFILE_AVATARS.every((avatar) => avatar.label && avatar.symbol), true);
+  assert.equal(isProfileAvatarId(defaultProfileAvatarId("existing-profile")), true);
+});
+
 test("profiles keep stable IDs through rename and delete their history", () => {
   const database = createDatabase(":memory:");
   try {
-    const profile = createProfile({ name: " Vasil " }, database);
+    const profile = createProfile({ name: " Vasil ", avatarId: "ocean" }, database);
+    assert.equal(profile.avatarId, "ocean");
     const renamed = renameProfile(profile.id, { name: "Viewer" }, database);
     assert.equal(renamed.id, profile.id);
     assert.equal(renamed.name, "Viewer");
+    assert.equal(renamed.avatarId, "ocean");
+    const customized = updateProfile(profile.id, { avatarId: "violet" }, database);
+    assert.equal(customized.name, "Viewer");
+    assert.equal(customized.avatarId, "violet");
+    assert.throws(() => updateProfile(profile.id, { avatarId: "custom-upload" }, database), /valid profile avatar/);
     assert.deepEqual(listProfiles(database).map((item) => item.id), [profile.id]);
 
     save(database, profile.id, movie(10, "Sintel"), 90, 600);
@@ -72,6 +92,8 @@ test("subtitle preferences are validated, persisted, and isolated by profile", (
   try {
     const first = createProfile({ name: "First" }, database);
     const second = createProfile({ name: "Second" }, database);
+    assert.equal(isProfileAvatarId(first.avatarId), true);
+    assert.throws(() => createProfile({ name: "Invalid", avatarId: "uploaded-image" }, database), /valid profile avatar/);
     assert.deepEqual(first.subtitlePreferences, {
       defaultLanguage: "en",
       enabledLanguages: ["en"],
@@ -178,7 +200,44 @@ test("database migration restores started media that only has a progress writer"
     assert.equal(restored.position, 0);
     assert.equal(restored.duration, 0);
     assert.equal(restored.episodeTitle, "Chapter Three: Body Double");
-    assert.equal(database.pragma("user_version", { simple: true }), 4);
+    assert.equal(database.pragma("user_version", { simple: true }), 6);
+  } finally {
+    database?.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("database migration assigns built-in avatars without replacing profile data", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "torplay-profile-avatars-"));
+  const filename = path.join(directory, "legacy.db");
+  let database;
+  try {
+    const legacy = new Database(filename);
+    legacy.exec(`
+      CREATE TABLE profiles (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        subtitle_default_language TEXT NOT NULL DEFAULT 'en',
+        subtitle_languages TEXT NOT NULL DEFAULT '["en"]',
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      INSERT INTO profiles VALUES ('legacy-one', 'Vasil', 'en', '["en"]', 1, 1);
+      INSERT INTO profiles VALUES ('legacy-two', 'Ema', 'en', '["en"]', 2, 2);
+      PRAGMA user_version = 5;
+    `);
+    legacy.close();
+
+    database = createDatabase(filename);
+    const profiles = listProfiles(database);
+    assert.deepEqual(profiles.map(({ id, name }) => ({ id, name })), [
+      { id: "legacy-one", name: "Vasil" },
+      { id: "legacy-two", name: "Ema" },
+    ]);
+    assert.equal(profiles[0].avatarId, defaultProfileAvatarId("legacy-one", 0));
+    assert.equal(profiles[1].avatarId, defaultProfileAvatarId("legacy-two", 1));
+    assert.equal(profiles.every((profile) => isProfileAvatarId(profile.avatarId)), true);
+    assert.equal(database.pragma("user_version", { simple: true }), 6);
   } finally {
     database?.close();
     await rm(directory, { recursive: true, force: true });

@@ -1,16 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import {
+  SETTINGS_SECTIONS,
+  settingsSectionFromHash,
+  settingsValidationRequest,
+} from "../lib/settings/navigation.js";
 import styles from "./SettingsManager.module.css";
-
-const sections = [
-  ["general", "General"],
-  ["services", "Services"],
-  ["subtitles", "Subtitles"],
-  ["playback", "Playback"],
-  ["about", "About"],
-];
+import NetworkAccess from "./NetworkAccess.js";
+import TorrentIndexerManager from "./TorrentIndexerManager.js";
 
 const statusLabels = {
   valid: "Valid",
@@ -19,6 +18,10 @@ const statusLabels = {
   missing: "Missing",
   unconfigured: "Not configured",
   checking: "Checking…",
+  available: "Available",
+  unavailable: "Unavailable",
+  disabled: "Disabled",
+  pending: "Not saved",
 };
 
 function key(providerId, fieldId) {
@@ -69,6 +72,7 @@ function RuntimeStatus({ components }) {
 }
 
 export default function SettingsManager() {
+  const [selectedSection, setSelectedSection] = useState("general");
   const [snapshot, setSnapshot] = useState(null);
   const [drafts, setDrafts] = useState({});
   const [secrets, setSecrets] = useState({});
@@ -78,16 +82,29 @@ export default function SettingsManager() {
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
 
-  async function validateProviders(providerIds) {
+  useEffect(() => {
+    function selectHashSection() {
+      setSelectedSection(settingsSectionFromHash(window.location.hash));
+    }
+    selectHashSection();
+    window.addEventListener("hashchange", selectHashSection);
+    return () => window.removeEventListener("hashchange", selectHashSection);
+  }, []);
+
+  const validateProviders = useCallback(async (providerIds, { refresh = false } = {}) => {
+    if (!providerIds.length) return;
     setValidations((current) => ({
       ...current,
-      ...Object.fromEntries(providerIds.map((id) => [id, { status: "checking", message: "Checking the configured service." }])),
+      ...Object.fromEntries(providerIds.map((id) => [id, {
+        status: "checking",
+        message: "Checking the configured service.",
+      }])),
     }));
     try {
       const data = await readJson(await fetch("/api/settings/validate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ providers: providerIds }),
+        body: JSON.stringify({ providers: providerIds, refresh }),
       }));
       setValidations((current) => ({
         ...current,
@@ -102,7 +119,7 @@ export default function SettingsManager() {
         }])),
       }));
     }
-  }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -112,11 +129,15 @@ export default function SettingsManager() {
         if (cancelled) return;
         setSnapshot(data);
         setDrafts(draftsFrom(data.providers));
-        void validateProviders(data.providers.map((provider) => provider.id));
       })
       .catch((loadError) => { if (!cancelled) setError(loadError.message); });
     return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    const request = settingsValidationRequest(snapshot, selectedSection);
+    if (request.providerIds.length) void validateProviders(request.providerIds, request);
+  }, [selectedSection, snapshot, validateProviders]);
 
   async function saveProvider(provider) {
     const values = {};
@@ -144,7 +165,6 @@ export default function SettingsManager() {
         Object.entries(current).filter(([fieldKey]) => !fieldKey.startsWith(`${provider.id}:`)),
       ));
       setNotice(`${provider.name} settings saved.`);
-      void validateProviders([provider.id]);
     } catch (saveError) {
       setError(saveError.message);
     } finally {
@@ -165,7 +185,6 @@ export default function SettingsManager() {
       }));
       setSnapshot(data);
       setNotice(`${provider.name} ${field.label} removed.`);
-      void validateProviders([provider.id]);
     } catch (removeError) {
       setError(removeError.message);
     } finally {
@@ -264,51 +283,70 @@ export default function SettingsManager() {
   return (
     <div className={styles.settingsLayout}>
       <nav className={styles.settingsNav} aria-label="Settings sections">
-        {sections.map(([id, label]) => <a href={`#${id}`} key={id}>{label}</a>)}
+        {SETTINGS_SECTIONS.map(([id, label]) => (
+          <a
+            className={selectedSection === id ? styles.activeNavItem : ""}
+            href={`#${id}`}
+            aria-current={selectedSection === id ? "page" : undefined}
+            key={id}
+            onClick={() => setSelectedSection(id)}
+          >
+            {label}
+          </a>
+        ))}
       </nav>
       <div className={styles.settingsContent}>
         {!snapshot.canEdit ? (
           <div className="notice" role="status">
-            Sensitive settings are read-only over the network. Open <strong>http://localhost/settings</strong> on the TorPlay computer to make changes.
-          </div>
-        ) : null}
-        {snapshot.restartRequired ? (
-          <div className="notice" role="status">
-            Restart TorPlay to synchronize the updated OMDb setting with Jackett. Use <strong>Start or Restart TorPlay</strong> on Windows, or restart the development command.
+            Settings can be changed only through TorPlay on your private local network.
           </div>
         ) : null}
         {notice ? <div className="notice success" role="status">{notice}</div> : null}
         {error ? <div className="notice error" role="alert">{error}</div> : null}
 
-        <section className={styles.settingsSection} id="general">
+        {selectedSection === "general" ? <section className={styles.settingsSection} id="general">
           <div className={styles.sectionHeading}><span>01</span><div><h2>General</h2><p>Runtime and local configuration health.</p></div></div>
           <div className={styles.summaryCard}>
             <dl>
               <div><dt>Runtime</dt><dd>{snapshot.runtime.mode}</dd></div>
               <div><dt>Configuration</dt><dd>{snapshot.runtime.configurationWritable ? "Writable" : "Unavailable"}</dd></div>
-              <div><dt>Editing</dt><dd>{snapshot.canEdit ? "Local host enabled" : "Read-only on this device"}</dd></div>
+              <div><dt>Editing</dt><dd>{snapshot.canEdit ? "Local network enabled" : "Unavailable outside the local network"}</dd></div>
             </dl>
             <RuntimeStatus components={snapshot.runtime.components} />
           </div>
-        </section>
+          <NetworkAccess />
+        </section> : null}
 
-        <section className={styles.settingsSection} id="services">
-          <div className={styles.sectionHeading}><span>02</span><div><h2>Services</h2><p>Metadata, source discovery, and managed search support.</p></div></div>
+        {selectedSection === "services" ? <section className={styles.settingsSection} id="services">
+          <div className={styles.sectionHeading}><span>02</span><div><h2>Services</h2><p>Metadata, source discovery, and external search integrations.</p></div></div>
           <div className={styles.providerGrid}>{serviceProviders.map(providerCard)}</div>
-          <article className={styles.providerCard}>
-            <div className={styles.providerTitle}><h3>FlareSolverr</h3><span>Managed</span></div>
-            <p>Started and configured automatically alongside Jackett. Its current state appears in General when supervisor status is available.</p>
-          </article>
-        </section>
+        </section> : null}
 
-        <section className={styles.settingsSection} id="subtitles">
-          <div className={styles.sectionHeading}><span>03</span><div><h2>Subtitles</h2><p>Optional external subtitle providers.</p></div></div>
+        {selectedSection === "torrent-sources" ? <section className={styles.settingsSection} id="torrent-sources">
+          <div className={styles.sectionHeading}><span>03</span><div><h2>Torrent Sources</h2><p>Choose the third-party sources TorPlay may use for movie and TV searches.</p></div></div>
+          <div className={styles.sourceNotice}>
+            TorPlay does not host or provide media files. Content and torrent metadata are obtained from third-party sources selected by the user. Users are responsible for ensuring that their use of TorPlay and configured sources complies with applicable laws and the rights of content owners.
+          </div>
+          <TorrentIndexerManager
+            nativeSources={snapshot.nativeSources}
+            initialCustomProviders={snapshot.customProviders}
+            canEdit={snapshot.canEdit}
+            onCustomChanged={async () => {
+              const data = await readJson(await fetch("/api/settings", { cache: "no-store" }));
+              setSnapshot(data);
+              return data;
+            }}
+          />
+        </section> : null}
+
+        {selectedSection === "subtitles" ? <section className={styles.settingsSection} id="subtitles">
+          <div className={styles.sectionHeading}><span>04</span><div><h2>Subtitles</h2><p>Optional external subtitle providers.</p></div></div>
           <div className={styles.providerGrid}>{subtitleProviders.map(providerCard)}</div>
           <p className={styles.sectionNote}>Preferred subtitle languages remain profile-specific. <Link href="/profiles">Manage profile languages →</Link></p>
-        </section>
+        </section> : null}
 
-        <section className={styles.settingsSection} id="playback">
-          <div className={styles.sectionHeading}><span>04</span><div><h2>Playback</h2><p>Current playback capabilities and safe runtime defaults.</p></div></div>
+        {selectedSection === "playback" ? <section className={styles.settingsSection} id="playback">
+          <div className={styles.sectionHeading}><span>05</span><div><h2>Playback</h2><p>Current playback capabilities and safe runtime defaults.</p></div></div>
           <div className={styles.capabilityGrid}>
             <div><span>Native formats</span><strong>{snapshot.playback.nativeFormats.join(" · ")}</strong></div>
             <div><span>Prepared playback</span><strong>{snapshot.playback.hlsAvailable ? "HLS available" : "Unavailable"}</strong></div>
@@ -317,10 +355,10 @@ export default function SettingsManager() {
             <div><span>Subtitle cache</span><strong>{snapshot.playback.subtitleCacheDays} days</strong></div>
           </div>
           <p className={styles.sectionNote}>Network ports, storage paths, trackers, and executable overrides remain owner-managed runtime configuration.</p>
-        </section>
+        </section> : null}
 
-        <section className={styles.settingsSection} id="about">
-          <div className={styles.sectionHeading}><span>05</span><div><h2>About</h2><p>Build and project information.</p></div></div>
+        {selectedSection === "about" ? <section className={styles.settingsSection} id="about">
+          <div className={styles.sectionHeading}><span>06</span><div><h2>About</h2><p>Build and project information.</p></div></div>
           <div className={styles.summaryCard}>
             <dl>
               <div><dt>Version</dt><dd>{snapshot.about.version}</dd></div>
@@ -329,7 +367,7 @@ export default function SettingsManager() {
             </dl>
             <p className={styles.muted}>Metadata by TMDB. IMDb-compatible ratings and lookups may use OMDb. Subtitle results may use OpenSubtitles or SubDL when configured.</p>
           </div>
-        </section>
+        </section> : null}
       </div>
     </div>
   );

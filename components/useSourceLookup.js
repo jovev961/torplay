@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { isRemotePlaybackSessionActive } from "../lib/remote-playback/client-state.js";
 
 async function readJson(response) {
   const contentType = response.headers.get("content-type") || "";
@@ -8,7 +9,11 @@ async function readJson(response) {
     throw new Error(`The server returned an unexpected response (${response.status}).`);
   }
   const data = await response.json();
-  if (!response.ok) throw new Error(data.error || "The request failed.");
+  if (!response.ok) {
+    const error = new Error(data.error || "The request failed.");
+    error.code = data.code || null;
+    throw error;
+  }
   return data;
 }
 
@@ -36,6 +41,17 @@ export async function releaseTorrentSession(
   return true;
 }
 
+export function shouldPollTorrentSession(session) {
+  return torrentSessionPollDelay(session) !== null;
+}
+
+export function torrentSessionPollDelay(session) {
+  if (!session?.id) return null;
+  if (session.status === "loading") return 1000;
+  if (session.status === "ready") return 2000;
+  return null;
+}
+
 export function useSourceLookup() {
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
@@ -44,6 +60,7 @@ export function useSourceLookup() {
   const [session, setSession] = useState(null);
   const [selectedFileId, setSelectedFileId] = useState(null);
   const [error, setError] = useState("");
+  const [errorCode, setErrorCode] = useState("");
   const pendingRequests = useRef(new Set());
   const releasedSessionIds = useRef(new Set());
 
@@ -74,7 +91,8 @@ export function useSourceLookup() {
   }, []);
 
   useEffect(() => {
-    if (!session?.id || !["loading", "ready"].includes(session.status)) return undefined;
+    const pollDelay = torrentSessionPollDelay(session);
+    if (pollDelay === null) return undefined;
 
     let cancelled = false;
     const timer = setTimeout(async () => {
@@ -85,9 +103,12 @@ export function useSourceLookup() {
         const next = await readJson(response);
         if (!cancelled) setSession(next);
       } catch (pollError) {
-        if (!cancelled) setError(pollError.message);
+        if (!cancelled) {
+          setError(pollError.message);
+          setErrorCode(pollError.code || "");
+        }
       }
-    }, 1000);
+    }, pollDelay);
 
     return () => {
       cancelled = true;
@@ -100,6 +121,7 @@ export function useSourceLookup() {
     if (!sessionId) return undefined;
 
     const onPageHide = () => {
+      if (isRemotePlaybackSessionActive(sessionId)) return;
       void releaseSession(sessionId, { preferBeacon: true }).catch(() => {});
     };
     const onPageShow = (event) => {
@@ -113,7 +135,9 @@ export function useSourceLookup() {
     return () => {
       window.removeEventListener("pagehide", onPageHide);
       window.removeEventListener("pageshow", onPageShow);
-      void releaseSession(sessionId).catch(() => {});
+      if (!isRemotePlaybackSessionActive(sessionId)) {
+        void releaseSession(sessionId).catch(() => {});
+      }
     };
   }, [releaseSession, session?.id]);
 
@@ -123,6 +147,7 @@ export function useSourceLookup() {
       await releaseSession(session.id, { explicit: true });
     } catch (stopError) {
       setError(stopError.message);
+      setErrorCode(stopError.code || "");
     } finally {
       setSession(null);
       setSelectedFileId(null);
@@ -134,6 +159,7 @@ export function useSourceLookup() {
     setSearching(true);
     setHasSearched(true);
     setError("");
+    setErrorCode("");
     setResults([]);
     setSelectedFileId(null);
 
@@ -149,7 +175,10 @@ export function useSourceLookup() {
       const data = await readJson(response);
       setResults(data.results);
     } catch (searchError) {
-      if (searchError.name !== "AbortError") setError(searchError.message);
+      if (searchError.name !== "AbortError") {
+        setError(searchError.message);
+        setErrorCode(searchError.code || "");
+      }
     } finally {
       setSearching(false);
     }
@@ -158,6 +187,7 @@ export function useSourceLookup() {
   async function start(resultId) {
     setStartingId(resultId);
     setError("");
+    setErrorCode("");
     setSelectedFileId(null);
     try {
       const response = await request("/api/torrents", {
@@ -167,7 +197,10 @@ export function useSourceLookup() {
       });
       setSession(await readJson(response));
     } catch (startError) {
-      if (startError.name !== "AbortError") setError(startError.message);
+      if (startError.name !== "AbortError") {
+        setError(startError.message);
+        setErrorCode(startError.code || "");
+      }
     } finally {
       setStartingId(null);
     }
@@ -175,6 +208,7 @@ export function useSourceLookup() {
 
   function adoptSession(nextSession, fileId = null) {
     setError("");
+    setErrorCode("");
     setResults([]);
     setHasSearched(true);
     setSession(nextSession);
@@ -183,6 +217,7 @@ export function useSourceLookup() {
 
   return {
     error,
+    errorCode,
     hasSearched,
     results,
     searching,

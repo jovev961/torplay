@@ -113,3 +113,16 @@ test("hides sources whose parsed metadata proves incompatible", async () => {
   assert.deepEqual(results, []);
   assert.equal(source.preferMagnet, undefined);
 });
+
+test("validates opaque Cardigann resolvers without exposing their download step", async () => {
+  let resolutions = 0;
+  const source = { resolver: async () => { resolutions += 1; return { magnet: "magnet:?xt=urn:btih:0123456789012345678901234567890123456789" }; } };
+  const id = saveSearchResult(source);
+  const results = await validateStreamableResults([{ id, title: "Resolved", infoHash: null }], {}, async (stored) => {
+    const resolved = await stored.resolver();
+    assert.match(resolved.magnet, /^magnet:/);
+    return { playbackMode: "native" };
+  });
+  assert.equal(resolutions, 1);
+  assert.equal(results[0].verification, "verified");
+});

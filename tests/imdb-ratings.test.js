@@ -85,7 +85,7 @@ test("persists ratings and serves fresh cache hits without provider calls", asyn
     assert.deepEqual(second, first);
     assert.equal(resolved, 1);
     assert.equal(fetched, 1);
-    assert.equal(database.pragma("user_version", { simple: true }), 4);
+    assert.equal(database.pragma("user_version", { simple: true }), 6);
   } finally {
     database.close();
   }

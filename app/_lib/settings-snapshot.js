@@ -1,17 +1,9 @@
 import packageJson from "../../package.json" with { type: "json" };
-import { readRuntimeStatus } from "../../scripts/runtime-status.js";
-import { configurationWritable, settingsState } from "./config.js";
-import { setupStatusFromProviders } from "./readiness.js";
-
-const restartKey = Symbol.for("torplay.settingsRestartRequired");
-
-export function requireSettingsRestart() {
-  globalThis[restartKey] = true;
-}
-
-export function settingsRestartRequired() {
-  return Boolean(globalThis[restartKey]);
-}
+import { configurationWritable, settingsState } from "../../lib/settings/config.js";
+import { setupStatusFromProviders } from "../../lib/settings/readiness.js";
+import { publicCustomProviders } from "../../lib/settings/torrent-providers.js";
+import { publicNativeSources } from "../../lib/settings/native-sources.js";
+import { readRuntimeStatus } from "../../platform/runtime/status.js";
 
 function runtimeComponents(environment) {
   const state = readRuntimeStatus(environment.TORPLAY_STATUS_PATH);
@@ -33,12 +25,14 @@ export async function getSettingsSnapshot({
   return {
     canEdit,
     setup: setupStatusFromProviders(state.providers),
-    restartRequired: settingsRestartRequired(),
     runtime: {
       mode: environment.TORPLAY_CONFIG_PATH ? "Installed Windows runtime" : "Development or source runtime",
       configurationWritable: await configurationWritable({ environment, cwd }),
       components: runtimeComponents(environment),
     },
+    torrentSources: state.torrentSources,
+    nativeSources: publicNativeSources(environment),
+    customProviders: publicCustomProviders(environment, canEdit),
     providers: state.providers,
     playback: {
       nativeFormats: ["MP4", "M4V", "WebM"],

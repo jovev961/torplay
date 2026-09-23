@@ -23,15 +23,15 @@ test("parses supported environment assignments without exposing comments", () =>
   assert.deepEqual(parseSettingsEnvironment([
     "# Settings",
     "TMDB_API_TOKEN='token value'",
-    " JACKETT_URL = http://localhost:9117 ",
+    " FLARESOLVERR_URL = http://localhost:8191 ",
     "lowercase=ignored",
   ].join("\n")), {
     TMDB_API_TOKEN: "token value",
-    JACKETT_URL: "http://localhost:9117",
+    FLARESOLVERR_URL: "http://localhost:8191",
   });
 });
 
-test("updates provider settings atomically while preserving unrelated configuration", async () => {
+test("updates FlareSolverr settings atomically while preserving legacy configuration", async () => {
   const { directory, filename } = await fixture("# Keep this comment\nUNRELATED=value\nJACKETT_URL=http://localhost:9117\nJACKETT_API_KEY=old-secret\n");
   const environment = {
     TORPLAY_CONFIG_PATH: filename,
@@ -39,28 +39,49 @@ test("updates provider settings atomically while preserving unrelated configurat
     JACKETT_URL: "http://localhost:9117",
   };
   try {
-    const result = await updateProviderSettings("jackett", {
-      values: {
-        url: "http://127.0.0.1:9117/",
-        apiKey: "",
-        movieIndexers: " public-domain, archive_org,public-domain ",
-      },
-      remove: ["showIndexers"],
+    const result = await updateProviderSettings("flaresolverr", {
+      values: { url: "http://127.0.0.1:8191/" },
     }, { environment, configPath: filename });
 
-    assert.deepEqual(result, { providerId: "jackett", restartRequired: false });
+    assert.deepEqual(result, { providerId: "flaresolverr", restartRequired: false });
     const source = await readFile(filename, "utf8");
     assert.match(source, /^# Keep this comment$/m);
     assert.match(source, /^UNRELATED=value$/m);
     assert.match(source, /^JACKETT_API_KEY=old-secret$/m);
-    assert.match(source, /^JACKETT_URL=http:\/\/127\.0\.0\.1:9117$/m);
-    assert.match(source, /^JACKETT_MOVIE_INDEXERS=public-domain,archive_org$/m);
+    assert.match(source, /^JACKETT_URL=http:\/\/localhost:9117$/m);
+    assert.match(source, /^FLARESOLVERR_URL=http:\/\/127\.0\.0\.1:8191$/m);
     assert.equal(environment.JACKETT_API_KEY, "old-secret");
-    assert.equal(environment.JACKETT_URL, "http://127.0.0.1:9117");
+    assert.equal(environment.FLARESOLVERR_URL, "http://127.0.0.1:8191");
     if (process.platform !== "win32") assert.equal((await stat(filename)).mode & 0o777, 0o600);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test("OMDb changes take effect without a runtime restart", async () => {
+  const { directory, filename } = await fixture("");
+  const environment = { TORPLAY_CONFIG_PATH: filename };
+  try {
+    const result = await updateProviderSettings("omdb", {
+      values: { apiKey: "omdb-secret" },
+    }, { environment, configPath: filename });
+    assert.deepEqual(result, { providerId: "omdb", restartRequired: false });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("Jackett service URL and key are saved without exposing the key", async () => {
+  const { directory, filename } = await fixture("");
+  const environment = { TORPLAY_CONFIG_PATH: filename };
+  try {
+    await updateProviderSettings("jackett", { values: { url: "http://localhost:9117", apiKey: "private-jackett-key" } }, { environment, configPath: filename });
+    const state = await settingsState({ environment, includeValues: true });
+    const jackett = state.providers.find((item) => item.id === "jackett");
+    assert.equal(jackett.configured, true);
+    assert.equal(jackett.fields.find((item) => item.id === "url").value, "http://localhost:9117");
+    assert.equal(JSON.stringify(state).includes("private-jackett-key"), false);
+  } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
 test("removes secrets explicitly and never returns their values", async () => {
@@ -96,13 +117,10 @@ test("rejects externally managed, malformed, and unsupported values", async () =
       (error) => error instanceof SettingsError && error.status === 409,
     );
     await assert.rejects(
-      updateProviderSettings("jackett", { values: { url: "file:///secret" } }, { environment: {}, configPath: filename }),
+      updateProviderSettings("flaresolverr", { values: { url: "file:///secret" } }, { environment: {}, configPath: filename }),
       /HTTP or HTTPS/,
     );
-    await assert.rejects(
-      updateProviderSettings("jackett", { values: { movieIndexers: "valid,bad id" } }, { environment: {}, configPath: filename }),
-      /invalid indexer ID/,
-    );
+    await assert.rejects(updateProviderSettings("jackett", { values: { url: "file:///secret" } }, { environment: {}, configPath: filename }), /HTTP or HTTPS/);
     await assert.rejects(
       updateProviderSettings("tmdb", { values: { apiToken: "0123456789abcdef0123456789abcdef" } }, { environment: {}, configPath: filename }),
       /API Read Access Token/,
@@ -133,12 +151,10 @@ test("validates required providers before committing them as one configuration c
   const environment = { TORPLAY_CONFIG_PATH: filename };
   const changes = [
     { providerId: "tmdb", payload: { values: { apiToken: "tmdb-token" } } },
-    { providerId: "jackett", payload: { values: { url: "http://localhost:9117", apiKey: "jackett-token" } } },
   ];
   try {
     const rejected = await validateAndUpdateProvidersSettings(changes, async (candidate) => {
       assert.equal(candidate.TMDB_API_TOKEN, "tmdb-token");
-      assert.equal(candidate.JACKETT_API_KEY, "jackett-token");
       return { valid: false, results: [{ provider: "tmdb", status: "invalid" }] };
     }, { environment, configPath: filename });
     assert.equal(rejected.committed, false);
@@ -153,9 +169,23 @@ test("validates required providers before committing them as one configuration c
     const source = await readFile(filename, "utf8");
     assert.match(source, /^# preserved$/m);
     assert.match(source, /^TMDB_API_TOKEN=tmdb-token$/m);
-    assert.match(source, /^JACKETT_API_KEY=jackett-token$/m);
     assert.equal(environment.TMDB_API_TOKEN, "tmdb-token");
-    assert.equal(environment.JACKETT_API_KEY, "jackett-token");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("configuring Jackett service alone does not create a torrent source", async () => {
+  const { directory, filename } = await fixture("");
+  const environment = {
+    TORPLAY_CONFIG_PATH: filename,
+    JACKETT_URL: "http://localhost:9117",
+    JACKETT_API_KEY: "secret",
+  };
+  try {
+    const state = await settingsState({ environment, includeValues: true });
+    assert.deepEqual(state.torrentSources, { nativeActive: false, customActive: false });
+    assert.equal(JSON.stringify(state.torrentSources).includes("secret"), false);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

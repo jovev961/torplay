@@ -10,7 +10,6 @@ export const dynamic = "force-dynamic";
 
 const setupFields = {
   tmdb: new Set(["apiToken"]),
-  jackett: new Set(["url", "apiKey"]),
 };
 
 function setupChanges(body) {
@@ -20,7 +19,7 @@ function setupChanges(body) {
   }
   const unknownProvider = Object.keys(providers).find((id) => !setupFields[id]);
   if (unknownProvider) throw new SettingsError("Setup contains an unknown provider.");
-  return Object.entries(setupFields).map(([providerId, allowed]) => {
+  return Object.entries(setupFields).filter(([id]) => id === "tmdb" || providers[id]).map(([providerId, allowed]) => {
     const values = providers[providerId] || {};
     if (typeof values !== "object" || Array.isArray(values)) {
       throw new SettingsError("Provider settings must be an object.");
@@ -42,7 +41,7 @@ export async function POST(request) {
       throw new SettingsError("Request body must be valid JSON.");
     }
     const outcome = await validateAndUpdateProvidersSettings(setupChanges(body), async (environment) => {
-      const results = await validateSettingsProviders(["tmdb", "jackett"], {
+      const results = await validateSettingsProviders(["tmdb"], {
         environment,
         useCache: false,
       });
@@ -55,7 +54,6 @@ export async function POST(request) {
       );
     }
     clearSettingsValidation("tmdb");
-    clearSettingsValidation("jackett");
     return Response.json(
       { ready: true, results: outcome.validation.results },
       { headers: { "Cache-Control": "no-store" } },

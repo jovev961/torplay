@@ -16,11 +16,16 @@ import {
 } from "../lib/subtitles/timeline.js";
 import { PROGRESS_SAVE_INTERVAL_MS } from "../lib/history/constants.js";
 import { isPlaybackAtEnd, shouldOfferNextEpisode } from "../lib/playback/autoplay.js";
+import { isRemotePlaybackSessionActive } from "../lib/remote-playback/client-state.js";
+import { remotePlaybackSource } from "../lib/remote-playback/source.js";
 import {
   isFullscreenActive,
+  lockFullscreenViewport,
   supportsFullscreen,
   toggleBrowserFullscreen,
 } from "../lib/video/fullscreen.js";
+import { closesPlayerMenu, nextMenuIndex } from "../lib/video/menu-navigation.js";
+import { useRemotePlayback } from "./useRemotePlayback.js";
 
 async function responseJson(response) {
   const contentType = response.headers.get("content-type") || "";
@@ -81,6 +86,7 @@ function Icon({ name }) {
     fullscreen: <path d="M5 5h5v2H7v3H5V5zm9 0h5v5h-2V7h-3V5zM5 14h2v3h3v2H5v-5zm12 0h2v5h-5v-2h3v-3z" />,
     compress: <path d="M8 8H5V6h5v5H8V8zm8 0v3h-2V6h5v2h-3zM8 16v-3h2v5H5v-2h3zm8 0h3v2h-5v-5h2v3z" />,
     pip: <path d="M4 6h16v12H4V6zm2 2v8h12V8H6zm7 3h4v4h-4v-4z" />,
+    cast: <path d="M3 18v3h3a3 3 0 0 0-3-3zm0-5v2a6 6 0 0 1 6 6h2a8 8 0 0 0-8-8zm0-5v2c6.08 0 11 4.92 11 11h2C16 13.82 10.18 8 3 8zm2-5a2 2 0 0 0-2 2v5h2V5h14v10h-6v2h6a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2H5z" />,
     settings: <path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zm9 4.8v-2.6l-2.1-.6a7 7 0 0 0-.7-1.6l1.1-1.9-1.9-1.9-1.9 1.1a7 7 0 0 0-1.6-.7L13.3 3h-2.6l-.6 2.1a7 7 0 0 0-1.6.7L6.6 4.7 4.7 6.6l1.1 1.9a7 7 0 0 0-.7 1.6l-2.1.6v2.6l2.1.6a7 7 0 0 0 .7 1.6l-1.1 1.9 1.9 1.9 1.9-1.1a7 7 0 0 0 1.6.7l.6 2.1h2.6l.6-2.1a7 7 0 0 0 1.6-.7l1.9 1.1 1.9-1.9-1.1-1.9a7 7 0 0 0 .7-1.6l2.1-.6z" />,
   };
   return (
@@ -103,6 +109,8 @@ export default function VideoPlayer({
 }) {
   const playerRef = useRef(null);
   const videoRef = useRef(null);
+  const captionMenuRef = useRef(null);
+  const captionButtonRef = useRef(null);
   const hlsRef = useRef(null);
   const abortRef = useRef(null);
   const pollRef = useRef(null);
@@ -119,6 +127,8 @@ export default function VideoPlayer({
   const endedRef = useRef(false);
   const nearEndNotifiedRef = useRef(false);
   const earlyEndRecoveryRef = useRef(false);
+  const castWasActiveRef = useRef(false);
+  const remoteOriginRef = useRef(null);
   const [playbackError, setPlaybackError] = useState("");
   const [subtitleError, setSubtitleError] = useState("");
   const [playbackHint, setPlaybackHint] = useState("");
@@ -147,16 +157,19 @@ export default function VideoPlayer({
     tracks: [],
   });
   const [playbackRate, setPlaybackRate] = useState(1);
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [browserFullscreen, setBrowserFullscreen] = useState(false);
+  const [viewportFullscreen, setViewportFullscreen] = useState(false);
   const [fullscreenSupported, setFullscreenSupported] = useState(false);
   const [pipSupported, setPipSupported] = useState(false);
   const [progressError, setProgressError] = useState("");
   const [writerToken, setWriterToken] = useState(null);
+  const remotePlayback = useRemotePlayback(videoRef);
   const baseUrl = `/api/torrents/${encodeURIComponent(sessionId)}/files/${encodeURIComponent(file.id)}`;
   const playbackUrl = `${baseUrl}/playback`;
   const subtitles = subtitleDiscovery.tracks;
   const subtitleUrl = `${baseUrl}/subtitles`;
   const subtitleStyleClass = subtitleAppearanceClassName(subtitleAppearance);
+  const isFullscreen = browserFullscreen || viewportFullscreen;
 
   const saveProgress = useCallback(async ({
     position = timelineRef.current.position,
@@ -306,17 +319,75 @@ export default function VideoPlayer({
     }
   }
 
+  async function getRemoteOrigin() {
+    if (remoteOriginRef.current) return remoteOriginRef.current;
+    const response = await fetch("/api/playback/remote", { cache: "no-store" });
+    const payload = await responseJson(response);
+    if (!response.ok || !payload?.origin) {
+      throw new Error(payload?.error || "TorPlay could not determine its local-network address.");
+    }
+    remoteOriginRef.current = payload.origin;
+    return payload.origin;
+  }
+
+  async function prepareRemoteSource(startTime = timelineRef.current.position) {
+    const origin = await getRemoteOrigin();
+    let mediaPath = `${baseUrl}/stream`;
+    let contentType = file.mimeType;
+    let originSeconds = 0;
+    let receiverStartTime = Math.max(0, Number(startTime) || 0);
+    let sourceDuration = timelineRef.current.duration;
+    let mode = "direct";
+
+    if (file.playbackMode === "transcode") {
+      const response = await fetch(playbackUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ startTime: receiverStartTime }),
+      });
+      const payload = await responseJson(response);
+      if (!response.ok) {
+        throw new Error(payload?.error || `Remote playback preparation failed with HTTP ${response.status}.`);
+      }
+      if (!payload?.manifestUrl) throw new Error("The server did not return a remote HLS playlist.");
+      preparedRef.current = true;
+      setPlaybackDetails(payload);
+      startPolling();
+      mediaPath = payload.manifestUrl;
+      contentType = "application/vnd.apple.mpegurl";
+      originSeconds = payload.originSeconds || 0;
+      receiverStartTime = 0;
+      sourceDuration = payload.duration || payload.media?.duration || sourceDuration;
+      mode = "hls";
+    }
+
+    return remotePlaybackSource({
+      origin,
+      sessionId,
+      mediaPath,
+      contentType,
+      title,
+      posterUrl: media?.posterUrl || null,
+      duration: sourceDuration,
+      originSeconds,
+      receiverStartTime,
+      mode,
+      subtitles,
+      activeSubtitleId,
+    });
+  }
+
   useEffect(() => {
     setPipSupported(Boolean(document.pictureInPictureEnabled && videoRef.current?.requestPictureInPicture));
     const video = videoRef.current;
     const updateFullscreenState = () => {
-      setIsFullscreen(isFullscreenActive(document, playerRef.current, video));
+      setBrowserFullscreen(isFullscreenActive(document, playerRef.current, video));
     };
     const updateFullscreenSupport = () => {
-      setFullscreenSupported(supportsFullscreen(playerRef.current, video));
+      setFullscreenSupported(supportsFullscreen(playerRef.current, { viewportFallback: true }));
     };
-    const onNativeFullscreenBegin = () => setIsFullscreen(true);
-    const onNativeFullscreenEnd = () => setIsFullscreen(false);
+    const onNativeFullscreenBegin = () => setBrowserFullscreen(true);
+    const onNativeFullscreenEnd = () => setBrowserFullscreen(false);
 
     updateFullscreenState();
     updateFullscreenSupport();
@@ -333,6 +404,62 @@ export default function VideoPlayer({
       video?.removeEventListener("webkitendfullscreen", onNativeFullscreenEnd);
     };
   }, []);
+
+  useEffect(() => {
+    if (!viewportFullscreen) return undefined;
+    const unlockViewport = lockFullscreenViewport(document);
+    const exitOnEscape = (event) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setViewportFullscreen(false);
+    };
+
+    document.addEventListener("keydown", exitOnEscape);
+
+    return () => {
+      document.removeEventListener("keydown", exitOnEscape);
+      unlockViewport();
+    };
+  }, [viewportFullscreen]);
+
+  useEffect(() => {
+    const cast = remotePlayback.castState;
+    const video = videoRef.current;
+    if (cast.active) {
+      if (!castWasActiveRef.current) {
+        video?.pause();
+        hlsRef.current?.destroy();
+        hlsRef.current = null;
+        initialSeekAppliedRef.current = true;
+      }
+      const nextDuration = cast.duration || timelineRef.current.duration;
+      timelineRef.current = { position: cast.position, duration: nextDuration };
+      if (!nearEndNotifiedRef.current && shouldOfferNextEpisode(cast.position, nextDuration)) {
+        nearEndNotifiedRef.current = true;
+        onNearEnd?.({ position: cast.position, duration: nextDuration });
+      }
+      if (!endedRef.current && isPlaybackAtEnd(cast.position, nextDuration)) {
+        endedRef.current = true;
+        void saveProgress({ position: nextDuration, duration: nextDuration }).finally(() => onEnded?.());
+      }
+    } else if (castWasActiveRef.current) {
+      if (file.playbackMode === "native" && video && timelineRef.current.position < video.duration) {
+        video.currentTime = timelineRef.current.position;
+      } else if (file.playbackMode === "transcode") {
+        hlsRef.current?.destroy();
+        hlsRef.current = null;
+        video?.removeAttribute("src");
+        video?.load();
+      }
+    }
+    castWasActiveRef.current = cast.active;
+  }, [
+    file.playbackMode,
+    onEnded,
+    onNearEnd,
+    remotePlayback.castState,
+    saveProgress,
+  ]);
 
   useEffect(() => {
     if (!profileId || !media) return undefined;
@@ -439,11 +566,11 @@ export default function VideoPlayer({
     hlsRef.current?.destroy();
     clearTimeout(hideTimerRef.current);
     clearTimeout(seekTimerRef.current);
-    if (preparedRef.current) {
+    if (preparedRef.current && !isRemotePlaybackSessionActive(sessionId)) {
       void fetch(playbackUrl, { method: "DELETE", keepalive: true });
     }
     void saveProgress({ keepalive: true });
-  }, [playbackUrl, saveProgress]);
+  }, [playbackUrl, saveProgress, sessionId]);
 
   function revealControls(autoHide = playing && !menu) {
     clearTimeout(hideTimerRef.current);
@@ -505,10 +632,17 @@ export default function VideoPlayer({
   }
 
   async function togglePlayback() {
+    if (remotePlayback.castState.active) {
+      remotePlayback.toggleCastPlayback();
+      return;
+    }
     const video = videoRef.current;
     if (!video) return;
-    if (file.playbackMode === "transcode" && ["idle", "failed"].includes(playbackState)) {
-      await preparePlayback(initialSeekAppliedRef.current ? currentTime : initialPosition);
+    if (
+      file.playbackMode === "transcode"
+      && (["idle", "failed"].includes(playbackState) || !hlsRef.current)
+    ) {
+      await preparePlayback(initialSeekAppliedRef.current ? effectiveCurrentTime : initialPosition);
       initialSeekAppliedRef.current = true;
       return;
     }
@@ -524,6 +658,7 @@ export default function VideoPlayer({
   }
 
   function selectSubtitle(id, manual = true) {
+    const returnFocus = menu === "captions";
     if (manual) {
       subtitleSelectionModeRef.current = "user";
     }
@@ -531,7 +666,38 @@ export default function VideoPlayer({
     setActiveSubtitleId(id);
     setSubtitleError("");
     setMenu(null);
+    if (returnFocus) captionButtonRef.current?.focus({ preventScroll: true });
     revealControls(playing);
+  }
+
+  function closeCaptionMenu() {
+    setMenu(null);
+    captionButtonRef.current?.focus({ preventScroll: true });
+    revealControls(playing);
+  }
+
+  function captionMenuItems() {
+    return Array.from(captionMenuRef.current?.querySelectorAll("[data-player-menu-item]:not(:disabled)") || []);
+  }
+
+  function focusCaptionMenuItem(item) {
+    item?.focus({ preventScroll: true });
+    item?.scrollIntoView({ block: "nearest" });
+  }
+
+  function handleCaptionMenuKeyDown(event) {
+    if (closesPlayerMenu(event.key)) {
+      event.preventDefault();
+      event.stopPropagation();
+      closeCaptionMenu();
+      return;
+    }
+    const items = captionMenuItems();
+    const nextIndex = nextMenuIndex(items.indexOf(document.activeElement), items.length, event.key);
+    if (nextIndex < 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    focusCaptionMenuItem(items[nextIndex]);
   }
 
   function toggleCaptions() {
@@ -551,10 +717,20 @@ export default function VideoPlayer({
   }
 
   function requestSeek(target, immediate = false) {
-    if (!duration) return;
-    const next = Math.max(0, Math.min(duration, Number(target)));
+    if (!effectiveDuration) return;
+    const next = Math.max(0, Math.min(effectiveDuration, Number(target)));
     setSeekPreview(next);
     clearTimeout(seekTimerRef.current);
+    if (remotePlayback.castState.active) {
+      const commitRemoteSeek = async () => {
+        setBuffering(true);
+        await remotePlayback.seekCast(next, prepareRemoteSource);
+        setSeekPreview(null);
+        setBuffering(false);
+      };
+      seekTimerRef.current = setTimeout(() => void commitRemoteSeek(), immediate ? 0 : 300);
+      return;
+    }
     const commit = async () => {
       setSeekPreview(null);
       setBuffering(true);
@@ -569,7 +745,11 @@ export default function VideoPlayer({
 
   async function toggleFullscreen() {
     try {
-      await toggleBrowserFullscreen(document, playerRef.current, videoRef.current);
+      await toggleBrowserFullscreen(document, playerRef.current, {
+        viewportActive: viewportFullscreen,
+        enterViewport: () => setViewportFullscreen(true),
+        exitViewport: () => setViewportFullscreen(false),
+      });
     } catch (error) {
       setPlaybackError(`Fullscreen is unavailable: ${error.message}`);
     }
@@ -593,22 +773,33 @@ export default function VideoPlayer({
     if (key === " " || key === "k") {
       event.preventDefault();
       void togglePlayback();
-    } else if (key === "arrowleft" && duration) {
+    } else if (key === "arrowleft" && effectiveDuration) {
       event.preventDefault();
-      requestSeek(currentTime - 10, true);
-    } else if (key === "arrowright" && duration) {
+      requestSeek(effectiveCurrentTime - 10, true);
+    } else if (key === "arrowright" && effectiveDuration) {
       event.preventDefault();
-      requestSeek(currentTime + 10, true);
+      requestSeek(effectiveCurrentTime + 10, true);
     } else if (key === "arrowup" || key === "arrowdown") {
       event.preventDefault();
-      const nextVolume = Math.min(1, Math.max(0, video.volume + (key === "arrowup" ? 0.05 : -0.05)));
-      video.volume = nextVolume;
-      video.muted = false;
+      const currentVolume = remotePlayback.castState.active
+        ? remotePlayback.castState.volume
+        : video.volume;
+      const nextVolume = Math.min(1, Math.max(0, currentVolume + (key === "arrowup" ? 0.05 : -0.05)));
+      if (remotePlayback.castState.active) remotePlayback.setCastVolume(nextVolume);
+      else {
+        video.volume = nextVolume;
+        video.muted = false;
+      }
       setVolume(nextVolume);
       setMuted(false);
     } else if (key === "m") {
-      video.muted = !video.muted;
-      setMuted(video.muted);
+      if (remotePlayback.castState.active) {
+        remotePlayback.toggleCastMute();
+        setMuted(!remotePlayback.castState.muted);
+      } else {
+        video.muted = !video.muted;
+        setMuted(video.muted);
+      }
     } else if (key === "c" && subtitles.length) {
       toggleCaptions();
     } else if (key === "f") {
@@ -618,18 +809,36 @@ export default function VideoPlayer({
   }
 
   const nativeUrl = file.playbackMode === "native" ? `${baseUrl}/stream` : undefined;
-  const canSeek = duration > 0;
-  const timelineTime = seekPreview ?? currentTime;
-  const playedRatio = duration > 0 ? timelineTime / duration : 0;
-  const visibleSubtitleCues = playbackState === "preparing" || activeSubtitleId === null
+  const effectivePlaying = remotePlayback.castState.active ? remotePlayback.castState.playing : playing;
+  const effectiveBuffering = remotePlayback.castState.active ? remotePlayback.castBusy : buffering;
+  const effectiveCurrentTime = remotePlayback.castState.active
+    ? remotePlayback.castState.position
+    : currentTime;
+  const effectiveDuration = remotePlayback.castState.active
+    ? remotePlayback.castState.duration || duration
+    : duration;
+  const effectiveMuted = remotePlayback.castState.active ? remotePlayback.castState.muted : muted;
+  const effectiveVolume = remotePlayback.castState.active ? remotePlayback.castState.volume : volume;
+  const canSeek = effectiveDuration > 0;
+  const timelineTime = seekPreview ?? effectiveCurrentTime;
+  const playedRatio = effectiveDuration > 0 ? timelineTime / effectiveDuration : 0;
+  const visibleSubtitleCues = remotePlayback.castState.active || playbackState === "preparing" || activeSubtitleId === null
     ? []
-    : activeSubtitleCues(subtitleCues[activeSubtitleId], currentTime, subtitleDelay);
+    : activeSubtitleCues(subtitleCues[activeSubtitleId], effectiveCurrentTime, subtitleDelay);
   const subtitleGroups = subtitleDiscovery.preferences.enabledLanguages
     .map((language) => ({
       language,
       tracks: subtitles.filter((subtitle) => subtitle.language === language),
     }))
     .filter((group) => group.tracks.length > 0);
+
+  useEffect(() => {
+    if (menu !== "captions") return;
+    const items = captionMenuItems();
+    const active = items.find((item) => item.getAttribute("aria-checked") === "true");
+    focusCaptionMenuItem(active || items[0]);
+  }, [activeSubtitleId, menu, subtitles.length]);
+
   const conversionLabel = playbackDetails
     ? `${playbackDetails.strategy === "remux" ? "Remuxing without video conversion" : "Converting to H.264 + AAC"} · ${playbackDetails.media.videoCodec}${playbackDetails.media.audioCodec ? ` / ${playbackDetails.media.audioCodec}` : ""}`
     : playbackState === "preparing"
@@ -639,7 +848,7 @@ export default function VideoPlayer({
   return (
     <div className="playerStack">
       <div
-        className={`videoPlayer ${subtitleStyleClass} ${controlsVisible ? "controlsVisible" : "controlsHidden"}`}
+        className={`videoPlayer ${subtitleStyleClass} ${controlsVisible ? "controlsVisible" : "controlsHidden"} ${viewportFullscreen ? "viewportFullscreen" : ""}`}
         ref={playerRef}
         tabIndex="0"
         role="group"
@@ -652,6 +861,7 @@ export default function VideoPlayer({
         <video
           ref={videoRef}
           playsInline
+          x-webkit-airplay="allow"
           preload={file.playbackMode === "native" ? "auto" : "none"}
           src={nativeUrl}
           onClick={() => void togglePlayback()}
@@ -735,14 +945,18 @@ export default function VideoPlayer({
         <div className="playerShade" aria-hidden="true" />
         <div className="playerTopBar">
           <strong>{title}</strong>
-          <span className="playbackModeBadge">{file.playbackMode === "native" ? "Native" : "HLS"}</span>
+          <span className="playbackModeBadge">
+            {remotePlayback.castState.active
+              ? `Playing on ${remotePlayback.castState.deviceName}`
+              : remotePlayback.airPlayActive ? "Playing with AirPlay" : file.playbackMode === "native" ? "Native" : "HLS"}
+          </span>
         </div>
 
         <div className="playerCenter">
-          {playbackState === "preparing" || buffering ? (
+          {playbackState === "preparing" || effectiveBuffering ? (
             <div className="playerSpinner" role="status" aria-label="Buffering" />
           ) : null}
-          {playbackState !== "preparing" && !buffering && !playing ? (
+          {playbackState !== "preparing" && !effectiveBuffering && !effectivePlaying ? (
             <button className="centerPlayButton" type="button" onClick={() => void togglePlayback()}>
               <Icon name="play" />
               <span className="srOnly">
@@ -761,48 +975,72 @@ export default function VideoPlayer({
 
         <div className="playerBottomBar">
           {menu === "captions" ? (
-            <div className="playerMenu captionMenu" role="menu" aria-label="Subtitles">
-              <span>Subtitles</span>
-              <button className={activeSubtitleId === null ? "active" : ""} type="button" onClick={() => selectSubtitle(null)}>Off</button>
-              {subtitleGroups.map((group) => (
-                <div className="captionLanguage" key={group.language}>
-                  <strong>{group.tracks[0].label}</strong>
-                  {group.tracks.map((subtitle) => (
-                    <button
-                      className={activeSubtitleId === subtitle.id ? "active" : ""}
-                      type="button"
-                      role="menuitemradio"
-                      aria-checked={activeSubtitleId === subtitle.id}
-                      key={subtitle.id}
-                      onClick={() => selectSubtitle(subtitle.id)}
-                    >
-                      <span>{activeSubtitleId === subtitle.id ? "✓ " : ""}{subtitle.source}</span>
-                      <small>{subtitle.releaseName || subtitle.sources.join(" + ")}</small>
-                    </button>
-                  ))}
-                </div>
-              ))}
-              {subtitleDiscovery.state === "loading" ? <small className="subtitleLoading">Searching subtitle providers…</small> : null}
-              <div className="subtitleDelay">
-                <span>Subtitle delay</span>
-                <div>
-                  <button type="button" onClick={() => setSubtitleDelay((value) => Math.max(-10, value - 0.5))}>−0.5s</button>
-                  <output>{subtitleDelay > 0 ? "+" : ""}{subtitleDelay.toFixed(1)}s</output>
-                  <button type="button" onClick={() => setSubtitleDelay((value) => Math.min(10, value + 0.5))}>+0.5s</button>
-                </div>
-                {subtitleDelay !== 0 ? <button type="button" onClick={() => setSubtitleDelay(0)}>Reset delay</button> : null}
+            <div
+              className="playerMenu captionMenu"
+              id="subtitle-menu"
+              role="menu"
+              aria-label="Subtitles"
+              ref={captionMenuRef}
+              onKeyDown={handleCaptionMenuKeyDown}
+            >
+              <div className="captionMenuHeader">
+                <span>Subtitles</span>
+                <button
+                  className={activeSubtitleId === null ? "active" : ""}
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={activeSubtitleId === null}
+                  data-player-menu-item
+                  onClick={() => selectSubtitle(null)}
+                >
+                  {activeSubtitleId === null ? "✓ " : ""}Off
+                </button>
               </div>
-              <button
-                className="subtitleAppearanceLink"
-                type="button"
-                onClick={() => setMenu("subtitleAppearance")}
-              >
-                Subtitle appearance <span aria-hidden="true">→</span>
-              </button>
+              <div className="captionTrackList">
+                {subtitleGroups.map((group) => (
+                  <div className="captionLanguage" role="group" aria-label={group.tracks[0].label} key={group.language}>
+                    <strong>{group.tracks[0].label}</strong>
+                    {group.tracks.map((subtitle) => (
+                      <button
+                        className={activeSubtitleId === subtitle.id ? "active" : ""}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={activeSubtitleId === subtitle.id}
+                        data-player-menu-item
+                        key={subtitle.id}
+                        onClick={() => selectSubtitle(subtitle.id)}
+                      >
+                        <span>{activeSubtitleId === subtitle.id ? "✓ " : ""}{subtitle.source}</span>
+                        <small>{subtitle.releaseName || subtitle.sources.join(" + ")}</small>
+                      </button>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <div className="captionMenuFooter">
+                {subtitleDiscovery.state === "loading" ? <small className="subtitleLoading">Searching subtitle providers…</small> : null}
+                <div className="subtitleDelay">
+                  <span>Subtitle delay</span>
+                  <div>
+                    <button data-player-menu-item type="button" onClick={() => setSubtitleDelay((value) => Math.max(-10, value - 0.5))}>−0.5s</button>
+                    <output>{subtitleDelay > 0 ? "+" : ""}{subtitleDelay.toFixed(1)}s</output>
+                    <button data-player-menu-item type="button" onClick={() => setSubtitleDelay((value) => Math.min(10, value + 0.5))}>+0.5s</button>
+                  </div>
+                  {subtitleDelay !== 0 ? <button data-player-menu-item type="button" onClick={() => setSubtitleDelay(0)}>Reset delay</button> : null}
+                </div>
+                <button
+                  className="subtitleAppearanceLink"
+                  type="button"
+                  data-player-menu-item
+                  onClick={() => setMenu("subtitleAppearance")}
+                >
+                  Subtitle appearance <span aria-hidden="true">→</span>
+                </button>
+              </div>
             </div>
           ) : null}
           {menu === "subtitleAppearance" ? (
-            <div className="playerMenu captionMenu subtitleAppearanceMenu" aria-label="Subtitle appearance">
+            <div className="playerMenu captionMenu subtitleAppearanceMenu" id="subtitle-menu" aria-label="Subtitle appearance">
               <div className="subtitleMenuHeader">
                 <button type="button" onClick={() => setMenu("captions")}>← Back</button>
                 <strong>Appearance</strong>
@@ -913,6 +1151,48 @@ export default function VideoPlayer({
               ))}
             </div>
           ) : null}
+          {menu === "remote" ? (
+            <div className="playerMenu remotePlaybackMenu" aria-label="Remote playback">
+              <span>Play on another screen</span>
+              {remotePlayback.castState.active ? (
+                <>
+                  <div className="remoteDeviceStatus">
+                    <strong>{remotePlayback.castState.deviceName}</strong>
+                    <small>{remotePlayback.castBusy ? "Connecting…" : effectivePlaying ? "Playing" : "Paused"}</small>
+                  </div>
+                  <button className="remoteStopButton" type="button" onClick={remotePlayback.stopCast}>
+                    Stop casting
+                  </button>
+                </>
+              ) : (
+                <>
+                  {remotePlayback.castAvailable ? (
+                    <button
+                      type="button"
+                      disabled={remotePlayback.castBusy}
+                      onClick={() => void remotePlayback.startCast(
+                        () => prepareRemoteSource(timelineRef.current.position),
+                      )}
+                    >
+                      {remotePlayback.castBusy ? "Connecting to Google Cast…" : "Google Cast"}
+                    </button>
+                  ) : null}
+                  {remotePlayback.airPlayAvailable ? (
+                    <button
+                      type="button"
+                      disabled={file.playbackMode === "transcode" && playbackState !== "ready"}
+                      onClick={remotePlayback.showAirPlayPicker}
+                    >
+                      AirPlay
+                    </button>
+                  ) : null}
+                </>
+              )}
+              <small className="remotePlaybackNote">
+                The selected device streams directly from this TorPlay server.
+              </small>
+            </div>
+          ) : null}
 
           <div className="playerTimeline">
             <div className="timelineTrack" aria-hidden="true">
@@ -921,8 +1201,8 @@ export default function VideoPlayer({
                   className="timelineBuffered"
                   key={`${range.start}-${range.end}`}
                   style={{
-                    left: `${duration ? range.start / duration * 100 : 0}%`,
-                    width: `${duration ? (range.end - range.start) / duration * 100 : 0}%`,
+                    left: `${effectiveDuration ? range.start / effectiveDuration * 100 : 0}%`,
+                    width: `${effectiveDuration ? (range.end - range.start) / effectiveDuration * 100 : 0}%`,
                   }}
                 />
               ))}
@@ -932,9 +1212,9 @@ export default function VideoPlayer({
               className="playerSeek"
               type="range"
               min="0"
-              max={duration || 1}
+              max={effectiveDuration || 1}
               step="0.1"
-              value={Math.min(timelineTime, duration || 1)}
+              value={Math.min(timelineTime, effectiveDuration || 1)}
               disabled={!canSeek}
               aria-label="Seek"
               onChange={(event) => requestSeek(event.target.value)}
@@ -943,19 +1223,24 @@ export default function VideoPlayer({
 
           <div className="playerControls">
             <div className="controlGroup">
-              <button type="button" aria-label={playing ? "Pause" : "Play"} onClick={() => void togglePlayback()}>
-                <Icon name={playing ? "pause" : "play"} />
+              <button type="button" aria-label={effectivePlaying ? "Pause" : "Play"} onClick={() => void togglePlayback()}>
+                <Icon name={effectivePlaying ? "pause" : "play"} />
               </button>
               <button
                 type="button"
-                aria-label={muted ? "Unmute" : "Mute"}
+                aria-label={effectiveMuted ? "Unmute" : "Mute"}
                 onClick={() => {
+                  if (remotePlayback.castState.active) {
+                    remotePlayback.toggleCastMute();
+                    setMuted(!remotePlayback.castState.muted);
+                    return;
+                  }
                   if (!videoRef.current) return;
                   videoRef.current.muted = !videoRef.current.muted;
                   setMuted(videoRef.current.muted);
                 }}
               >
-                <Icon name={muted || volume === 0 ? "muted" : "volume"} />
+                <Icon name={effectiveMuted || effectiveVolume === 0 ? "muted" : "volume"} />
               </button>
               <input
                 className="volumeSlider"
@@ -963,10 +1248,16 @@ export default function VideoPlayer({
                 min="0"
                 max="1"
                 step="0.05"
-                value={muted ? 0 : volume}
+                value={effectiveMuted ? 0 : effectiveVolume}
                 aria-label="Volume"
                 onChange={(event) => {
                   const next = Number(event.target.value);
+                  if (remotePlayback.castState.active) {
+                    remotePlayback.setCastVolume(next);
+                    setVolume(next);
+                    setMuted(false);
+                    return;
+                  }
                   if (!videoRef.current) return;
                   videoRef.current.volume = next;
                   videoRef.current.muted = false;
@@ -974,14 +1265,16 @@ export default function VideoPlayer({
                   setMuted(false);
                 }}
               />
-              <span className="playerTime">{formatTime(timelineTime)} / {duration ? formatTime(duration) : "--:--"}</span>
+              <span className="playerTime">{formatTime(timelineTime)} / {effectiveDuration ? formatTime(effectiveDuration) : "--:--"}</span>
             </div>
             <div className="controlGroup">
               <button
                 className={activeSubtitleId !== null ? "active" : ""}
+                ref={captionButtonRef}
                 type="button"
                 aria-label="Subtitles"
                 aria-expanded={menu === "captions" || menu === "subtitleAppearance"}
+                aria-controls="subtitle-menu"
                 disabled={subtitles.length === 0}
                 onClick={() => {
                   clearTimeout(hideTimerRef.current);
@@ -1004,7 +1297,22 @@ export default function VideoPlayer({
               >
                 <Icon name="settings" />
               </button>
-              {pipSupported ? (
+              {remotePlayback.castAvailable || remotePlayback.airPlayAvailable || remotePlayback.castState.active ? (
+                <button
+                  className={menu === "remote" || remotePlayback.castState.active || remotePlayback.airPlayActive ? "active" : ""}
+                  type="button"
+                  aria-label="Remote playback"
+                  aria-expanded={menu === "remote"}
+                  onClick={() => {
+                    clearTimeout(hideTimerRef.current);
+                    setControlsVisible(true);
+                    setMenu(menu === "remote" ? null : "remote");
+                  }}
+                >
+                  <Icon name="cast" />
+                </button>
+              ) : null}
+              {pipSupported && !remotePlayback.castState.active ? (
                 <button type="button" aria-label="Picture in picture" onClick={() => void togglePictureInPicture()}>
                   <Icon name="pip" />
                 </button>
@@ -1021,6 +1329,7 @@ export default function VideoPlayer({
 
       {file.playbackMode === "transcode" ? <div className="conversionNotice">{conversionLabel}</div> : null}
       {subtitleError ? <div className="notice error" role="alert">{subtitleError}</div> : null}
+      {remotePlayback.error ? <div className="notice error" role="alert">Remote playback: {remotePlayback.error}</div> : null}
       {playbackError ? <div className="notice error" role="alert">{playbackError}</div> : null}
       {playbackHint ? <div className="notice">{playbackHint}</div> : null}
       {progressError ? <div className="notice">Watch progress unavailable: {progressError}</div> : null}

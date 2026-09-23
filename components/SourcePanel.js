@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { findEpisodeFile, findLargestFile } from "../lib/video/episode.js";
 import { episodeFilePresentation, formatFileSize } from "../lib/video/episode-display.js";
 import VideoPlayer from "./VideoPlayer.js";
@@ -51,7 +52,11 @@ export default function SourcePanel({
         ) : null}
       </div>
 
-      {lookup.error ? <div className="notice error" role="alert">{lookup.error}</div> : null}
+      {lookup.errorCode === "NO_TORRENT_SOURCES" ? (
+        <div className="notice" role="status">
+          No torrent sources are configured. <Link href="/setup/sources">Choose sources →</Link>
+        </div>
+      ) : lookup.error ? <div className="notice error" role="alert">{lookup.error}</div> : null}
       {lookup.searching ? <div className="notice">Searching sources…</div> : null}
       {!lookup.searching && lookup.hasSearched && lookup.results.length === 0 && !lookup.error ? (
         <div className="notice">No usable authorized sources were found.</div>
@@ -135,7 +140,7 @@ export default function SourcePanel({
                 />
                 <div className="bufferStatus" aria-live="polite">
                   <div>
-                    <span>Buffering {formatFileSize(selectedFile.downloaded)} of {formatFileSize(selectedFile.size)}</span>
+                    <span>Downloaded {formatFileSize(selectedFile.downloaded)} of {formatFileSize(selectedFile.size)}</span>
                     <span>{formatSpeed(lookup.session.downloadSpeed)} · {lookup.session.peers ?? 0} peers</span>
                   </div>
                   <progress value={selectedFile.progress} max={1}>

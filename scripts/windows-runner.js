@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import {
   appendFileSync,
   existsSync,
@@ -10,6 +11,7 @@ import {
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { installedEnvironment, installedPaths } from "./windows-paths.js";
+import { stopInstalledRuntime } from "./windows-control-runtime.js";
 
 const DEFAULT_MAX_BYTES = 5 * 1024 * 1024;
 const DEFAULT_BACKUPS = 3;
@@ -40,12 +42,50 @@ export function createRotatingLog(logPath, options = {}) {
   };
 }
 
+export function attachInstalledRuntimeLifecycle(child, {
+  paths = installedPaths(),
+  environment = process.env,
+  processRef = process,
+  stopRuntime = stopInstalledRuntime,
+} = {}) {
+  let stopping = false;
+  const listeners = new Map();
+  const detach = () => {
+    for (const [signal, listener] of listeners) processRef.removeListener(signal, listener);
+    listeners.clear();
+  };
+  for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
+    const listener = () => {
+      if (stopping) return;
+      stopping = true;
+      void stopRuntime({ paths, environment })
+        .then((result) => {
+          if (result?.stopped === false && child.exitCode === null) child.kill?.();
+        })
+        .catch(() => {
+          child.kill?.();
+          processRef.exitCode = 1;
+        });
+    };
+    listeners.set(signal, listener);
+    processRef.once(signal, listener);
+  }
+  child.once("exit", detach);
+  return detach;
+}
+
 export function runInstalledRuntime({
   paths = installedPaths(),
   environment = process.env,
   spawnProcess = spawn,
+  processRef = process,
+  createInstanceId = randomUUID,
 } = {}) {
-  const runtimeEnvironment = installedEnvironment(paths, environment);
+  const runtimeEnvironment = {
+    ...installedEnvironment(paths, environment),
+    TORPLAY_RUNNER_PID: String(processRef.pid),
+    TORPLAY_RUNTIME_INSTANCE_ID: createInstanceId(),
+  };
   const output = createRotatingLog(paths.logPath);
   output.write(`\n[${new Date().toISOString()}] TorPlay launcher starting.\n`);
   const child = spawnProcess(paths.nodePath, [paths.homeEntry], {
@@ -56,13 +96,21 @@ export function runInstalledRuntime({
   });
   child.stdout?.on("data", (chunk) => output.write(chunk));
   child.stderr?.on("data", (chunk) => output.write(chunk));
-  child.on("error", (error) => output.write(`[TorPlay] Launcher error: ${error.message}\n`));
-  child.on("exit", (code, signal) => {
+  attachInstalledRuntimeLifecycle(child, { paths, environment: runtimeEnvironment, processRef });
+  let finished = false;
+  const finish = (code, signal = null) => {
+    if (finished) return;
+    finished = true;
     output.write(
       `[${new Date().toISOString()}] TorPlay exited${signal ? ` with ${signal}` : ` with code ${code}`}.\n`,
     );
-    process.exitCode = code || (signal ? 1 : 0);
+    processRef.exit(code || (signal ? 1 : 0));
+  };
+  child.once("error", (error) => {
+    output.write(`[TorPlay] Launcher error: ${error.message}\n`);
+    finish(1);
   });
+  child.once("exit", finish);
   return child;
 }
 

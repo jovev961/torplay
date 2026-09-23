@@ -35,7 +35,7 @@ test("the public frontend accepts only loopback and private LAN addresses", () =
   ]) {
     assert.equal(isPrivateClientAddress(address), true, address);
   }
-  for (const address of ["8.8.8.8", "172.32.0.1", "203.0.113.4", "2001:4860:4860::8888", ""]) {
+  for (const address of ["8.8.8.8", "172.32.0.1", "203.0.113.4", "2001:4860:4860::8888", "fcorp.example", ""]) {
     assert.equal(isPrivateClientAddress(address), false, address);
   }
 });
@@ -60,6 +60,7 @@ test("the public proxy preserves Range status, headers, and bytes", async () => 
   });
 
   try {
+    assert.equal(proxy.isHealthy(), true);
     const response = await fetch(`http://127.0.0.1:${proxy.server.address().port}/video`, {
       headers: { Range: "bytes=2-5" },
     });
@@ -76,6 +77,7 @@ test("the public proxy preserves Range status, headers, and bytes", async () => 
 
 test("mDNS waits for advertisement and sends one clean shutdown", async () => {
   const service = new EventEmitter();
+  service.serviceState = "announced";
   service.advertise = async () => {};
   service.getHostname = () => "torplay.local.";
   let shutdowns = 0;
@@ -103,7 +105,9 @@ test("mDNS waits for advertisement and sends one clean shutdown", async () => {
   assert.equal(responderOptions.interface, "Wi-Fi");
   assert.equal(serviceOptions.hostname, "torplay");
   assert.equal(serviceOptions.port, 80);
+  assert.equal(mdns.isHealthy(), true);
   await mdns.stop();
+  assert.equal(mdns.isHealthy(), false);
   await mdns.stop();
   assert.equal(shutdowns, 1);
 });

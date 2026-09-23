@@ -2,7 +2,7 @@
 
 ## Start with status and logs
 
-On an installed Windows host, open **TorPlay Status** from the Start menu. It reports Docker, Jackett, FlareSolverr, TorPlay, and mDNS health and shows the last startup failure.
+On an installed Windows host, right-click the TorPlay system-tray icon for current runtime status and quick access to logs or start/stop controls. **TorPlay Status** in the Start menu provides the detailed application, LAN proxy, and mDNS report plus the last runtime failure.
 
 Runtime logs are stored at:
 
@@ -12,51 +12,44 @@ Runtime logs are stored at:
 
 The log rotates at 5 MiB and retains three backups. Setup and uninstall logs are kept in the same directory.
 
-## Docker is missing
+TorPlay automatically retries an application, LAN proxy, or mDNS component after two consecutive health failures. If the same component exceeds three recovery attempts within 60 seconds, the tray shows **Status: Error** and the log records the failing component and each attempt. Choose **Retry TorPlay** to perform a clean full restart after correcting the reported problem.
 
-Install Docker Desktop from its official installer. Open it once, accept its agreement, and wait for the Docker engine to become ready. Then restart Windows or choose **Start or Restart TorPlay**.
+## A Jackett source fails
 
-TorPlay does not include a custom Docker installer.
-
-## Docker is installed but not ready
-
-The installed runtime attempts to start Docker Desktop and waits for up to ten minutes. If it still fails:
-
-1. Open Docker Desktop directly and inspect its status.
-2. Confirm it is using Linux containers.
-3. Confirm WSL 2 or the selected Docker backend is healthy.
-4. Choose **Start or Restart TorPlay** after Docker reports that it is running.
-
-## Jackett or FlareSolverr fails
-
-- Confirm Docker is healthy.
+- Confirm your independently operated Jackett instance is running.
 - Open [http://localhost:9117](http://localhost:9117).
 - Confirm at least one Jackett indexer is configured and working.
-- Open [http://localhost/settings](http://localhost/settings) and confirm the Jackett API key matches the value shown by Jackett.
-- Confirm explicitly listed movie/show indexer IDs exist in Jackett.
-- Required Jackett settings activate immediately after TorPlay verifies and saves them.
+- Open [http://torplay.local/settings](http://torplay.local/settings) or Settings through the displayed LAN address. Test Jackett under **Services**, then check the individual source under **Torrent Sources**.
+- If this source was converted from legacy Jackett settings, confirm the named movie/show indexer IDs still exist in Jackett.
+- Jackett source choices activate immediately after TorPlay verifies and saves them.
 
-TorPlay configures Jackett's FlareSolverr URL internally as `http://flaresolverr:8191`; port 8191 is intentionally not published to Windows.
+## A Cardigann source needs FlareSolverr
+
+Run FlareSolverr independently on the TorPlay computer or a private LAN host, then configure and test its base URL under **Settings → Services**. Only Cardigann definitions marked `info_flaresolverr` send compatible search-page requests through it; torrent downloads stay direct. Check its service status, then use **Test** on the added source under **Torrent Sources**. If FlareSolverr is missing or unreachable, marked definitions cannot search successfully, but other sources continue to work. An **Add Anyway** source is saved as unverified after a connection failure; it is not proof the indexer works.
 
 ## Metadata is unavailable
 
-Open [http://localhost/settings](http://localhost/settings) on the TorPlay computer and check TMDB's connection status. The token must be the TMDB API Read Access Token, not the 32-character v3 API key. Provider credentials can also be maintained in `.env.local` for development or `%LOCALAPPDATA%\TorPlay\config\torplay.env` for an installed runtime.
+Open [http://torplay.local/settings](http://torplay.local/settings), Settings through the displayed LAN address, or [http://localhost/settings](http://localhost/settings) on the TorPlay computer and check TMDB's connection status. The token must be the TMDB API Read Access Token, not the 32-character v3 API key. Provider credentials can also be maintained in `.env.local` for development or `%LOCALAPPDATA%\TorPlay\config\torplay.env` for an installed runtime.
 
 ## Setup keeps reopening
 
-Open [http://localhost/setup](http://localhost/setup) on the TorPlay computer. TorPlay saves nothing until both TMDB and Jackett pass live validation. Check that Docker and Jackett are running, copy the API Read Access Token rather than TMDB's v3 key, and verify the Jackett API key. A Jackett indexer is not required to finish setup, but source searches need at least one authorized working indexer.
+Open [http://torplay.local/setup](http://torplay.local/setup), the displayed private LAN address, or [http://localhost/setup](http://localhost/setup) on the TorPlay computer. Setup requires a valid TMDB API Read Access Token rather than TMDB's v3 key. Torrent sources are optional and do not control setup readiness. Once setup succeeds, add or test sources under **Settings → Torrent Sources**.
 
-## Settings are read-only
+## Settings cannot be changed
 
-Provider settings can be changed only from `localhost` on the TorPlay computer. This protects credentials from other household devices. Open [http://localhost/settings](http://localhost/settings), not `http://torplay.local/settings`, to edit them. Values supplied by the host environment are also read-only in the page and must be changed at their source.
+Provider settings can be changed from [http://torplay.local/settings](http://torplay.local/settings), the displayed private LAN address, or [http://localhost/settings](http://localhost/settings) on the TorPlay computer. Requests from outside the private local network and values supplied by the host environment remain read-only.
 
-If Settings reports that a restart is required after an OMDb change, choose **Start or Restart TorPlay** from the Windows Start menu. Other provider credential changes are used by new requests without a restart.
+Provider credential changes are used by new requests without a restart.
+
+## A torrent source is unavailable
+
+Distinguish a failed optional service connection from an indexer search failure. Test Jackett or FlareSolverr under **Services** when applicable, then test a Cardigann source or use **Refresh availability** under **Torrent Sources**. A Cardigann definition can be compatible but unverified; check its own login/settings and response before assuming FlareSolverr is the cause. Disabled sources are not searched.
 
 ## `torplay.local` does not open
 
 Check these conditions:
 
-- TorPlay Status reports TorPlay and mDNS as `OK`.
+- TorPlay Status reports TorPlay, LAN proxy, and mDNS as `OK`.
 - The Windows network profile is **Private**, not Public.
 - The client is on the same home network.
 - Guest Wi-Fi, client isolation, or access-point isolation is disabled.
@@ -66,6 +59,8 @@ Check these conditions:
 If necessary, set `TORPLAY_MDNS_INTERFACE` to the Windows interface name or local IP, restart TorPlay, and test again.
 
 Ordinary browser hostname navigation does not use the DNS-SD service port. A custom `TORPLAY_PUBLIC_PORT` therefore requires the port in the URL; the installer is designed for port 80.
+
+If a TV or mobile device cannot resolve `torplay.local`, open **Settings → General → Network Access** on the TorPlay computer and use the displayed LAN IPv4 URL or scan its QR code. The address is detected dynamically and may change after switching Wi-Fi, Ethernet, or DHCP networks.
 
 ## Firewall or LAN access fails
 

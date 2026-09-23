@@ -15,7 +15,7 @@ Key metadata endpoints:
 
 ## Source search
 
-Movie and episode pages call the provider-independent torrent search service only after the user requests sources. Jackett remains the configured adapter. Results are filtered and ranked by the service without exposing API keys, download URLs, or magnet URIs. Public results expose `hasMagnet` instead of `magnet`; opaque result IDs resolve to server-side playback references.
+Movie and episode pages call the provider-independent torrent search service only after the user requests sources. Users explicitly add optional TorPlay Tested Sources, community Cardigann definitions, custom Torznab endpoints, or individual indexers from a configured external Jackett service. None are added automatically. Results are filtered and ranked by the service without exposing API keys, download URLs, or magnet URIs. Public results expose `hasMagnet` instead of `magnet`; opaque result IDs resolve to server-side playback references.
 
 - Direct `.torrent` metadata is inspected for the top 20 relevant candidates.
 - Verified playable results appear before unverified magnet fallbacks.
@@ -77,6 +77,11 @@ The custom player includes keyboard controls, playback speed, picture-in-picture
 
 Native MP4, M4V, and WebM support HTTP Range seeking. Recognized non-native containers—including MKV, AVI, MOV, MPEG, transport streams, VOB, OGM/OGV, 3GP, DIVX, WMV, and FLV—use FFmpeg preparation when possible.
 
+The remote-playback menu supports Google Cast receivers (including Cast-enabled Google TV devices) and AirPlay when the current browser exposes it. A selected receiver requests the native stream or prepared HLS media directly from TorPlay over the local network; torrent traffic and provider credentials remain on the server. The receiver must be able to resolve and reach the TorPlay LAN address, normally `http://torplay.local`.
+
+- `GET /api/playback/remote` returns the receiver-safe TorPlay origin.
+- Stream, HLS, and subtitle routes support receiver CORS, preflight, `HEAD`, and Range requests where applicable.
+
 ## Subtitles
 
 Torrent `.srt` and `.vtt` sidecars are downloaded by the server and delivered as WebVTT. TorPlay can also expose embedded tracks and configured OpenSubtitles/SubDL results.
@@ -102,10 +107,13 @@ Profile responses include `subtitlePreferences`. Update them with `PUT /api/prof
 
 ## Settings
 
-The Settings page separates General, Services, Subtitles, Playback, and About information. It explains each external provider, links to its official credential instructions, and checks configured services in the background.
+The Settings page separates General, Services, Torrent Sources, Subtitles, Playback, and About information. TMDB is required; Jackett, FlareSolverr, OMDb, and external subtitle services are optional. General shows the current `torplay.local` and detected private-LAN URLs with copy actions and a QR code for devices that cannot resolve mDNS. Services explains external providers and checks configured services only when that section is viewed. Torrent Sources shows added sources, their enabled and availability states, and an Add source dialog for Tested Sources, community Cardigann definitions, Jackett indexers, and advanced custom Torznab setup. The community list loads on demand, excludes already-added indexers, and filters by Movies, TV / Series, Anime, and access type. Source health is checked by the Torrent Sources manager.
 
-- `GET /api/settings` returns secret-free configuration and runtime status. Non-secret editable values are returned only to a localhost request.
-- `PATCH /api/settings` updates one provider from a same-origin JSON request on localhost only.
-- `POST /api/settings/validate` checks selected provider connections and returns sanitized validity states.
+- `GET /api/network-access` dynamically reports the current preferred hostname and usable LAN IPv4 URL without persisting the detected address.
 
-Secret values are never returned by these endpoints. LAN clients can inspect safe status but cannot change provider configuration.
+- `GET /api/settings` returns secret-free configuration and runtime status. Editable non-secret values are returned only on a trusted private-network request.
+- `PATCH /api/settings` updates one service through a same-origin JSON request from the private local network.
+- `POST /api/settings/validate` checks selected provider connections and returns sanitized validity or availability states. `{ "refresh": true }` bypasses the short health cache.
+- `POST /api/settings/torrent-providers` accepts an `action` and, where needed, a `provider` object. Actions cover Tested Source add/update/remove, community listing/import, Cardigann import/create/update/test/remove, Jackett listing/capabilities/create/update, custom Torznab create/update/remove/test, and `health`. Saved-source actions use a stable `id`. Custom Torznab connection fields are `name`, `endpoint`, and optional `apiKey`; blank keys keep existing credentials, and `clearApiKey` removes one. Mutations and draft tests require a same-origin private-network request. Health returns safe status for saved sources and supports `refresh`.
+
+Secret values are never returned by these endpoints. Trusted private-LAN clients can edit Settings; requests outside the private local network can inspect safe status but cannot change provider configuration.

@@ -1,84 +1,20 @@
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
-import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { configureJackett } from "./jackett-config.js";
-import { MAC_DOCKER_PATH, resolveDockerCommand } from "./docker-paths.js";
-
-export {
-  resolveDockerCommand,
-  resolveDockerDesktopCommand,
-  windowsDockerDesktopPaths,
-  windowsDockerPaths,
-} from "./docker-paths.js";
+import { readLocalEnvironment } from "./local-environment.js";
 
 const require = createRequire(import.meta.url);
 
-export const COMPOSE_START_ARGS = [
-  "compose",
-  "up",
-  "-d",
-  "--wait",
-  "--wait-timeout",
-  "120",
-  "flaresolverr",
-  "jackett",
-];
-export const COMPOSE_STOP_ARGS = ["compose", "stop", "jackett", "flaresolverr"];
-
-function dockerSpawnOptions(dockerCommand) {
-  const options = { stdio: "inherit" };
-  if (dockerCommand === MAC_DOCKER_PATH) {
-    options.env = {
-      ...process.env,
-      PATH: `${path.dirname(MAC_DOCKER_PATH)}${path.delimiter}${process.env.PATH ?? ""}`,
-    };
-  }
-  return options;
-}
-
-function waitForSuccess(child, label) {
-  return new Promise((resolve, reject) => {
-    child.once("error", (error) => {
-      reject(new Error(`${label} could not start: ${error.message}`));
-    });
-    child.once("exit", (code, signal) => {
-      if (code === 0) resolve();
-      else reject(new Error(`${label} failed${signal ? ` with ${signal}` : ` with exit code ${code}`}.`));
-    });
-  });
-}
-
-function requireSuccessfulResult(result, label) {
-  if (result.error) throw new Error(`${label} could not start: ${result.error.message}`);
-  if (result.status !== 0) throw new Error(`${label} failed with exit code ${result.status}.`);
-}
-
 export async function startDevelopment({
   spawnProcess = spawn,
-  spawnSyncProcess = spawnSync,
-  configureJackettProcess = configureJackett,
-  dockerCommand = resolveDockerCommand(),
+  environment = { ...readLocalEnvironment(), ...process.env },
 } = {}) {
-  const composeOptions = dockerSpawnOptions(dockerCommand);
-  try {
-    const composeUp = spawnProcess(dockerCommand, COMPOSE_START_ARGS, composeOptions);
-    await waitForSuccess(composeUp, "Development services");
-    configureJackettProcess({
-      dockerCommand,
-      spawnSyncProcess,
-      processEnvironment: composeOptions.env ?? process.env,
-    });
-  } catch (error) {
-    spawnSyncProcess(dockerCommand, COMPOSE_STOP_ARGS, composeOptions);
-    throw error;
-  }
-
   const nextBin = require.resolve("next/dist/bin/next");
   const isolateNextProcess = process.platform !== "win32";
   const nextProcess = spawnProcess(process.execPath, [nextBin, "dev"], {
     stdio: "inherit",
     detached: isolateNextProcess,
+    env: environment,
   });
   let stopped = false;
 
@@ -97,9 +33,6 @@ export async function startDevelopment({
         nextProcess.kill(signal);
       }
     }
-
-    const result = spawnSyncProcess(dockerCommand, COMPOSE_STOP_ARGS, composeOptions);
-    requireSuccessfulResult(result, "Development services shutdown");
   }
 
   return { nextProcess, stop };
