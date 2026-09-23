@@ -15,7 +15,7 @@ Key metadata endpoints:
 
 ## Source search
 
-Movie and episode pages call the provider-independent torrent search service only after the user requests sources. TorPlay does not bundle torrent indexers; users can add custom Torznab or imported Cardigann sources, while Jackett remains available as an optional adapter. Results are filtered and ranked by the service without exposing API keys, download URLs, or magnet URIs. Public results expose `hasMagnet` instead of `magnet`; opaque result IDs resolve to server-side playback references.
+Movie and episode pages call the provider-independent torrent search service only after the user requests sources. TorPlay does not bundle torrent indexers; users can add custom Torznab or imported Cardigann sources. Jackett is supported as a user-managed custom Torznab endpoint. Results are filtered and ranked by the service without exposing API keys, download URLs, or magnet URIs. Public results expose `hasMagnet` instead of `magnet`; opaque result IDs resolve to server-side playback references.
 
 - Direct `.torrent` metadata is inspected for the top 20 relevant candidates.
 - Verified playable results appear before unverified magnet fallbacks.

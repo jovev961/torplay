@@ -36,13 +36,14 @@ and hasMagnet. Requested playback context is stored separately from release meta
 TorPlay includes no torrent indexers or provider definitions. Add a compatible
 third-party source under **Settings → Torrent Sources** by configuring a custom
 Torznab endpoint or importing a Cardigann definition. An independently operated
-Jackett instance remains optional and is configured under **Settings → Services**.
+Jackett or Prowlarr instance is just another custom Torznab source.
 TorPlay never starts, stops, or configures these external services.
 
 `TORPLAY_SEARCH_PROVIDERS` is an optional advanced full-provider allowlist. It
-accepts `jackett` and the stable `custom-...` or `cardigann-...` IDs saved for
+accepts the stable `custom-...` or `cardigann-...` IDs saved for
 user-configured sources. Unknown IDs are rejected, and an empty list produces a
-configuration error. No mirror discovery or mandatory anti-bot service is used.
+configuration error. A legacy `jackett` override still selects converted sources.
+No mirror discovery or mandatory anti-bot service is used.
 Only search/download content you are authorized to access.
 
 ## Custom Torznab providers
@@ -84,11 +85,17 @@ The generic engine supports definition-driven GET/POST and raw search inputs,
 templates and filters, categories, HTML/JSON/XML parsing, declared response
 encodings, public/cookie/form authentication, selector-derived login values,
 session cookies, error selectors, and direct or multi-step torrent downloads.
-Definitions that require CAPTCHA, FlareSolverr/anti-bot handling, custom
+Definitions marked `info_flaresolverr` use an optional external FlareSolverr
+service configured under **Settings → Services**. Compatible HTML GET and form
+POST requests go through its `/v1` API; torrent downloads remain direct. The
+service must be on this computer or a private LAN address. TorPlay never manages it.
+Other definitions continue to use direct HTTP, and OMDb ratings remain independent.
+
+Definitions that require CAPTCHA, custom
 certificate pinning, torrent-link self-testing, an unavailable text encoding, or
 another unknown operation are rejected during import. Every compatibility error
 names the unsupported feature and its YAML path; sections are never silently
-ignored. TorPlay never installs or requires an anti-bot service.
+ignored. TorPlay never installs or globally requires an anti-bot service.
 
 Developers can audit a locally supplied Cardigann v11 corpus without downloading
 or bundling a catalog:

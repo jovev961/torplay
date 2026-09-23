@@ -14,7 +14,7 @@ Next.js pages and API routes
         +--> SQLite profiles, history, and progress
         +--> Torrent search service --> imported Cardigann providers
         |                          +--> custom Torznab providers
-        |                          +--> optional Jackett adapter
+        |                          +--> optional FlareSolverr for marked Cardigann definitions
         +--> WebTorrent session manager --> torrent swarm
         +--> subtitle providers and torrent sidecars
         +--> native Range stream or FFmpeg-prepared playback
@@ -57,7 +57,7 @@ Next.js-only setup redirects and settings-response composition stay in `app/_lib
 | Persistence | SQLite through `better-sqlite3` |
 | Metadata | TMDB API |
 | Source search | Provider-independent adapters, Cardigann definitions, Torznab XML through Fast XML Parser |
-| Search support | User-configured Cardigann/Torznab sources, optional Jackett, optional OMDb |
+| Search support | User-configured Cardigann/Torznab sources, optional FlareSolverr, optional OMDb |
 | Torrent runtime | WebTorrent and `parse-torrent` |
 | Playback | HTML5 video, HTTP Range, HLS.js |
 | Conversion | FFmpeg and FFprobe static packages |
@@ -89,7 +89,7 @@ The browser-facing application never imports or controls the torrent client dire
 
 ## Search flow
 
-TMDB provides title metadata and discovery. Selecting a movie or episode calls the server-side torrent search service. Provider selection is isolated in `lib/search/provider.js`. It selects user-configured Cardigann and custom Torznab sources plus optional Jackett integration; TorPlay does not bundle torrent indexers.
+TMDB provides title metadata and discovery. Selecting a movie or episode calls the server-side torrent search service. Provider selection is isolated in `lib/search/provider.js`. It selects user-configured Cardigann and custom Torznab sources; Jackett and Prowlarr are user-managed Torznab endpoints. TorPlay does not bundle torrent indexers.
 
 Adapters implement the [common provider contract](torrent-providers.md) and execute concurrently. Their candidates are normalized while individual provider failures remain isolated. Shared processing validates search context, filters titles and episodes, deduplicates, and ranks candidates using the existing rules. The service allocates expiring result IDs and validates streamability before returning an explicit public projection. Magnets and credential-bearing download URLs remain in the server-side result store. Search routes and automatic next-episode playback use the same service without importing adapters. When no provider is available, the application directs the user to provider settings instead of requiring Jackett.
 

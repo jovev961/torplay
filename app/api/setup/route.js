@@ -10,7 +10,6 @@ export const dynamic = "force-dynamic";
 
 const setupFields = {
   tmdb: new Set(["apiToken"]),
-  jackett: new Set(["url", "apiKey"]),
 };
 
 function setupChanges(body) {
@@ -42,7 +41,7 @@ export async function POST(request) {
       throw new SettingsError("Request body must be valid JSON.");
     }
     const outcome = await validateAndUpdateProvidersSettings(setupChanges(body), async (environment) => {
-      const results = await validateSettingsProviders(body.providers.jackett ? ["tmdb", "jackett"] : ["tmdb"], {
+      const results = await validateSettingsProviders(["tmdb"], {
         environment,
         useCache: false,
       });
@@ -55,7 +54,6 @@ export async function POST(request) {
       );
     }
     clearSettingsValidation("tmdb");
-    clearSettingsValidation("jackett");
     return Response.json(
       { ready: true, results: outcome.validation.results },
       { headers: { "Cache-Control": "no-store" } },

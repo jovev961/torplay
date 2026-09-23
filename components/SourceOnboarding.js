@@ -21,7 +21,6 @@ export default function SourceOnboarding() {
     return () => { cancelled = true; };
   }, []);
   const active = snapshot?.torrentSources.nativeActive
-    || snapshot?.torrentSources.jackettActive
     || snapshot?.torrentSources.customActive;
   return <>
     {error ? <p className="notice error" role="alert">{error}</p> : null}
