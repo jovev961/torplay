@@ -14,14 +14,14 @@ The log rotates at 5 MiB and retains three backups. Setup and uninstall logs are
 
 TorPlay automatically retries an application, LAN proxy, or mDNS component after two consecutive health failures. If the same component exceeds three recovery attempts within 60 seconds, the tray shows **Status: Error** and the log records the failing component and each attempt. Choose **Retry TorPlay** to perform a clean full restart after correcting the reported problem.
 
-## A custom Torznab source fails
+## A Jackett source fails
 
 - Confirm your independently operated Jackett instance is running.
 - Open [http://localhost:9117](http://localhost:9117).
 - Confirm at least one Jackett indexer is configured and working.
-- Open [http://torplay.local/settings](http://torplay.local/settings) or Settings through the displayed LAN address and confirm the custom Torznab endpoint and API key.
+- Open [http://torplay.local/settings](http://torplay.local/settings) or Settings through the displayed LAN address. Test Jackett under **Services**, then check the individual source under **Torrent Sources**.
 - If this source was converted from legacy Jackett settings, confirm the named movie/show indexer IDs still exist in Jackett.
-- Custom source changes activate immediately after TorPlay verifies and saves them.
+- Jackett source choices activate immediately after TorPlay verifies and saves them.
 
 ## A Cardigann source needs FlareSolverr
 

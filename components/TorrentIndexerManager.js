@@ -47,6 +47,7 @@ export default function TorrentIndexerManager({
   const [dialogOpen, setDialogOpen] = useState(false);
   const [draft, setDraft] = useState(null);
   const [importDraft, setImportDraft] = useState(null);
+  const [jackettDraft, setJackettDraft] = useState(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -75,6 +76,7 @@ export default function TorrentIndexerManager({
     setDialogOpen(false);
     setDraft(null);
     setImportDraft(null);
+    setJackettDraft(null);
     setMessage("");
     setError("");
   }
@@ -179,16 +181,17 @@ export default function TorrentIndexerManager({
                       <button className={styles.testButton} type="button" disabled={busy} onClick={() => {
                         if (provider.kind === "cardigann") {
                           setImportDraft({ editId: provider.id, definition: { name: provider.name, categories: provider.categories, settings: provider.settings }, enabled: provider.enabled, values: settingValues(provider.settings) });
-                        } else setDraft({ ...provider, apiKey: "" });
+                        } else if (provider.kind === "jackett") setJackettDraft(provider);
+                        else setDraft({ ...provider, apiKey: "" });
                         setDialogOpen(true); setMessage(""); setError("");
                       }}>Edit</button>
                       {provider.kind === "cardigann" ? <button className={styles.testButton} type="button" disabled={busy} onClick={() => void act("test-cardigann", { id: provider.id })}>Test</button> : null}
-                      <button className={styles.testButton} type="button" disabled={busy} onClick={() => void act(provider.kind === "cardigann" ? "update-cardigann" : "update", { id: provider.id, enabled: !provider.enabled })}>{provider.enabled ? "Disable" : "Enable"}</button>
+                      <button className={styles.testButton} type="button" disabled={busy} onClick={() => void act(provider.kind === "cardigann" ? "update-cardigann" : provider.kind === "jackett" ? "update-jackett" : "update", { id: provider.id, enabled: !provider.enabled, mediaTypes: provider.mediaTypes })}>{provider.enabled ? "Disable" : "Enable"}</button>
                       <button className={styles.removeButton} type="button" disabled={busy} onClick={() => { if (window.confirm(`Remove ${provider.name}?`)) void act(provider.kind === "cardigann" ? "remove-cardigann" : "remove", { id: provider.id }); }}>Remove</button>
                     </div>
                   ) : null}
                 </div>
-                <p>{provider.kind === "cardigann" ? "Imported Cardigann definition." : "Custom Torznab-compatible indexer."}</p>
+                <p>{provider.kind === "cardigann" ? "Imported Cardigann definition." : provider.kind === "jackett" ? "External Jackett indexer." : "Custom Torznab-compatible indexer."}</p>
                 <IndexerStatus status={status} message={statusMessage} />
               </article>
             );
@@ -214,7 +217,7 @@ export default function TorrentIndexerManager({
       ) : null}
 
       {dialogOpen ? <AddSourceDialog
-        initial={{ draft, importDraft }}
+        initial={{ draft, importDraft, jackettDraft }}
         testedSources={nativeSources}
         onClose={closeDialog}
         onSaved={async (data) => {

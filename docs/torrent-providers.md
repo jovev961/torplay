@@ -36,13 +36,15 @@ and hasMagnet. Requested playback context is stored separately from release meta
 TorPlay includes no torrent indexers or provider definitions. Add a compatible
 third-party source under **Settings → Torrent Sources** by configuring a custom
 Torznab endpoint or importing a Cardigann definition. An independently operated
-Jackett or Prowlarr instance is just another custom Torznab source.
+Prowlarr instance can be added as a custom Torznab source. Jackett is configured
+as an optional external service under **Settings → Services**; after validation,
+add its configured indexers individually here. TorPlay does not manage Jackett.
 TorPlay never starts, stops, or configures these external services.
 
 `TORPLAY_SEARCH_PROVIDERS` is an optional advanced full-provider allowlist. It
-accepts the stable `custom-...` or `cardigann-...` IDs saved for
+accepts the stable `custom-...`, `jackett-...`, or `cardigann-...` IDs saved for
 user-configured sources. Unknown IDs are rejected, and an empty list produces a
-configuration error. A legacy `jackett` override still selects converted sources.
+configuration error. A legacy `jackett` override still selects Jackett sources.
 No mirror discovery or mandatory anti-bot service is used.
 Only search/download content you are authorized to access.
 
@@ -53,6 +55,15 @@ Use Settings → Torrent Sources → Add Custom Indexer. Enter a name, the compl
 Custom providers can be edited, enabled, disabled, or removed. Health is checked on load and refreshed manually. Disabled providers make no requests. Credentials and endpoint URLs remain server-side, except that localhost editors can see the configured endpoint. Redirects are rejected to prevent credential forwarding.
 
 Enabled custom providers join the existing provider runner and share filtering, deduplication, ranking, and failure isolation. A full `TORPLAY_SEARCH_PROVIDERS` override includes a custom provider only when its stable `custom-...` ID is listed. The ID is stored in the private configuration file. Capabilities constrain the search modes and parameters used.
+
+## Jackett sources
+
+Run Jackett independently, save and test its base URL and API key in **Services**,
+then use **Torrent Sources → Add Source → Jackett** to choose a configured indexer.
+Each indexer is a separate source with Movies and/or TV Shows selected according
+to its capabilities. Jackett credentials remain in Services; changing them affects
+all Jackett sources. No source is added merely by configuring the service. Existing
+sources remain saved but report unavailable when Jackett is offline.
 
 ## Imported Cardigann definitions
 

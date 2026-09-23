@@ -496,8 +496,8 @@ test("imported definitions persist only after live verification and redact setti
     assert.equal(JSON.stringify(providers).includes("private"), false);
     assert.equal(readCustomProviders(environment)[0].settings.token, "private");
     const stored = JSON.parse(await readFile(path.join(directory, "torrent-providers.json"), "utf8"));
-    assert.equal(stored[0].definitionYaml, definitionYaml);
-    assert.equal(stored[0].definitionSourceFormat, "original");
+    assert.equal(stored.providers[0].definitionYaml, definitionYaml);
+    assert.equal(stored.providers[0].definitionSourceFormat, "original");
     assert.equal(publicCustomProviders(environment)[0].definitionUrl, "https://github.com/example/indexers/blob/main/example.yml");
   } finally {
     await rm(directory, { recursive: true, force: true });
@@ -580,9 +580,9 @@ test("legacy parsed-only Cardigann records remain readable and canonicalize on s
     assert.equal(readCustomProviders(environment)[0].definition.id, "example");
     await updateCardigannProvider({ id: "cardigann-legacy", enabled: false }, { environment });
     const stored = JSON.parse(await readFile(filename, "utf8"));
-    assert.equal(stored[0].definitionSourceFormat, "canonicalized-legacy");
-    assert.match(stored[0].definitionYaml, /^id: example/m);
-    assert.match(stored[0].definitionHash, /^[a-f\d]{64}$/);
+    assert.equal(stored.providers[0].definitionSourceFormat, "canonicalized-legacy");
+    assert.match(stored.providers[0].definitionYaml, /^id: example/m);
+    assert.match(stored.providers[0].definitionHash, /^[a-f\d]{64}$/);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

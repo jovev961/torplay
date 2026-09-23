@@ -1,6 +1,9 @@
 import { assertSettingsMutationRequest, assertSameOriginSettingsRequest } from "../../../../lib/settings/security.js";
 import {
   changeCustomProvider,
+  changeJackettProvider,
+  availableJackettIndexers,
+  jackettIndexerCapabilities,
   createCardigannProvider,
   customProviderHealth,
   removeCardigannProvider,
@@ -41,6 +44,9 @@ export async function POST(request) {
     if (body?.action === "test-cardigann") return json(await testCardigannProviderConnection(body.provider || {}));
     if (body?.action === "remove-cardigann") return json({ providers: await removeCardigannProvider(body.provider || {}) });
     if (body?.action === "test") return json({ capabilities: await testCustomProvider(body.provider || {}) });
+    if (body?.action === "jackett-indexers") return json({ indexers: await availableJackettIndexers() });
+    if (body?.action === "jackett-capabilities") return json({ capabilities: await jackettIndexerCapabilities(body.provider?.indexerId) });
+    if (["create-jackett", "update-jackett"].includes(body?.action)) return json({ providers: await changeJackettProvider(body.action.replace("-jackett", ""), body.provider || {}) });
     if (!["create", "update", "remove"].includes(body?.action)) return json({ error: "Unknown provider action." }, 400);
     return json({ providers: await changeCustomProvider(body.action, body.provider || {}) });
   } catch (error) {
