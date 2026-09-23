@@ -224,6 +224,7 @@ export default function TorrentIndexerManager({
       {dialogOpen ? <AddSourceDialog
         initial={{ draft, importDraft, jackettDraft }}
         testedSources={nativeSources}
+        configuredProviders={customProviders}
         onClose={closeDialog}
         onSaved={async (data) => {
           if (Array.isArray(data.providers)) setCustomProviders(data.providers);

@@ -11,6 +11,7 @@ import { importDefinition } from "../lib/search/cardigann/definition.js";
 import { createCardigannProvider, readCustomProviders, customProviderAdapter } from "../lib/settings/torrent-providers.js";
 import { POST } from "../app/api/settings/torrent-providers/route.js";
 import { settingsState } from "../lib/settings/config.js";
+import { filterCommunityEntries, unexploredCommunityEntries } from "../components/community-source-filters.js";
 
 const revision = "a".repeat(40);
 const hash = (n) => String(n).repeat(40);
@@ -18,10 +19,11 @@ const entry = (name, type = "blob", mode = "100644", sha = hash(4)) => ({ path: 
 async function definitionArchive(omit = []) {
   const pack = tar.pack();
   const definitions = {
-    "zulu.yml": { type: "public", language: "en-US", caps: { categories: { "2000": "Movies" } } },
-    "alpha-source.yaml": { type: "semi-private", language: "en-US", caps: { categories: { "5000": "TV" } },
+    "zulu.yml": { id: "zulu-internal", type: "public", language: "en-US", caps: { categories: { "2000": "Movies" } } },
+    "alpha-source.yaml": { id: "alpha", type: "semi-private", language: "en-US", caps: { categories: { "5000": "TV/Anime" } },
       settings: [{ name: "flare", type: "info_flaresolverr" }] },
-    "nested/beta.yml": { type: "private", language: "en-US", caps: { categories: { "2000": "Movies", "5000": "TV" } } },
+    "nested/beta.yml": { id: "beta", type: "private", language: "en-US", caps: { categories: { "2000": "Movies", "5000": "TV" } } },
+    "anime-public.yml": { id: "anime-public", type: "public", language: "ja-JP", caps: { categories: { "5070": "TV/Anime" } } },
     "audio.yml": { type: "public", language: "en-US", caps: { categories: { "3000": "Audio" } } },
   };
   for (const [name, definition] of Object.entries(definitions)) {
@@ -38,7 +40,7 @@ function directoryFixture() {
     master: { sha: revision },
     [revision]: { sha: hash(0), truncated: false, tree: [entry("definitions", "tree", "040000", hash(1))] },
     [hash(1)]: { sha: hash(1), truncated: false, tree: [entry("v11", "tree", "040000", hash(2))] },
-    [hash(2)]: { sha: hash(2), truncated: false, tree: [entry("zulu.yml"), entry("alpha-source.yaml"), entry("audio.yml"), entry("README.md"), entry("link.yml", "blob", "120000"), entry("nested", "tree", "040000", hash(3))] },
+    [hash(2)]: { sha: hash(2), truncated: false, tree: [entry("zulu.yml"), entry("alpha-source.yaml"), entry("anime-public.yml"), entry("audio.yml"), entry("README.md"), entry("link.yml", "blob", "120000"), entry("nested", "tree", "040000", hash(3))] },
     [hash(3)]: { sha: hash(3), truncated: false, tree: [entry("beta.yml")] },
   };
   const calls = [];
@@ -59,9 +61,11 @@ test("directory is opt-in, metadata-only, sorted, cached and deduplicated", asyn
   assert.equal(fixture.calls.length, 0);
   const [first, same] = await Promise.all([directory.list(), directory.list({ refresh: true })]);
   assert.deepEqual(first, same);
-  assert.deepEqual(first.entries.map((item) => item.name), ["alpha source", "beta", "zulu"]);
-  assert.deepEqual(first.entries.map((item) => item.mediaTypes), [["TV"], ["Movies", "TV"], ["Movies"]]);
-  assert.deepEqual(first.entries.map((item) => item.access), ["semi-private", "private", "public"]);
+  assert.deepEqual(first.entries.map((item) => item.name), ["alpha source", "anime public", "beta", "zulu"]);
+  assert.deepEqual(first.entries.map((item) => item.mediaTypes), [["TV"], ["TV"], ["Movies", "TV"], ["Movies"]]);
+  assert.deepEqual(first.entries.map((item) => item.access), ["semi-private", "public", "private", "public"]);
+  assert.deepEqual(first.entries.map((item) => item.anime), [true, true, false, false]);
+  assert.deepEqual(first.entries.map((item) => item.definitionId), ["alpha", "anime-public", "beta", "zulu-internal"]);
   assert.equal(first.entries[0].requiresFlareSolverr, true);
   assert.equal(JSON.stringify(first).includes("caps"), false);
   assert.equal(first.revision, revision);
@@ -90,7 +94,7 @@ test("directory rejects incomplete, malformed and unsafe entries and can retry",
   const directory = createCommunityDirectory({ request: (...args) => fail ? { status: 429, body: Buffer.from("secret") } : fixture.request(...args) });
   await assert.rejects(directory.list(), /rate limited/);
   fail = false;
-  assert.equal((await directory.list()).entries.length, 3);
+  assert.equal((await directory.list()).entries.length, 4);
   await assert.rejects(createCommunityDirectory({ request: async () => ({ status: 200, body: Buffer.from("invalid json") }) }).list(), /invalid response/);
   await assert.rejects(createCommunityDirectory({ request: async () => { throw new Error("sensitive upstream text"); } }).list(), (error) => !error.message.includes("sensitive"));
 });
@@ -103,7 +107,21 @@ test("directory rejects a corrupt definition archive without caching it", async 
     : fixture.request(url, options) });
   await assert.rejects(directory.list(), /archive could not be read/);
   corrupt = false;
-  assert.equal((await directory.list()).entries.length, 3);
+  assert.equal((await directory.list()).entries.length, 4);
+});
+
+test("explore filters anime, access and search while hiding configured Cardigann definitions", async () => {
+  const entries = (await createCommunityDirectory({ request: directoryFixture().request }).list()).entries;
+  const available = unexploredCommunityEntries(entries, [
+    { kind: "cardigann", definitionId: "ZULU-INTERNAL" },
+    { kind: "cardigann", definitionUrl: `https://raw.githubusercontent.com/Prowlarr/Indexers/${revision}/definitions/v11/nested/beta.yml` },
+    { kind: "torznab", definitionId: "alpha" },
+  ]);
+  assert.deepEqual(available.map((item) => item.name), ["alpha source", "anime public"]);
+  assert.deepEqual(filterCommunityEntries(available, { media: "Anime" }).map((item) => item.name), ["alpha source", "anime public"]);
+  assert.deepEqual(filterCommunityEntries(available, { media: "TV", access: "semi-private" }).map((item) => item.name), ["alpha source"]);
+  assert.deepEqual(filterCommunityEntries(available, { media: "Anime", access: "public", query: "anime" }).map((item) => item.name), ["anime public"]);
+  assert.deepEqual(filterCommunityEntries(available, { access: "private" }), []);
 });
 
 test("directory does not silently omit files missing from a pinned archive", async () => {

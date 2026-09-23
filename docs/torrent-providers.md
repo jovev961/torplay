@@ -82,9 +82,11 @@ open the individual `.yml` file for the indexer, and copy that file page's brows
 URL. Do not paste the torrent indexer's own website URL. GitHub's **Raw** button is
 not required.
 
-The in-app community browser shows only definitions with movie or TV categories.
-Use its Movies and TV / Series filters to narrow the list; a source that supports
-both appears in both filters. Access badges (Public, Semi-public, Private) and the
+The in-app community browser shows definitions with supported movie or TV categories
+that have not already been added, including anime-capable TV sources. Use its
+Movies, TV / Series, and Anime filters
+alongside the access select; a source supporting multiple categories appears in
+each matching filter. Access badges (Public, Semi-public, Private) and the
 FlareSolverr marker come from the definition at the pinned community revision.
 Semi-public is the UI label for the upstream `semi-private` type; it may require
 registration or other access before an indexer can be used.

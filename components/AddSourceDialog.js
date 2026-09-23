@@ -25,7 +25,7 @@ function settingValues(settings) {
 }
 
 
-export default function AddSourceDialog({ initial = {}, testedSources = [], onClose, onSaved, embedded = false }) {
+export default function AddSourceDialog({ initial = {}, testedSources = [], configuredProviders = [], onClose, onSaved, embedded = false }) {
   const [draft, setDraft] = useState(initial.draft || null);
   const [jackettDraft, setJackettDraft] = useState(initial.jackettDraft || null);
   const [jackettIndexers, setJackettIndexers] = useState(null);
@@ -254,7 +254,7 @@ export default function AddSourceDialog({ initial = {}, testedSources = [], onCl
                     <button className={styles.testButton} type="button" disabled={busy || item.added} onClick={() => void chooseJackett(item.id)}>{item.added ? "Added" : "Add"}</button>
                   </article>)}</div> : <p>No configured Jackett indexers are available yet.</p>}
                 </section> : <p className={styles.sectionNote}>To add Jackett sources, configure and validate Jackett under <a href="/settings#services">Services</a>.</p>}
-                <CommunitySources busy={busy} onSelect={importDefinition} onAdvanced={() => { setAdvanced(true); setError(""); }} />
+                <CommunitySources busy={busy} configuredProviders={configuredProviders} onSelect={importDefinition} onAdvanced={() => { setAdvanced(true); setError(""); }} />
               </div>
             ) : (
               <div className={styles.addIndexerOptions}>
