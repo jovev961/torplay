@@ -207,7 +207,7 @@
 
 .sourceGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
   gap: 14px;
 }
 
@@ -222,38 +222,81 @@
   line-height: 1.55;
 }
 
-.sourceCardHeading span {
+.sourceCardHeading {
   display: grid;
-  gap: 3px;
+  gap: 5px;
 }
 
-.sourceCardHeading small {
+.sourceCardHeading strong {
+  font-size: 1.05rem;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.sourceKicker {
   color: var(--muted);
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
 }
 
-.sourceCardHeading {
+.sourceBadges,
+.communityItemMeta {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
-.sourceCardHeading .removeButton {
-  min-height: 34px;
+.sourceBadges {
+  margin-top: 12px;
+}
+
+.sourceBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border: 1px solid #39424d;
+  border-radius: 999px;
+  color: #c8d0d9;
+  background: #20262e;
+  font-size: 0.69rem;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.publicBadge {
+  border-color: #315b41;
+  color: #b5f0cb;
+  background: #193728;
+}
+
+.semiBadge {
+  border-color: #655234;
+  color: #f2d6a3;
+  background: #3b3021;
+}
+
+.privateBadge {
+  border-color: #645062;
+  color: #eac9e5;
+  background: #352735;
 }
 
 .sourceCardActions {
   display: flex;
   flex-wrap: wrap;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 8px;
+  margin-top: 17px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
 }
 
 .sourceCard {
+  display: flex;
+  flex-direction: column;
   padding: 18px;
   border: 1px solid var(--border);
   border-radius: 14px;
@@ -261,11 +304,15 @@
 }
 
 .sourceCard > p {
-  min-height: 2.9em;
   margin: 13px 0 0;
   color: var(--muted);
   font-size: 0.84rem;
   line-height: 1.45;
+}
+
+.sourceCard .providerStatus {
+  margin: auto 0 0;
+  padding-top: 17px;
 }
 
 .sourceActions {
@@ -513,13 +560,13 @@
 
 .communityList {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 8px;
-  max-height: 340px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 255px), 1fr));
+  gap: 10px;
+  max-height: 440px;
   overflow-y: auto;
   list-style: none;
   margin: 0;
-  padding: 4px;
+  padding: 4px 6px 4px 4px;
 }
 
 .sourceOnboarding {
@@ -529,10 +576,86 @@
   background: var(--panel);
 }
 
-.communityList button {
+.communityIntro h3 {
+  margin: 0 0 5px;
+}
+
+.communityToolbar {
+  display: grid;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.communityFilters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.communityFilter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 11px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  background: #11161b;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.communityFilter span {
+  color: #aeb8c3;
+  font-size: 0.7rem;
+}
+
+.communityFilter:hover,
+.communityFilter:focus-visible,
+.communityFilterActive {
+  border-color: #a0413d;
+  color: var(--text);
+  background: #301a1b;
+}
+
+.communityCount {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.communityItem {
+  display: grid;
+  align-content: space-between;
+  gap: 13px;
   width: 100%;
+  min-height: 86px;
+  padding: 13px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  color: var(--text);
+  background: #12171c;
+  cursor: pointer;
   text-align: left;
   overflow-wrap: anywhere;
+}
+
+.communityItem:hover,
+.communityItem:focus-visible {
+  border-color: #a0413d;
+  outline: none;
+  background: #1c2027;
+}
+
+.communityItem:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.communityItem strong {
+  font-size: 0.94rem;
+  line-height: 1.25;
 }
 
 .sourceChoiceSections {
@@ -895,6 +1018,10 @@
 }
 
 @media (max-width: 760px) {
+  .sourceGrid {
+    grid-template-columns: 1fr;
+  }
+
   .settingsLayout {
     grid-template-columns: 1fr;
     gap: 20px;

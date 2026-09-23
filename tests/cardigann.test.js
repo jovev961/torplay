@@ -353,6 +353,7 @@ test("a FlareSolverr-backed source passes the Settings connection test after a s
     };
     const [saved] = await createCardigannProvider({ importId: imported.importId, settings: {} }, options);
     assert.equal(saved.verification.status, "verified");
+    assert.equal(publicCustomProviders(environment)[0].requiresFlareSolverr, true);
     const retested = await testCardigannProviderConnection({ id: saved.id }, options);
     assert.equal(retested.verification.status, "verified");
     assert.equal(readCustomProviders(environment)[0].verification.status, "verified");
@@ -567,6 +568,7 @@ test("imported definitions persist only after live verification and redact setti
     assert.equal(stored.providers[0].definitionYaml, definitionYaml);
     assert.equal(stored.providers[0].definitionSourceFormat, "original");
     assert.equal(publicCustomProviders(environment)[0].definitionUrl, "https://github.com/example/indexers/blob/main/example.yml");
+    assert.equal(publicCustomProviders(environment)[0].access, "public");
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
