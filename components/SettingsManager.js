@@ -346,8 +346,9 @@ export default function SettingsManager() {
         </section> : null}
 
         {selectedSection === "services" ? <section className={styles.settingsSection} id="services">
-          <div className={styles.sectionHeading}><span>02</span><div><h2>Services</h2><p>Metadata, source discovery, and external search integrations.</p></div></div>
+          <div className={styles.sectionHeading}><span>02</span><div><h2>Services</h2><p>Metadata, source discovery, debrid playback, and external search integrations.</p></div></div>
           <div className={styles.providerGrid}>{serviceProviders.map(providerCard)}</div>
+          <DebridSettings canEdit={snapshot.canEdit} section="services" />
         </section> : null}
 
         {selectedSection === "torrent-sources" ? <section className={styles.settingsSection} id="torrent-sources">
@@ -382,7 +383,7 @@ export default function SettingsManager() {
             <div><span>Buffer target</span><strong>{snapshot.playback.bufferAheadSeconds} seconds</strong></div>
             <div><span>Subtitle cache</span><strong>{snapshot.playback.subtitleCacheDays} days</strong></div>
           </div>
-          <DebridSettings canEdit={snapshot.canEdit} />
+          <DebridSettings canEdit={snapshot.canEdit} section="playback" />
           <p className={styles.sectionNote}>Network ports, storage paths, trackers, and executable overrides remain owner-managed runtime configuration.</p>
         </section> : null}
 

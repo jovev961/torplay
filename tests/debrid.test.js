@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { readDebridConfig, updateDebridPolicy, publicDebridConfig } from "../lib/debrid/config.js";
+import { readDebridConfig, updateDebridConfig, updateDebridPolicy, publicDebridConfig } from "../lib/debrid/config.js";
 import {
   RealDebridProvider, finishRealDebridAuthorization, startRealDebridAuthorization,
 } from "../lib/debrid/real-debrid.js";
@@ -12,7 +12,8 @@ import {
 } from "../lib/debrid/torbox.js";
 import { providerRequest } from "../lib/debrid/http.js";
 import { DebridError } from "../lib/debrid/http.js";
-import { getPlaybackSession, startPlaybackSource, stopPlayback } from "../lib/debrid/session.js";
+import { connectDebridApiKey, disconnectDebrid } from "../lib/debrid/auth.js";
+import { getPlaybackSession, makeDebridProvider, startPlaybackSource, stopPlayback } from "../lib/debrid/session.js";
 import { findEpisodeFile, findLargestFile } from "../lib/video/episode.js";
 
 const hash = "a".repeat(40);
@@ -104,6 +105,86 @@ test("Real-Debrid refreshes expired OAuth credentials before account lookup", as
   assert.equal((await provider.getAccountInfo()).id, 123);
   assert.equal(saved.refreshToken, "new-refresh");
   assert.equal(calls.length, 2);
+});
+
+test("Real-Debrid manual token uses bearer authentication without OAuth refresh or revocation", async () => {
+  const calls = [];
+  const provider = new RealDebridProvider({ apiKey: "private-token" }, {
+    fetchImpl: async (url, options) => {
+      calls.push(new URL(url).pathname);
+      assert.equal(options.headers.get("authorization"), "Bearer private-token");
+      return response({ id: 123 });
+    },
+  });
+  assert.equal((await provider.getAccountInfo()).id, 123);
+  await provider.disconnect();
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].endsWith("/user"), true);
+});
+
+test("manual keys validate before replacing credentials and stay redacted", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "torplay-debrid-keys-"));
+  const configOptions = { path: path.join(directory, "debrid-config.json") };
+  const calls = [];
+  const fetchImpl = async (url, options) => {
+    const route = new URL(url).pathname;
+    const token = options.headers.get("authorization");
+    calls.push({ route, token });
+    if (token === "Bearer invalid-key") return response({ error: "bad key" }, 401);
+    if (route.endsWith("/user")) {
+      assert.equal(token, "Bearer real-debrid-key");
+      return response({ id: 1 });
+    }
+    assert.equal(route.endsWith("/user/me"), true);
+    assert.equal(token, "Bearer torbox-key");
+    return response({ success: true, data: { id: 2 } });
+  };
+  try {
+    await connectDebridApiKey("real-debrid", "real-debrid-key", fetchImpl, configOptions);
+    await connectDebridApiKey("torbox", "torbox-key", fetchImpl, configOptions);
+    await assert.rejects(
+      connectDebridApiKey("real-debrid", "invalid-key", fetchImpl, configOptions),
+      (error) => error.status === 400 && !error.message.includes("invalid-key"),
+    );
+    const config = await readDebridConfig(configOptions);
+    assert.equal(config.credentials["real-debrid"].apiKey, "real-debrid-key");
+    assert.equal(config.credentials.torbox.apiKey, "torbox-key");
+    assert.equal(JSON.stringify(publicDebridConfig(config)).includes("-key"), false);
+    assert.equal(calls.length, 3);
+    await disconnectDebrid("real-debrid", configOptions);
+    assert.equal((await readDebridConfig(configOptions)).credentials["real-debrid"], undefined);
+    assert.equal(calls.length, 3);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("an old OAuth refresh cannot replace a newly saved manual token", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "torplay-debrid-refresh-"));
+  const configOptions = { path: path.join(directory, "debrid-config.json") };
+  const old = {
+    clientId: "client", clientSecret: "secret", accessToken: "old",
+    refreshToken: "old-refresh", expiresAt: 0,
+  };
+  try {
+    await updateDebridConfig((config) => ({
+      ...config, credentials: { "real-debrid": old },
+    }), configOptions);
+    const provider = makeDebridProvider("real-debrid", old, {
+      configOptions,
+      fetchImpl: async () => response({
+        access_token: "new", refresh_token: "new-refresh", expires_in: 3600,
+      }),
+    });
+    await updateDebridConfig((config) => ({
+      ...config, credentials: { "real-debrid": { apiKey: "manual-token" } },
+    }), configOptions);
+    await provider.refresh();
+    assert.equal((await readDebridConfig(configOptions)).credentials["real-debrid"].apiKey,
+      "manual-token");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test("Real-Debrid open-source device authorization obtains user-bound credentials", async () => {

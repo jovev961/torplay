@@ -31,3 +31,15 @@ test("debrid credential actions reject untrusted and cross-origin requests", asy
   }), { params: Promise.resolve({ provider: "torbox" }) });
   assert.equal(foreignOrigin.status, 403);
 });
+
+test("malformed key requests do not echo credential text", async () => {
+  const response = await providerPost(new Request("http://localhost/api/settings/debrid/real-debrid", {
+    method: "POST", headers: {
+      host: "localhost", origin: "http://localhost",
+      "content-type": "application/json",
+    },
+    body: '{"action":"key","apiKey":"private-token" broken',
+  }), { params: Promise.resolve({ provider: "real-debrid" }) });
+  assert.equal(response.status, 400);
+  assert.equal((await response.text()).includes("private-token"), false);
+});
