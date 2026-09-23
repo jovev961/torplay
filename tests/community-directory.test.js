@@ -3,6 +3,8 @@ import test from "node:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { gzipSync } from "node:zlib";
+import tar from "tar-stream";
 import { stringify } from "yaml";
 import { createCommunityDirectory, communityDirectory } from "../lib/search/community-directory.js";
 import { importDefinition } from "../lib/search/cardigann/definition.js";
@@ -13,17 +15,37 @@ import { settingsState } from "../lib/settings/config.js";
 const revision = "a".repeat(40);
 const hash = (n) => String(n).repeat(40);
 const entry = (name, type = "blob", mode = "100644", sha = hash(4)) => ({ path: name, type, mode, sha });
+async function definitionArchive(omit = []) {
+  const pack = tar.pack();
+  const definitions = {
+    "zulu.yml": { type: "public", language: "en-US", caps: { categories: { "2000": "Movies" } } },
+    "alpha-source.yaml": { type: "semi-private", language: "en-US", caps: { categories: { "5000": "TV" } },
+      settings: [{ name: "flare", type: "info_flaresolverr" }] },
+    "nested/beta.yml": { type: "private", language: "en-US", caps: { categories: { "2000": "Movies", "5000": "TV" } } },
+    "audio.yml": { type: "public", language: "en-US", caps: { categories: { "3000": "Audio" } } },
+  };
+  for (const [name, definition] of Object.entries(definitions)) {
+    if (omit.includes(name)) continue;
+    pack.entry({ name: `Indexers-${revision}/definitions/v11/${name}` }, stringify(definition));
+  }
+  pack.finalize();
+  const chunks = [];
+  for await (const chunk of pack) chunks.push(chunk);
+  return gzipSync(Buffer.concat(chunks));
+}
 function directoryFixture() {
   const responses = {
     master: { sha: revision },
     [revision]: { sha: hash(0), truncated: false, tree: [entry("definitions", "tree", "040000", hash(1))] },
     [hash(1)]: { sha: hash(1), truncated: false, tree: [entry("v11", "tree", "040000", hash(2))] },
-    [hash(2)]: { sha: hash(2), truncated: false, tree: [entry("zulu.yml"), entry("alpha-source.yaml"), entry("README.md"), entry("link.yml", "blob", "120000"), entry("nested", "tree", "040000", hash(3))] },
+    [hash(2)]: { sha: hash(2), truncated: false, tree: [entry("zulu.yml"), entry("alpha-source.yaml"), entry("audio.yml"), entry("README.md"), entry("link.yml", "blob", "120000"), entry("nested", "tree", "040000", hash(3))] },
     [hash(3)]: { sha: hash(3), truncated: false, tree: [entry("beta.yml")] },
   };
   const calls = [];
+  const archive = definitionArchive();
   const request = async (url) => {
     calls.push(url);
+    if (url.startsWith("https://codeload.github.com/")) return { status: 200, body: await archive };
     assert.match(url, /^https:\/\/api\.github\.com\//);
     return { status: 200, body: Buffer.from(JSON.stringify(responses[url.split("/").at(-1)])) };
   };
@@ -38,15 +60,19 @@ test("directory is opt-in, metadata-only, sorted, cached and deduplicated", asyn
   const [first, same] = await Promise.all([directory.list(), directory.list({ refresh: true })]);
   assert.deepEqual(first, same);
   assert.deepEqual(first.entries.map((item) => item.name), ["alpha source", "beta", "zulu"]);
+  assert.deepEqual(first.entries.map((item) => item.mediaTypes), [["TV"], ["Movies", "TV"], ["Movies"]]);
+  assert.deepEqual(first.entries.map((item) => item.access), ["semi-private", "private", "public"]);
+  assert.equal(first.entries[0].requiresFlareSolverr, true);
+  assert.equal(JSON.stringify(first).includes("caps"), false);
   assert.equal(first.revision, revision);
-  assert.equal(fixture.calls.length, 5);
+  assert.equal(fixture.calls.length, 6);
   await directory.list();
-  assert.equal(fixture.calls.length, 5);
+  assert.equal(fixture.calls.length, 6);
   time = 15 * 60 * 1000;
   await directory.list();
-  assert.equal(fixture.calls.length, 10);
+  assert.equal(fixture.calls.length, 12);
   await directory.list({ refresh: true });
-  assert.equal(fixture.calls.length, 15);
+  assert.equal(fixture.calls.length, 18);
 });
 
 test("directory rejects incomplete, malformed and unsafe entries and can retry", async () => {
@@ -69,6 +95,26 @@ test("directory rejects incomplete, malformed and unsafe entries and can retry",
   await assert.rejects(createCommunityDirectory({ request: async () => { throw new Error("sensitive upstream text"); } }).list(), (error) => !error.message.includes("sensitive"));
 });
 
+test("directory rejects a corrupt definition archive without caching it", async () => {
+  const fixture = directoryFixture();
+  let corrupt = true;
+  const directory = createCommunityDirectory({ request: (url, options) => url.startsWith("https://codeload.github.com/") && corrupt
+    ? { status: 200, body: Buffer.from("not gzip") }
+    : fixture.request(url, options) });
+  await assert.rejects(directory.list(), /archive could not be read/);
+  corrupt = false;
+  assert.equal((await directory.list()).entries.length, 3);
+});
+
+test("directory does not silently omit files missing from a pinned archive", async () => {
+  const fixture = directoryFixture();
+  const partial = await definitionArchive(["zulu.yml"]);
+  const directory = createCommunityDirectory({ request: (url, options) => url.startsWith("https://codeload.github.com/")
+    ? { status: 200, body: partial }
+    : fixture.request(url, options) });
+  await assert.rejects(directory.list(), /archive is incomplete/);
+});
+
 test("selected entries are resolved server-side and pinned; expired and forged requests cannot import", async () => {
   const fixture = directoryFixture();
   let time = 0;
@@ -85,7 +131,7 @@ test("selected entries are resolved server-side and pinned; expired and forged r
   assert.deepEqual(imports, [`https://raw.githubusercontent.com/Prowlarr/Indexers/${revision}/definitions/v11/nested/beta.yml`]);
   time = 15 * 60 * 1000;
   await assert.rejects(directory.importEntry({ id: "zulu.yml", revision }), /expired/);
-  assert.equal(fixture.calls.length, 5);
+  assert.equal(fixture.calls.length, 6);
 });
 
 const definition = {

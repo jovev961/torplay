@@ -82,6 +82,15 @@ open the individual `.yml` file for the indexer, and copy that file page's brows
 URL. Do not paste the torrent indexer's own website URL. GitHub's **Raw** button is
 not required.
 
+The in-app community browser shows only definitions with movie or TV categories.
+Use its Movies and TV / Series filters to narrow the list; a source that supports
+both appears in both filters. Access badges (Public, Semi-public, Private) and the
+FlareSolverr marker come from the definition at the pinned community revision.
+Semi-public is the UI label for the upstream `semi-private` type; it may require
+registration or other access before an indexer can be used.
+These labels describe the upstream definition, not a live availability or
+compatibility guarantee; selecting a source still runs the normal import checks.
+
 Imported definitions run entirely on the TorPlay server. Definition settings,
 cookies, passwords, magnets, torrent files, and download URLs are not exposed to
 the browser. After the user confirms the preview, TorPlay performs a live
