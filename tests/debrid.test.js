@@ -85,6 +85,40 @@ test("Real-Debrid reuses only a completed account torrent and validates the exac
   assert.equal(calls.some((route) => route.includes("addMagnet") || route.includes("selectFiles")), false);
 });
 
+test("Real-Debrid treats an empty account as a cache miss without requesting page 1", async () => {
+  const requests = [];
+  const provider = new RealDebridProvider({ apiKey: "private-token" }, {
+    fetchImpl: async (url) => {
+      requests.push(new URL(url).search);
+      return response([]);
+    },
+  });
+  assert.deepEqual(await provider.checkAvailability({ infoHash: hash }), { status: "miss" });
+  assert.deepEqual(requests, ["?limit=500"]);
+});
+
+test("Real-Debrid treats an empty later page object as the end of the list", async () => {
+  const requests = [];
+  const provider = new RealDebridProvider({ apiKey: "private-token" }, {
+    fetchImpl: async (url) => {
+      const search = new URL(url).search;
+      requests.push(search);
+      return response(search.includes("page=2") ? {}
+        : Array.from({ length: 500 }, (_, index) => ({ hash: `other-${index}`, status: "downloaded" })));
+    },
+  });
+  assert.deepEqual(await provider.checkAvailability({ infoHash: hash }), { status: "miss" });
+  assert.deepEqual(requests, ["?limit=500", "?limit=500&page=2"]);
+});
+
+test("Real-Debrid still rejects malformed torrent lists", async () => {
+  const provider = new RealDebridProvider({ apiKey: "private-token" }, {
+    fetchImpl: async () => response({ error: "unexpected shape" }),
+  });
+  await assert.rejects(provider.checkAvailability({ infoHash: hash }),
+    (error) => error.code === "malformed-response");
+});
+
 test("Real-Debrid refreshes expired OAuth credentials before account lookup", async () => {
   const calls = [];
   let saved = null;
