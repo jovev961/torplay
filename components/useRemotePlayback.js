@@ -58,7 +58,16 @@ export function useRemotePlayback(videoRef) {
   const [castState, setCastState] = useState(EMPTY_CAST_STATE);
   const [airPlayAvailable, setAirPlayAvailable] = useState(false);
   const [airPlayActive, setAirPlayActive] = useState(false);
+  const [remoteAllowed, setRemoteAllowed] = useState(null);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/playback/remote", { cache: "no-store" })
+      .then((response) => { if (!cancelled) setRemoteAllowed(response.status !== 409); })
+      .catch(() => { if (!cancelled) setRemoteAllowed(true); });
+    return () => { cancelled = true; };
+  }, []);
 
   const refreshCastState = useCallback(() => {
     const player = castPlayerRef.current;
@@ -84,6 +93,7 @@ export function useRemotePlayback(videoRef) {
   }, []);
 
   useEffect(() => {
+    if (remoteAllowed !== true) return undefined;
     let cancelled = false;
     let player = null;
     let controller = null;
@@ -114,9 +124,10 @@ export function useRemotePlayback(videoRef) {
       castPlayerRef.current = null;
       castControllerRef.current = null;
     };
-  }, [refreshCastState]);
+  }, [refreshCastState, remoteAllowed]);
 
   useEffect(() => {
+    if (remoteAllowed !== true) return undefined;
     const video = videoRef.current;
     if (!video) return undefined;
     const supported = typeof video.webkitShowPlaybackTargetPicker === "function";
@@ -131,7 +142,7 @@ export function useRemotePlayback(videoRef) {
       video.removeEventListener("webkitplaybacktargetavailabilitychanged", updateAvailability);
       video.removeEventListener("webkitcurrentplaybacktargetiswirelesschanged", updateConnection);
     };
-  }, [videoRef]);
+  }, [videoRef, remoteAllowed]);
 
   const loadCastSource = useCallback(async (sourceFactory, { requestSession = false } = {}) => {
     const context = castContextRef.current;

@@ -26,7 +26,10 @@ export async function getSettingsSnapshot({
     canEdit,
     setup: setupStatusFromProviders(state.providers),
     runtime: {
-      mode: environment.TORPLAY_CONFIG_PATH ? "Installed Windows runtime" : "Development or source runtime",
+      mode: environment.TORPLAY_DISTRIBUTION === "linux-appimage"
+        ? "Installed Linux AppImage runtime"
+        : environment.TORPLAY_CONFIG_PATH ? "Installed Windows runtime" : "Development or source runtime",
+      canQuit: environment.TORPLAY_DISTRIBUTION === "linux-appimage" && canEdit,
       configurationWritable: await configurationWritable({ environment, cwd }),
       components: runtimeComponents(environment),
     },

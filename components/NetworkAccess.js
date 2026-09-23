@@ -88,8 +88,10 @@ export default function NetworkAccess() {
     <article className={styles.networkAccessCard}>
       <div className={styles.networkAccessHeading}>
         <div>
-          <h3>Network Access</h3>
-          <p>Open TorPlay from a TV, phone, or tablet on the same local network.</p>
+          <h3>{details?.scope === "desktop" ? "Desktop Access" : "Network Access"}</h3>
+          <p>{details?.scope === "desktop"
+            ? "This AppImage is available only on this computer."
+            : "Open TorPlay from a TV, phone, or tablet on the same local network."}</p>
         </div>
         {!details && !error ? <span>Detecting…</span> : null}
       </div>
@@ -99,12 +101,12 @@ export default function NetworkAccess() {
           <div className={styles.networkAddressList} aria-live="polite">
             <AddressRow
               id="hostname"
-              label="This computer"
+              label={details.scope === "desktop" ? "This desktop" : "This computer"}
               url={details.hostnameUrl}
               copied={copied}
               onCopy={handleCopy}
             />
-            {details.lanUrl ? (
+            {details.scope !== "desktop" && details.lanUrl ? (
               <AddressRow
                 id="lan"
                 label="Local network"
@@ -112,13 +114,13 @@ export default function NetworkAccess() {
                 copied={copied}
                 onCopy={handleCopy}
               />
-            ) : (
+            ) : details.scope !== "desktop" ? (
               <div className={styles.networkUnavailable}>
                 <strong>Local network</strong>
                 <span>No local network address detected.</span>
               </div>
-            )}
-            <p>Use the local network address on devices that cannot open <code>torplay.local</code>.</p>
+            ) : null}
+            {details.scope !== "desktop" ? <p>Use the local network address on devices that cannot open <code>torplay.local</code>.</p> : null}
           </div>
           {details.lanUrl ? (
             <div className={styles.networkQrCode}>

@@ -81,6 +81,7 @@ export default function SettingsManager() {
   const [saving, setSaving] = useState("");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [quitting, setQuitting] = useState(false);
 
   useEffect(() => {
     function selectHashSection() {
@@ -189,6 +190,23 @@ export default function SettingsManager() {
       setError(removeError.message);
     } finally {
       setSaving("");
+    }
+  }
+
+  async function quitTorPlay() {
+    if (!window.confirm("Quit TorPlay? Streaming and background downloads will stop.")) return;
+    setQuitting(true);
+    setError("");
+    try {
+      await readJson(await fetch("/api/runtime/quit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      }));
+      setNotice("TorPlay is shutting down. You can close this browser tab.");
+    } catch (quitError) {
+      setError(quitError.message);
+      setQuitting(false);
     }
   }
 
@@ -315,6 +333,15 @@ export default function SettingsManager() {
             <RuntimeStatus components={snapshot.runtime.components} />
           </div>
           <NetworkAccess />
+          {snapshot.runtime.canQuit ? (
+            <div className={styles.summaryCard}>
+              <h3>App lifecycle</h3>
+              <p>Closing this browser tab does not stop TorPlay. Launch the AppImage again to reopen it.</p>
+              <button className={styles.quitButton} type="button" disabled={quitting} onClick={quitTorPlay}>
+                {quitting ? "Quitting…" : "Quit TorPlay"}
+              </button>
+            </div>
+          ) : null}
         </section> : null}
 
         {selectedSection === "services" ? <section className={styles.settingsSection} id="services">

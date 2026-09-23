@@ -5,6 +5,7 @@ Use these guides for the current application.
 ## Household owners
 
 - [Windows installation and first run](windows-deployment.md) — download, verify, install, configure APIs, use tray controls, troubleshoot, update, and uninstall.
+- [Linux AppImage](linux-deployment.md) — Ubuntu 24.04 x86_64 download, verification, launch, Quit, storage, and troubleshooting.
 - [Configuration](configuration.md) — provider credentials, storage, playback, subtitles, search, and network settings.
 - [Torrent sources](torrent-providers.md) — Tested Sources, community Cardigann, Jackett, custom Torznab, and FlareSolverr behavior.
 - [Troubleshooting](troubleshooting.md) — optional Jackett, `torplay.local`, firewall, ports, playback, and logs.
