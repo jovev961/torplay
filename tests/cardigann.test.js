@@ -116,10 +116,21 @@ test("definition settings preserve generic controls and informational guidance",
   };
   const descriptors = settingDescriptors(configured);
   assert.deepEqual(descriptors.map((field) => field.type), ["text", "password", "select", "checkbox", "info_cookie"]);
+  assert.equal(descriptors[0].required, false);
+  assert.equal(descriptors[1].required, false);
   assert.equal(descriptors.at(-1).informational, true);
+  assert.deepEqual(validateDefinitionSettings(configured, {}), {
+    username: "", password: "", section: "all", safe: true,
+  });
+  assert.deepEqual(validateDefinitionSettings(configured, { username: "  ", password: "" }, { password: "stored" }), {
+    username: "", password: "stored", section: "all", safe: true,
+  });
   assert.deepEqual(validateDefinitionSettings(configured, {
     username: "alice", password: "secret", section: "trusted", safe: false,
   }), { username: "alice", password: "secret", section: "trusted", safe: false });
+  const requiredChoice = { ...configured, settings: [{ name: "region", label: "Region", type: "select", options: { us: "US" } }] };
+  assert.equal(settingDescriptors(requiredChoice)[0].required, true);
+  assert.throws(() => validateDefinitionSettings(requiredChoice, {}), /Region is required/);
 });
 
 test("Cardigann templates and filters render supported expressions without evaluation", () => {
@@ -552,7 +563,7 @@ test("imported definitions persist only after live verification and redact setti
       website: "https://indexer.example/",
       sourceUrl: "https://github.com/example/indexers/blob/main/example.yml",
       settings: [
-        { name: "token", label: "Token", type: "password", options: null, default: null, required: true, secret: true, configured: false },
+        { name: "token", label: "Token", type: "password", options: null, default: null, required: false, secret: true, configured: false },
         { name: "safe", label: "Safe search", type: "checkbox", options: null, default: true, required: false, secret: false, configured: false },
       ],
     });

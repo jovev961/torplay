@@ -167,13 +167,13 @@ export default function AddSourceDialog({ initial = {}, testedSources = [], conf
                     {importDraft.definition.sourceUrl ? <div><dt>Definition</dt><dd className={styles.definitionUrl}>{importDraft.definition.sourceUrl}</dd></div> : null}
                   </dl>
                   {importDraft.definition.settings.some((field) => !field.informational) ? (
-                    <p className={styles.definitionRequirement}>Configuration is required. Complete the fields below before adding this indexer.</p>
+                    <p className={styles.definitionRequirement}>Text and password fields are optional, though some indexers may need them to connect. Choices without defaults still require a selection.</p>
                   ) : (
                     <p className={`${styles.definitionRequirement} ${styles.definitionReady}`}>✓ No account configuration required</p>
                   )}
                 </div>
                 <div className={styles.providerForm}>
-                  {importDraft.definition.settings.some((field) => !field.informational) ? <h3>Configuration required</h3> : null}
+                  {importDraft.definition.settings.some((field) => !field.informational) ? <h3>Indexer options</h3> : null}
                   {importDraft.definition.settings.map((field) => (
                     field.informational ? (
                       <p className={styles.definitionRequirement} key={field.name}>{field.label}</p>
