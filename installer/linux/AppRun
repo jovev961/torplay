@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+appdir=${APPDIR:-$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)}
+exec "$appdir/usr/bin/node" "$appdir/usr/lib/torplay/runtime/linux-launcher.mjs" "$@"

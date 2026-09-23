@@ -14,6 +14,7 @@
     "start:home": "node scripts/home.js",
     "firewall:home": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/windows-firewall.ps1",
     "release:windows": "node scripts/release-windows.js",
+    "release:linux": "node scripts/release-linux.js",
     "lint": "eslint .",
     "test": "node --test",
     "audit:cardigann": "node scripts/audit-cardigann-definitions.js"

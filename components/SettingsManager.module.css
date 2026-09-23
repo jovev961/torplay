@@ -814,6 +814,25 @@
   color: #ffb7b7;
 }
 
+.quitButton {
+  margin-top: 16px;
+  padding: 10px 14px;
+  border: 1px solid #a54b4b;
+  border-radius: 8px;
+  background: #2b171a;
+  color: #ffd1d1;
+  cursor: pointer;
+}
+
+.quitButton:hover:not(:disabled) {
+  background: #3a1d21;
+}
+
+.quitButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .saveButton {
   justify-self: start;
   padding: 10px 14px;

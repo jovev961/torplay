@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=TorPlay
+Comment=Discover and stream authorized torrent video
+Exec=AppRun
+Icon=torplay
+Terminal=false
+Categories=AudioVideo;Video;Network;

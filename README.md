@@ -8,7 +8,7 @@ TorPlay includes movie and TV discovery, optional TorPlay Tested Sources, commun
 
 ## Install on Windows
 
-The normal installation path is the self-contained Windows installer. It does not require Node.js, npm, Docker, Jackett, FlareSolverr, or a source checkout.
+The self-contained Windows installer does not require Node.js, npm, Docker, Jackett, FlareSolverr, or a source checkout.
 
 1. Open [TorPlay Releases](https://github.com/jovev961/torplay/releases) and download `TorPlay-Setup-<version>.exe` plus its `.sha256` file.
 2. Run the installer on Windows 10 or 11 x64 and approve the Private-network firewall prompt.
@@ -20,14 +20,19 @@ TorPlay then opens at [http://localhost](http://localhost). Other devices on the
 
 Profiles, history, configuration, and logs are kept under `%LOCALAPPDATA%\TorPlay` and are preserved during upgrades and normal uninstall. See the [complete Windows installation and first-run guide](docs/windows-deployment.md) for checksum verification, API setup, tray controls, troubleshooting, updates, and uninstalling.
 
+## Run on Ubuntu 24.04 x86_64
+
+The Linux AppImage bundles TorPlay's runtime and media tools. Download the AppImage and checksum from a successful **Linux AppImage** workflow artifact, verify the checksum, make the AppImage executable, and launch it. TorPlay opens in your default browser on this computer only. See the [Linux AppImage guide](docs/linux-deployment.md) for exact commands, first-run setup, Quit, updates, and troubleshooting.
+
 ## Developer/source setup
 
-Source development is separate from normal installation and requires Node.js and npm. See [Development](docs/development.md) for prerequisites, commands, local data, quality checks, and Windows release builds.
+Source development is separate from normal installation and requires Node.js and npm. See [Development](docs/development.md) for prerequisites, commands, local data, quality checks, and standalone release builds.
 
 ## Documentation
 
 - [Documentation index](docs/README.md)
 - [Windows deployment](docs/windows-deployment.md)
+- [Linux AppImage](docs/linux-deployment.md)
 - [Configuration](docs/configuration.md)
 - [Development](docs/development.md)
 - [Architecture](docs/architecture.md)
