@@ -278,20 +278,88 @@ test("only marked Cardigann definitions use configured FlareSolverr", async () =
   await assert.rejects(cardigannAdapter(provider, { environment: {} }).search({ title: "Sintel", type: "movie" }),
     { code: "FLARESOLVERR_NOT_CONFIGURED" });
   let calls = 0;
+  const solvedPage = '<html><head><title>Download Sintel Torrents</title><script src="/cdn-cgi/challenge-platform/scripts/jsd/main.js"></script></head><body><article class="result"><span class="title">Sintel</span><a href="magnet:?xt=urn:btih:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa">Get</a></article></body></html>';
   const adapter = cardigannAdapter(provider, {
     environment: { FLARESOLVERR_URL: "http://localhost:8191" },
     validateTarget: async (hostname) => assert.equal(hostname, "indexer.example"),
-    fetchImpl: async (_url, options) => {
+    requestImpl: async () => assert.fail("A marked source must not make a direct HTTP request."),
+    fetchImpl: async (url, options) => {
       calls += 1;
-      assert.equal(JSON.parse(options.body).cmd, "request.get");
+      assert.equal(String(url), "http://localhost:8191/v1");
+      assert.deepEqual(JSON.parse(options.body), {
+        cmd: "request.get", url: "https://indexer.example/search?q=Sintel", maxTimeout: 60000,
+      });
       return new Response(JSON.stringify({ status: "ok", solution: {
         url: "https://indexer.example/search?q=Sintel", status: 200,
-        response: '<article class="result"><span class="title">Sintel</span><a href="magnet:?xt=urn:btih:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa">Get</a></article>',
+        headers: { server: "cloudflare" }, response: solvedPage,
       } }));
     },
   });
   assert.equal((await adapter.search({ title: "Sintel", type: "movie" })).length, 1);
-  assert.equal(calls, 1);
+  assert.deepEqual(await testCardigannProvider(provider, {
+    environment: { FLARESOLVERR_URL: "http://localhost:8191" },
+    validateTarget: async (hostname) => assert.equal(hostname, "indexer.example"),
+    requestImpl: async () => assert.fail("Verification must not make a direct HTTP request."),
+    fetchImpl: async (url, options) => {
+      calls += 1;
+      assert.equal(String(url), "http://localhost:8191/v1");
+      assert.equal(JSON.parse(options.body).cmd, "request.get");
+      return new Response(JSON.stringify({ status: "ok", solution: {
+        url: "https://indexer.example/search?q=Sintel", status: 200,
+        headers: { server: "cloudflare" }, response: solvedPage,
+      } }));
+    },
+  }), provider.capabilities);
+  assert.equal(calls, 2);
+  await assert.rejects(cardigannAdapter(provider, {
+    environment: { FLARESOLVERR_URL: "http://localhost:8191" },
+    validateTarget: async () => {},
+    fetchImpl: async () => new Response(JSON.stringify({ status: "ok", solution: {
+      url: "https://indexer.example/search?q=Sintel", status: 200,
+      response: '<html><title>Just a moment...</title><script src="/cdn-cgi/challenge-platform/test.js"></script></html>',
+    } })),
+  }).search({ title: "Sintel", type: "movie" }), { code: "CARDIGANN_CHALLENGE_DETECTED" });
+
+  const direct = cardigannAdapter({ ...provider, definition }, {
+    environment: { FLARESOLVERR_URL: "http://localhost:8191" },
+    fetchImpl: async () => assert.fail("An unmarked source must not use FlareSolverr."),
+    requestImpl: async (url) => response(url, solvedPage),
+  });
+  assert.equal((await direct.search({ title: "Sintel", type: "movie" })).length, 1);
+});
+
+test("a FlareSolverr-backed source passes the Settings connection test after a solved challenge", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "torplay-cardigann-flare-test-"));
+  const environment = { TORPLAY_CONFIG_PATH: path.join(directory, "torplay.env"), FLARESOLVERR_URL: "http://localhost:8191" };
+  let serviceCalls = 0;
+  try {
+    const imported = await importDefinition("https://definitions.example/flared.yml", {
+      request: async (url) => response(url, stringify({ ...definition, id: "flared-fixture",
+        settings: [{ name: "info_flaresolverr", type: "info_flaresolverr" }] })),
+    });
+    const options = {
+      environment,
+      validateTarget: async (hostname) => assert.equal(hostname, "indexer.example"),
+      requestImpl: async () => assert.fail("The indexer must not be contacted directly."),
+      fetchImpl: async (url, requestOptions) => {
+        serviceCalls += 1;
+        assert.equal(String(url), "http://localhost:8191/v1");
+        assert.equal(JSON.parse(requestOptions.body).url, "https://indexer.example/search?q=Sintel");
+        return new Response(JSON.stringify({ status: "ok", solution: {
+          url: "https://indexer.example/search?q=Sintel", status: 200, headers: { server: "cloudflare" },
+          response: '<html><title>Search results</title><script src="/cdn-cgi/challenge-platform/main.js"></script><article class="result"><span class="title">Sintel</span><a href="magnet:?xt=urn:btih:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa">Get</a></article></html>',
+        } }));
+      },
+    };
+    const [saved] = await createCardigannProvider({ importId: imported.importId, settings: {} }, options);
+    assert.equal(saved.verification.status, "verified");
+    const retested = await testCardigannProviderConnection({ id: saved.id }, options);
+    assert.equal(retested.verification.status, "verified");
+    assert.equal(readCustomProviders(environment)[0].verification.status, "verified");
+    assert.equal(serviceCalls, 2);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test("Cardigann adapter supports JSON and XML result documents", async () => {
