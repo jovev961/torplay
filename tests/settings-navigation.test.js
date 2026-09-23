@@ -28,6 +28,7 @@ test("validates external services only when their settings section is viewed", (
   const snapshot = {
     providers: [
       { id: "tmdb", section: "services" },
+      { id: "jackett", section: "services" },
       { id: "flaresolverr", section: "services" },
       { id: "opensubtitles", section: "subtitles" },
     ],
@@ -38,7 +39,7 @@ test("validates external services only when their settings section is viewed", (
     providerIds: [],
   });
   assert.deepEqual(settingsValidationRequest(snapshot, "services"), {
-    providerIds: ["tmdb", "flaresolverr"],
+    providerIds: ["tmdb", "jackett", "flaresolverr"],
   });
   assert.deepEqual(settingsValidationRequest(snapshot, "torrent-sources"), {
     providerIds: [],

@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { sourceRequest as request } from "./source-request.js";
 import CommunitySources from "./CommunitySources.js";
 import styles from "./SettingsManager.module.css";
@@ -27,12 +27,39 @@ function settingValues(settings) {
 
 export default function AddSourceDialog({ initial = {}, testedSources = [], onClose, onSaved, embedded = false }) {
   const [draft, setDraft] = useState(initial.draft || null);
+  const [jackettDraft, setJackettDraft] = useState(initial.jackettDraft || null);
+  const [jackettIndexers, setJackettIndexers] = useState(null);
   const [definitionUrl, setDefinitionUrl] = useState("");
   const [importDraft, setImportDraft] = useState(initial.importDraft || null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [advanced, setAdvanced] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    request("jackett-indexers").then((data) => {
+      if (!cancelled) setJackettIndexers(data.indexers);
+    }).catch(() => { if (!cancelled) setJackettIndexers(null); });
+    return () => { cancelled = true; };
+  }, []);
+  async function chooseJackett(indexerId, previous = null) {
+    setBusy(true); setError("");
+    try {
+      const data = await request("jackett-capabilities", { indexerId });
+      setJackettDraft({ id: previous?.id, indexerId, enabled: previous?.enabled ?? true,
+        supported: data.capabilities.mediaTypes,
+        mediaTypes: previous?.mediaTypes || data.capabilities.mediaTypes });
+    } catch (failure) { setError(failure.message); }
+    finally { setBusy(false); }
+  }
+  useEffect(() => {
+    if (!initial.jackettDraft) return;
+    let cancelled = false;
+    request("jackett-capabilities", { indexerId: initial.jackettDraft.indexerId }).then((data) => {
+      if (!cancelled) setJackettDraft({ ...initial.jackettDraft, supported: data.capabilities.mediaTypes });
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [initial.jackettDraft]);
   function closeDialog() { if (!busy) onClose(); }
   async function act(action, provider) {
     setBusy(true); setError(""); setMessage("");
@@ -101,7 +128,7 @@ export default function AddSourceDialog({ initial = {}, testedSources = [], onCl
             <div className={styles.dialogHeading}>
               <div>
                 <span className="eyebrow">Torrent Sources</span>
-                <h2 id="indexer-dialog-title">{draft?.id || importDraft?.editId ? "Edit source" : draft ? "Add Torznab source" : importDraft ? "Review source" : "Choose a source"}</h2>
+                <h2 id="indexer-dialog-title">{draft?.id || importDraft?.editId || jackettDraft?.id ? "Edit source" : draft ? "Add Torznab source" : jackettDraft ? "Add Jackett source" : importDraft ? "Review source" : "Choose a source"}</h2>
               </div>
               {!embedded ? <button className={styles.dialogClose} type="button" aria-label="Close source setup" disabled={busy} onClick={closeDialog}>×</button> : null}
             </div>
@@ -109,7 +136,23 @@ export default function AddSourceDialog({ initial = {}, testedSources = [], onCl
             {error ? <div className="notice error" role="alert">{error}</div> : null}
             {message ? <div className="notice success" role="status">{message}</div> : null}
 
-            {importDraft ? (
+            {jackettDraft ? (
+              <form onSubmit={(event) => { event.preventDefault(); void act(jackettDraft.id ? "update-jackett" : "create-jackett", jackettDraft); }}>
+                <div className={styles.providerForm}>
+                  <p className={styles.dialogIntro}>Jackett indexer: {jackettIndexers?.find((item) => item.id === jackettDraft.indexerId)?.name || jackettDraft.indexerId}</p>
+                  {jackettDraft.supported?.map((type) => <label className={styles.checkboxLabel} key={type}>
+                    <input type="checkbox" disabled={busy} checked={jackettDraft.mediaTypes.includes(type)} onChange={(event) => setJackettDraft((current) => ({ ...current,
+                      mediaTypes: event.target.checked ? [...current.mediaTypes, type] : current.mediaTypes.filter((item) => item !== type),
+                    }))} /> {type === "TV" ? "TV Shows" : type}
+                  </label>)}
+                  <label className={styles.checkboxLabel}><input type="checkbox" disabled={busy} checked={jackettDraft.enabled} onChange={(event) => setJackettDraft({ ...jackettDraft, enabled: event.target.checked })} /> Enabled</label>
+                  <div className={styles.sourceActions}>
+                    <button className={styles.saveButton} type="submit" disabled={busy || !jackettDraft.mediaTypes.length}>{busy ? "Verifying…" : "Verify and save"}</button>
+                    <button className={styles.testButton} type="button" disabled={busy} onClick={() => jackettDraft.id ? closeDialog() : setJackettDraft(null)}>Back</button>
+                  </div>
+                </div>
+              </form>
+            ) : importDraft ? (
               <form onSubmit={(event) => { event.preventDefault(); if (importDraft.verificationFailure) return; void (importDraft.editId
                 ? act("update-cardigann", { id: importDraft.editId, settings: importDraft.values, enabled: importDraft.enabled })
                 : saveImported()); }}>
@@ -203,6 +246,14 @@ export default function AddSourceDialog({ initial = {}, testedSources = [], onCl
                     ))}
                   </div>
                 </section>
+                {jackettIndexers ? <section className={styles.providerForm}>
+                  <h3>Jackett</h3>
+                  <p>Add one configured Jackett indexer at a time. Movie and TV choices belong to each source.</p>
+                  {jackettIndexers.length ? <div className={styles.addSourceGrid}>{jackettIndexers.map((item) => <article className={styles.addSourceCard} key={item.id}>
+                    <span><strong>{item.name}</strong><small>Jackett indexer</small></span>
+                    <button className={styles.testButton} type="button" disabled={busy || item.added} onClick={() => void chooseJackett(item.id)}>{item.added ? "Added" : "Add"}</button>
+                  </article>)}</div> : <p>No configured Jackett indexers are available yet.</p>}
+                </section> : <p className={styles.sectionNote}>To add Jackett sources, configure and validate Jackett under <a href="/settings#services">Services</a>.</p>}
                 <CommunitySources busy={busy} onSelect={importDefinition} onAdvanced={() => { setAdvanced(true); setError(""); }} />
               </div>
             ) : (

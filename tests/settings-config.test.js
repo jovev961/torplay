@@ -71,6 +71,19 @@ test("OMDb changes take effect without a runtime restart", async () => {
   }
 });
 
+test("Jackett service URL and key are saved without exposing the key", async () => {
+  const { directory, filename } = await fixture("");
+  const environment = { TORPLAY_CONFIG_PATH: filename };
+  try {
+    await updateProviderSettings("jackett", { values: { url: "http://localhost:9117", apiKey: "private-jackett-key" } }, { environment, configPath: filename });
+    const state = await settingsState({ environment, includeValues: true });
+    const jackett = state.providers.find((item) => item.id === "jackett");
+    assert.equal(jackett.configured, true);
+    assert.equal(jackett.fields.find((item) => item.id === "url").value, "http://localhost:9117");
+    assert.equal(JSON.stringify(state).includes("private-jackett-key"), false);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
 test("removes secrets explicitly and never returns their values", async () => {
   const { directory, filename } = await fixture("TMDB_API_TOKEN=very-secret-token\n");
   const environment = { TORPLAY_CONFIG_PATH: filename, TMDB_API_TOKEN: "very-secret-token" };
@@ -107,7 +120,7 @@ test("rejects externally managed, malformed, and unsupported values", async () =
       updateProviderSettings("flaresolverr", { values: { url: "file:///secret" } }, { environment: {}, configPath: filename }),
       /HTTP or HTTPS/,
     );
-    await assert.rejects(updateProviderSettings("jackett", { values: { url: "http://localhost:9117" } }, { environment: {}, configPath: filename }), /Unknown settings provider/);
+    await assert.rejects(updateProviderSettings("jackett", { values: { url: "file:///secret" } }, { environment: {}, configPath: filename }), /HTTP or HTTPS/);
     await assert.rejects(
       updateProviderSettings("tmdb", { values: { apiToken: "0123456789abcdef0123456789abcdef" } }, { environment: {}, configPath: filename }),
       /API Read Access Token/,
@@ -162,7 +175,7 @@ test("validates required providers before committing them as one configuration c
   }
 });
 
-test("reports source-neutral torrent state without exposing credentials", async () => {
+test("configuring Jackett service alone does not create a torrent source", async () => {
   const { directory, filename } = await fixture("");
   const environment = {
     TORPLAY_CONFIG_PATH: filename,
@@ -171,7 +184,7 @@ test("reports source-neutral torrent state without exposing credentials", async 
   };
   try {
     const state = await settingsState({ environment, includeValues: true });
-    assert.deepEqual(state.torrentSources, { nativeActive: false, customActive: true });
+    assert.deepEqual(state.torrentSources, { nativeActive: false, customActive: false });
     assert.equal(JSON.stringify(state.torrentSources).includes("secret"), false);
   } finally {
     await rm(directory, { recursive: true, force: true });

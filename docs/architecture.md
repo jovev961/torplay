@@ -89,7 +89,7 @@ The browser-facing application never imports or controls the torrent client dire
 
 ## Search flow
 
-TMDB provides title metadata and discovery. Selecting a movie or episode calls the server-side torrent search service. Provider selection is isolated in `lib/search/provider.js`. It selects user-configured Cardigann and custom Torznab sources; Jackett and Prowlarr are user-managed Torznab endpoints. TorPlay does not bundle torrent indexers.
+TMDB provides title metadata and discovery. Selecting a movie or episode calls the server-side torrent search service. Provider selection is isolated in `lib/search/provider.js`. It selects user-configured Cardigann, Jackett-backed, and custom Torznab sources; Jackett is an external service and Prowlarr is supported as a custom Torznab endpoint. TorPlay does not bundle torrent indexers.
 
 Adapters implement the [common provider contract](torrent-providers.md) and execute concurrently. Their candidates are normalized while individual provider failures remain isolated. Shared processing validates search context, filters titles and episodes, deduplicates, and ranks candidates using the existing rules. The service allocates expiring result IDs and validates streamability before returning an explicit public projection. Magnets and credential-bearing download URLs remain in the server-side result store. Search routes and automatic next-episode playback use the same service without importing adapters. When no provider is available, the application directs the user to provider settings instead of requiring Jackett.
 

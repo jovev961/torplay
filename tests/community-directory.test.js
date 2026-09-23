@@ -121,7 +121,7 @@ test("community selection uses complete import, compatibility, confirmation, dup
     });
     const [saved] = await createCardigannProvider({ ...values, addUnverified: true, confirmationToken: token }, { environment });
     assert.equal(saved.verification.status, "unverified");
-    assert.equal(JSON.parse(await readFile(path.join(folder, "torrent-providers.json"), "utf8"))[0].definitionYaml, yaml);
+    assert.equal(JSON.parse(await readFile(path.join(folder, "torrent-providers.json"), "utf8")).providers[0].definitionYaml, yaml);
     const duplicate = await directory.importEntry({ id: "zulu.yml", revision });
     await assert.rejects(createCardigannProvider({ importId: duplicate.importId, settings: { choice: "all" } }, { environment }), /already configured/);
     const calls = fixture.calls.length;
@@ -150,7 +150,7 @@ test("directory API requires same-origin LAN access before any upstream request"
 test("onboarding source availability respects the migrated Jackett provider override", async () => {
   const folder = await mkdtemp(path.join(os.tmpdir(), "torplay-onboarding-"));
   try {
-    const environment = { TORPLAY_CONFIG_PATH: path.join(folder, "config.env"), JACKETT_URL: "http://localhost:9117", JACKETT_API_KEY: "configured" };
+    const environment = { TORPLAY_CONFIG_PATH: path.join(folder, "config.env"), JACKETT_URL: "http://localhost:9117", JACKETT_API_KEY: "configured", JACKETT_MOVIE_INDEXERS: "yts" };
     assert.equal((await settingsState({ environment })).torrentSources.customActive, true);
     assert.equal((await settingsState({ environment: { ...environment, TORPLAY_SEARCH_PROVIDERS: "" } })).torrentSources.customActive, false);
   } finally { await rm(folder, { recursive: true, force: true }); }
