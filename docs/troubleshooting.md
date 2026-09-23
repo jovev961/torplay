@@ -86,7 +86,7 @@ TorPlay requires internal port 3000 and public port 80 by default. Stop the conf
 
 ## Sources load slowly or do not start
 
-If **Prefer Debrid** is enabled, open **Settings → Playback** and test both connected providers. A Real-Debrid hash absent from your completed account torrents is treated as unavailable under cached-only playback. TorBox may also report a cache miss. Check provider order and the local fallback switch; **Debrid Only** reports an unavailable file rather than starting WebTorrent. If a remote stream fails while seeking, reconnect or test the provider, then choose another source. Provider stream URLs and credentials are never shown in TorPlay's diagnostics.
+If **Prefer Debrid** is enabled, open **Settings → Services** and test both connected providers. Real-Debrid can immediately play completed account torrents; an unknown hash needs a remote-download choice because its documented API has no global instant-availability lookup. TorBox may report a cache miss. Check provider order and the choice setting under **Settings → Playback**. A remote download may stay queued or processing until the provider makes the file ready; check **Debrid Library** after leaving the title page. **Debrid Only** does not start local BitTorrent. If a ready remote stream fails while seeking, reconnect or test the provider, then choose another source. Provider stream URLs and credentials are never shown in TorPlay's diagnostics.
 
 Torrent availability depends on reachable peers. Jackett's seeder count can be stale. The player reports peers and current transfer speed from the active WebTorrent session.
 

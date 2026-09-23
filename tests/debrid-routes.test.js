@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { GET as streamGet } from "../app/api/torrents/[id]/files/[fileId]/stream/route.js";
 import { POST as providerPost } from "../app/api/settings/debrid/[provider]/route.js";
+import { GET as libraryGet } from "../app/api/debrid/library/route.js";
+import { DELETE as libraryDelete } from "../app/api/debrid/library/[provider]/[id]/route.js";
+import { POST as libraryPlay } from "../app/api/debrid/library/[provider]/[id]/play/route.js";
+import { POST as torrentStart } from "../app/api/torrents/route.js";
 
 test("unknown playback sessions cannot proxy remote media", async () => {
   const response = await streamGet(
@@ -42,4 +46,26 @@ test("malformed key requests do not echo credential text", async () => {
   }), { params: Promise.resolve({ provider: "real-debrid" }) });
   assert.equal(response.status, 400);
   assert.equal((await response.text()).includes("private-token"), false);
+});
+
+test("library account data and destructive actions reject public or foreign origins", async () => {
+  const publicList = await libraryGet(new Request("https://public.example/api/debrid/library", {
+    headers: { host: "public.example" },
+  }));
+  assert.equal(publicList.status, 403);
+  const params = { params: Promise.resolve({ provider: "torbox", id: "7" }) };
+  const foreignDelete = await libraryDelete(new Request("http://localhost/api/debrid/library/torbox/7", {
+    method: "DELETE", headers: { host: "localhost", origin: "https://attacker.example" },
+  }), params);
+  assert.equal(foreignDelete.status, 403);
+  const foreignPlay = await libraryPlay(new Request("http://localhost/api/debrid/library/torbox/7/play", {
+    method: "POST", headers: { host: "localhost", origin: "https://attacker.example",
+      "content-type": "application/json" }, body: JSON.stringify({ fileId: "1" }),
+  }), params);
+  assert.equal(foreignPlay.status, 403);
+  const foreignStart = await torrentStart(new Request("http://localhost/api/torrents", {
+    method: "POST", headers: { host: "localhost", origin: "https://attacker.example",
+      "content-type": "application/json" }, body: JSON.stringify({ resultId: "none" }),
+  }));
+  assert.equal(foreignStart.status, 403);
 });

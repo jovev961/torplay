@@ -32,6 +32,7 @@ test("debrid policy defaults to local and redacts credentials", async () => {
   const filename = path.join(directory, "debrid-config.json");
   try {
     assert.equal((await readDebridConfig({ path: filename })).mode, "local");
+    assert.equal((await readDebridConfig({ path: filename })).unavailableAction, "ask");
     await updateDebridPolicy({
       mode: "prefer-debrid", priority: ["torbox", "real-debrid"], localFallback: false,
     }, { path: filename });
@@ -408,31 +409,60 @@ test("resolver continues after an unavailable provider and obeys reversed priori
   await stopPlayback(session.id);
 });
 
-test("two cache misses use local fallback, while Debrid Only rejects without WebTorrent", async () => {
+test("two cache misses ask by default; explicit local choice never submits remotely", async () => {
   const source = {
     magnet: `magnet:?xt=urn:btih:${"c".repeat(40)}`, mediaContext: context,
   };
   const calls = [];
   const config = {
     mode: "prefer-debrid", priority: ["real-debrid", "torbox"], localFallback: true,
+    unavailableAction: "ask",
     credentials: { "real-debrid": { accessToken: "miss-rd" }, torbox: { apiKey: "miss-tb" } },
   };
   const providerFactory = (id) => ({
     async checkAvailability() { calls.push(id); return { status: "miss" }; },
   });
-  const fallback = await startPlaybackSource(source, {
+  const choice = await startPlaybackSource(source, {
     config, providerFactory, startLocal: async () => ({ id: "fallback", status: "loading" }),
   });
   assert.deepEqual(calls, ["real-debrid", "torbox"]);
-  assert.equal(fallback.id, "fallback");
-  await assert.rejects(startPlaybackSource(source, {
+  assert.equal(choice.kind, "choice");
+  assert.equal(choice.localAllowed, true);
+  const local = await startPlaybackSource(source, {
+    config, action: "local", providerFactory,
+    startLocal: async () => ({ id: "local", status: "loading" }),
+  });
+  assert.equal(local.id, "local");
+  assert.equal(calls.length, 2);
+  const only = await startPlaybackSource(source, {
     config: { ...config, mode: "debrid-only" }, providerFactory,
     startLocal: async () => { throw new Error("Local must not start"); },
-  }), (error) => error.code === "not-cached");
-  await assert.rejects(startPlaybackSource(source, {
+  });
+  assert.equal(only.kind, "choice");
+  assert.equal(only.localAllowed, false);
+  const noFallback = await startPlaybackSource(source, {
     config: { ...config, localFallback: false }, providerFactory,
     startLocal: async () => { throw new Error("Local must not start"); },
-  }), (error) => error.code === "not-cached");
+  });
+  assert.equal(noFallback.localAllowed, false);
+});
+
+test("failed automatic remote submission asks before using the second provider", async () => {
+  const calls = [];
+  const result = await startPlaybackSource({ magnet, mediaContext: context }, {
+    config: {
+      mode: "prefer-debrid", priority: ["real-debrid", "torbox"],
+      localFallback: true, unavailableAction: "remote",
+      credentials: { "real-debrid": { apiKey: "key" }, torbox: { apiKey: "key" } },
+    },
+    providerFactory: (id) => ({
+      async checkAvailability() { calls.push(`${id}:check`); return { status: "miss" }; },
+      async getAccountInfo() { calls.push(`${id}:account`); throw new DebridError("unavailable", "Provider unavailable."); },
+    }),
+  });
+  assert.equal(result.kind, "choice");
+  assert.match(result.error, /Real-Debrid could not start/);
+  assert.deepEqual(calls, ["real-debrid:check", "torbox:check", "real-debrid:account"]);
 });
 
 test("file matching rejects samples, extras, and ambiguous episodes", () => {
