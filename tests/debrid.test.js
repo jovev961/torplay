@@ -465,6 +465,20 @@ test("failed automatic remote submission asks before using the second provider",
   assert.deepEqual(calls, ["real-debrid:check", "torbox:check", "real-debrid:account"]);
 });
 
+test("TorBox show-pack submission requires an explicit whole-pack confirmation", async () => {
+  let submissions = 0;
+  await assert.rejects(startPlaybackSource({ magnet, mediaContext: context }, {
+    action: "remote", remoteProvider: "torbox",
+    config: { mode: "prefer-debrid", priority: ["torbox"], localFallback: true,
+      unavailableAction: "ask", credentials: { torbox: { apiKey: "key" } } },
+    providerFactory: () => ({
+      async checkAvailability() { return { status: "miss" }; },
+      async submit() { submissions += 1; },
+    }),
+  }), (error) => error.code === "confirmation-required");
+  assert.equal(submissions, 0);
+});
+
 test("file matching rejects samples, extras, and ambiguous episodes", () => {
   const files = [
     { name: "sample.mp4", size: 10_000_000 },

@@ -112,8 +112,11 @@ export function useSourceLookup() {
         setDebridJob(next);
         if (next.status === "ready" && !session) {
           const file = next.files.find((entry) => entry.providerId === next.selectedFileId)
-            || next.files.find((entry) => entry.selected);
-          if (!file) throw new Error("The requested video file is unavailable in this resource.");
+            || (next.mediaContext?.type === "show" ? null : next.files.find((entry) => entry.selected));
+          if (!file) {
+            setError("Choose the requested episode file below. If Real-Debrid did not select it, this existing download cannot play that episode.");
+            return;
+          }
           const playback = await readJson(await fetch(`${baseUrl}/play`, {
             method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ fileId: file.providerId, scope: debridJob.selectionScope }),
@@ -328,7 +331,7 @@ export function useSourceLookup() {
     } catch (deleteError) { setError(deleteError.message); }
   }
 
-  async function start(resultId, action = null, provider = null, scope = "episode") {
+  async function start(resultId, action = null, provider = null, scope = "episode", confirmWholePack = false) {
     setStartingId(resultId);
     setError("");
     setErrorCode("");
@@ -337,7 +340,7 @@ export function useSourceLookup() {
       const response = await request("/api/torrents", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ resultId, action, provider, scope }),
+        body: JSON.stringify({ resultId, action, provider, scope, confirmWholePack }),
       });
       const result = await readJson(response);
       if (result.kind === "choice") {
@@ -360,6 +363,49 @@ export function useSourceLookup() {
     } finally {
       setStartingId(null);
     }
+  }
+
+  async function selectEpisodeFile(fileId) {
+    if (!session?.id || mediaContext?.type !== "show") {
+      setSelectedFileId(fileId);
+      return;
+    }
+    try {
+      await readJson(await request(`/api/torrents/${encodeURIComponent(session.id)}/episode-file`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileId }),
+      }));
+      setSelectedFileId(fileId);
+      setError("");
+    } catch (selectionError) {
+      setSelectedFileId(fileId);
+      setError(`Playing this file, but could not remember the episode choice: ${selectionError.message}`);
+    }
+  }
+
+  async function confirmDebridFiles(fileIds, episodeFileId) {
+    if (!debridJob) return;
+    try {
+      const next = await readJson(await request(`/api/debrid/library/${debridJob.provider}/${encodeURIComponent(debridJob.resourceId)}/select`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileIds, episodeFileId }),
+      }));
+      setDebridJob(next);
+      setError("");
+    } catch (selectionError) { setError(selectionError.message); }
+  }
+
+  async function mapDebridFile(fileId) {
+    if (!debridJob || mediaContext?.type !== "show") return;
+    try {
+      const next = await readJson(await request(`/api/debrid/library/${debridJob.provider}/${encodeURIComponent(debridJob.resourceId)}/episode-file`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileId, season: mediaContext.season, episode: mediaContext.episode }),
+      }));
+      setDebridJob(next);
+      setError(next.files.some((file) => file.providerId === fileId && file.selected) ? ""
+        : "This Real-Debrid resource did not select that file. Choose another source or use TorPlay playback.");
+    } catch (selectionError) { setError(selectionError.message); }
   }
 
   function adoptSession(nextSession, fileId = null) {
@@ -389,6 +435,9 @@ export function useSourceLookup() {
     search,
     adoptSession,
     setSelectedFileId,
+    selectEpisodeFile,
+    confirmDebridFiles,
+    mapDebridFile,
     start,
     startUsenet,
     uploadNzb,

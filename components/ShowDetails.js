@@ -148,7 +148,8 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
     let current = initialSession;
     for (let attempt = 0; attempt < 120; attempt += 1) {
       if (current.status === "ready") {
-        const file = findEpisodeFile(current.files, nextEpisode.season, nextEpisode.number, {
+        const file = current.files.find((entry) => entry.id === current.suggestedFileId)
+          || findEpisodeFile(current.files, nextEpisode.season, nextEpisode.number, {
           allowSingleFileFallback: false,
         });
         if (!file) throw new Error("The prepared torrent does not contain the next episode.");

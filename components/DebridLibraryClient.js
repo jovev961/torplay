@@ -14,7 +14,7 @@ async function json(response) {
 }
 
 const label = { "real-debrid": "Real-Debrid", torbox: "TorBox" };
-const active = new Set(["submitting", "queued", "downloading", "processing"]);
+const active = new Set(["submitting", "queued", "downloading", "processing", "awaiting-selection"]);
 
 function historyMedia(item, file) {
   const context = item?.mediaContext;
@@ -23,6 +23,11 @@ function historyMedia(item, file) {
     mediaType: "movie", tmdbId: context.tmdbId, title: context.title || item.name,
   };
   if (context.type !== "show") return null;
+  const mapped = item.episodeMappings?.find((entry) => entry.fileId === file.providerId);
+  if (mapped) return {
+    mediaType: "tv", tmdbId: context.tmdbId, title: context.title || item.name,
+    seasonNumber: mapped.season, episodeNumber: mapped.episode,
+  };
   if (file.providerId === item.selectedFileId) return {
     mediaType: "tv", tmdbId: context.tmdbId, title: context.title || item.name,
     seasonNumber: context.season, episodeNumber: context.episode,
@@ -45,6 +50,10 @@ export default function DebridLibraryClient() {
   const [playingFile, setPlayingFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [downloadFileIds, setDownloadFileIds] = useState(null);
+  const [requestedFileId, setRequestedFileId] = useState(null);
+  const [mapSeason, setMapSeason] = useState(1);
+  const [mapEpisode, setMapEpisode] = useState(1);
   const requestId = useRef(0);
 
   const refresh = useCallback(async (nextPage = 1, fresh = false) => {
@@ -96,6 +105,10 @@ export default function DebridLibraryClient() {
       const detail = await json(await fetch(`/api/debrid/library/${item.provider}/${encodeURIComponent(item.resourceId)}`,
         { cache: "no-store" }));
       setSelected(detail);
+      setDownloadFileIds(null);
+      setRequestedFileId(null);
+      setMapSeason(detail.mediaContext?.season ?? 1);
+      setMapEpisode(detail.mediaContext?.episode ?? 1);
     } catch (openError) { setError(openError.message); }
   }
 
@@ -112,6 +125,31 @@ export default function DebridLibraryClient() {
       setSession(next);
       setPlayingFile(next.files.find((entry) => entry.name === file.name) || null);
     } catch (playError) { setError(playError.message); }
+  }
+
+  async function confirmFiles() {
+    if (!selected) return;
+    try {
+      const next = await json(await fetch(`/api/debrid/library/${selected.provider}/${encodeURIComponent(selected.resourceId)}/select`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileIds: downloadFileIds || selected.suggestedSelectionIds,
+          episodeFileId: requestedFileId }),
+      }));
+      setSelected(next);
+      setError("");
+    } catch (selectionError) { setError(selectionError.message); }
+  }
+
+  async function mapFile(file) {
+    if (!selected) return;
+    try {
+      const next = await json(await fetch(`/api/debrid/library/${selected.provider}/${encodeURIComponent(selected.resourceId)}/episode-file`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileId: file.providerId, season: mapSeason, episode: mapEpisode }),
+      }));
+      setSelected(next);
+      setError("");
+    } catch (mappingError) { setError(mappingError.message); }
   }
 
   async function remove(item) {
@@ -192,8 +230,37 @@ export default function DebridLibraryClient() {
     {selected ? <section className="panel debridLibraryDetail">
       <h2>{selected.name}</h2>
       <p>{label[selected.provider]} · {selected.status}</p>
+      {selected.status === "awaiting-selection" ? <div className="debridFileReview">
+        <strong>Review video files before Real-Debrid downloads them</strong>
+        <p>Select the pack files you want and identify the requested episode.</p>
+        {selected.files.filter((file) => selected.suggestedSelectionIds.includes(file.providerId)).map((file) => {
+          const checked = (downloadFileIds || selected.suggestedSelectionIds).includes(file.providerId);
+          return <div className="debridFileReviewRow" key={file.providerId}>
+            <label><input type="checkbox" checked={checked} onChange={() => setDownloadFileIds((current) => {
+              const ids = current || selected.suggestedSelectionIds;
+              return checked ? ids.filter((id) => id !== file.providerId) : [...ids, file.providerId];
+            })} /> {file.path} · {formatFileSize(file.size)}</label>
+            <label><input type="radio" name="library-requested-episode" checked={requestedFileId === file.providerId}
+              onChange={() => setRequestedFileId(file.providerId)} /> Requested episode</label>
+          </div>;
+        })}
+        <button className="primaryButton compact" type="button"
+          disabled={!requestedFileId || !(downloadFileIds || selected.suggestedSelectionIds).includes(requestedFileId)}
+          onClick={() => void confirmFiles()}>Confirm and download</button>
+      </div> : null}
+      {selected.mediaContext?.type === "show" ? <div className="debridFileReviewRow">
+        <label>Map season <input type="number" min="0" value={mapSeason}
+          onChange={(event) => setMapSeason(Number(event.target.value))} /></label>
+        <label>Episode <input type="number" min="1" value={mapEpisode}
+          onChange={(event) => setMapEpisode(Number(event.target.value))} /></label>
+      </div> : null}
       {selected.files.length ? selected.files.map((file) => <div className="debridLibraryFile" key={file.providerId}>
-        <span>{file.name} · {formatFileSize(file.size)}</span>
+        <span>{file.name} · {formatFileSize(file.size)}
+          {selected.episodeMappings?.filter((entry) => entry.fileId === file.providerId)
+            .map((entry) => ` · mapped S${String(entry.season).padStart(2, "0")}E${String(entry.episode).padStart(2, "0")}`)
+            .join("") || (selected.mediaContext?.type === "show" ? " · unmapped" : "")}
+        </span>
+        {selected.mediaContext?.type === "show" ? <button type="button" onClick={() => void mapFile(file)}>Map to episode</button> : null}
         {selected.status === "ready" && file.selected ? <button className="primaryButton compact" type="button" onClick={() => void play(file)}>Play</button> : null}
       </div>) : <p>File details are not available yet.</p>}
       {session && playingFile ? <div className="videoFrame"><VideoPlayer key={`${session.id}:${playingFile.id}`}

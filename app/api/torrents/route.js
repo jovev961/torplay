@@ -32,6 +32,7 @@ export async function POST(request) {
     }
     const result = await startPlaybackSource(source, {
       action: body.action, remoteProvider: body.provider, scope: body.scope,
+      confirmWholePack: body.confirmWholePack === true,
     });
     return Response.json(result, {
       status: result.status === "loading" || result.kind === "debrid-job" ? 202 : 200,
