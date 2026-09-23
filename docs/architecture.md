@@ -2,7 +2,7 @@
 
 ## Security and runtime boundary
 
-The browser communicates only with TorPlay pages and API routes. Provider credentials, credential-bearing torrent URLs, magnets, metadata downloads, swarm connections, file selection, media conversion, and persistent watch data stay on the server. An optional playback resolver checks ready Real-Debrid or TorBox files after source selection and can fall back to the existing local engine.
+The browser communicates only with TorPlay pages and API routes. Provider credentials, credential-bearing torrent URLs, magnets, metadata downloads, swarm connections, file selection, media conversion, and persistent watch data stay on the server. An optional playback resolver checks ready Real-Debrid or TorBox files after source selection, then applies the saved local-or-remote choice. Remote jobs are tracked by safe SQLite resource references and reconciled with the provider account; Debrid Library reads provider state. Ready files use the existing secure session-scoped Range proxy.
 
 ```text
 Browser / future client

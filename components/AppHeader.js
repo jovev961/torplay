@@ -11,6 +11,7 @@ const links = [
   { href: "/search", label: "Search", id: "search" },
   { href: "/discover", label: "Discover", id: "discover" },
   { href: "/history", label: "History", id: "history" },
+  { href: "/debrid-library", label: "Debrid Library", id: "debrid-library" },
   { href: "/settings", label: "Settings", id: "settings" },
 ];
 

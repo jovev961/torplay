@@ -64,6 +64,9 @@ export function useSourceLookup() {
   const [hasSearched, setHasSearched] = useState(false);
   const [startingId, setStartingId] = useState(null);
   const [session, setSession] = useState(null);
+  const [debridChoice, setDebridChoice] = useState(null);
+  const [debridJob, setDebridJob] = useState(null);
+  const [debridPollFailures, setDebridPollFailures] = useState(0);
   const [selectedFileId, setSelectedFileId] = useState(null);
   const [error, setError] = useState("");
   const [errorCode, setErrorCode] = useState("");
@@ -95,6 +98,41 @@ export function useSourceLookup() {
     for (const controller of pendingRequests.current) controller.abort();
     pendingRequests.current.clear();
   }, []);
+
+  useEffect(() => {
+    if (!debridJob || ["failed", "cancelled", "unavailable"].includes(debridJob.status) || session) return undefined;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const baseUrl = `/api/debrid/library/${encodeURIComponent(debridJob.provider)}/${encodeURIComponent(debridJob.resourceId)}`;
+        const url = `${baseUrl}?scope=${encodeURIComponent(debridJob.selectionScope || "")}`;
+        const next = await readJson(await fetch(url, { cache: "no-store" }));
+        if (cancelled) return;
+        setDebridPollFailures(0);
+        setDebridJob(next);
+        if (next.status === "ready" && !session) {
+          const file = next.files.find((entry) => entry.providerId === next.selectedFileId)
+            || next.files.find((entry) => entry.selected);
+          if (!file) throw new Error("The requested video file is unavailable in this resource.");
+          const playback = await readJson(await fetch(`${baseUrl}/play`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ fileId: file.providerId, scope: debridJob.selectionScope }),
+          }));
+          if (!cancelled) {
+            setSession(playback);
+            setSelectedFileId(playback.files.find((entry) => entry.name === file.name)?.id || null);
+          }
+        }
+      } catch (pollError) { if (!cancelled) {
+        setError(pollError.message);
+        if (pollError.code === "not-configured") {
+          setDebridJob((current) => current ? { ...current, status: "unavailable" } : current);
+        } else setDebridPollFailures((value) => Math.min(value + 1, 3));
+      } }
+    }, debridJob.status === "ready" && debridPollFailures === 0
+      ? 0 : Math.min(120_000, 15_000 * 2 ** debridPollFailures));
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [debridJob, session, debridPollFailures]);
 
   useEffect(() => {
     let cancelled = false;
@@ -214,6 +252,8 @@ export function useSourceLookup() {
     setUsenetResults([]);
     setMediaContext(criteria);
     setSelectedFileId(null);
+    setDebridChoice(null);
+    setDebridJob(null);
 
     const params = new URLSearchParams({ type: criteria.type, q: criteria.query });
     if (criteria.season !== undefined) params.set("season", String(criteria.season));
@@ -288,7 +328,7 @@ export function useSourceLookup() {
     } catch (deleteError) { setError(deleteError.message); }
   }
 
-  async function start(resultId) {
+  async function start(resultId, action = null, provider = null, scope = "episode") {
     setStartingId(resultId);
     setError("");
     setErrorCode("");
@@ -297,9 +337,21 @@ export function useSourceLookup() {
       const response = await request("/api/torrents", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ resultId }),
+        body: JSON.stringify({ resultId, action, provider, scope }),
       });
-      setSession(await readJson(response));
+      const result = await readJson(response);
+      if (result.kind === "choice") {
+        setDebridChoice({ ...result, resultId });
+        setDebridJob(null);
+      } else if (result.kind === "debrid-job") {
+        setDebridChoice({ ...result.choices, resultId });
+        setDebridJob(result.item);
+        setDebridPollFailures(0);
+      } else {
+        setDebridChoice(null);
+        setDebridJob(null);
+        setSession(result);
+      }
     } catch (startError) {
       if (startError.name !== "AbortError") {
         setError(startError.message);
@@ -327,6 +379,8 @@ export function useSourceLookup() {
     usenetResults,
     usenetJobs,
     usenetJob,
+    debridChoice,
+    debridJob,
     usenetEnabled,
     searching,
     selectedFileId,

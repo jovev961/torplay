@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { findEpisodeFile, findLargestFile } from "../lib/video/episode.js";
 import { episodeFilePresentation, formatFileSize } from "../lib/video/episode-display.js";
 import VideoPlayer from "./VideoPlayer.js";
@@ -17,6 +18,7 @@ export default function SourcePanel({
   episodeChoices = [],
   playback = {},
 }) {
+  const [packScope, setPackScope] = useState("episode");
   const suggestedFile = lookup.session?.status === "ready" && episode
     ? findEpisodeFile(lookup.session.files, episode.season, episode.number)
     : null;
@@ -47,7 +49,7 @@ export default function SourcePanel({
         </div>
         {lookup.session ? (
           <button className="textButton" type="button" onClick={lookup.stop}>
-            Stop &amp; clean up
+            {lookup.session.backend === "debrid" ? "Stop playback" : "Stop & clean up"}
           </button>
         ) : null}
       </div>
@@ -58,6 +60,46 @@ export default function SourcePanel({
         </div>
       ) : lookup.error ? <div className="notice error" role="alert">{lookup.error}</div> : null}
       {lookup.searching ? <div className="notice">Searching sources…</div> : null}
+      {lookup.debridChoice && !lookup.session && (!lookup.debridJob || lookup.debridJob.status === "failed") ? (
+        <div className="notice" role="group" aria-label="Choose how to watch">
+          <h3>This release is not ready on your debrid services.</h3>
+          {lookup.debridChoice.error ? <p role="alert">{lookup.debridChoice.error}</p> : null}
+          {!lookup.debridChoice.localAllowed && !lookup.debridChoice.providers.length
+            ? <p>No connected provider can prepare this torrent right now. Check Settings → Services.</p> : null}
+          {lookup.debridChoice.localAllowed ? <button type="button" disabled={lookup.startingId !== null}
+            onClick={() => lookup.start(lookup.debridChoice.resultId, "local")}>▶ Watch Now with TorPlay</button> : null}
+          {lookup.debridChoice.localAllowed ? <p>Stream directly from torrent peers.</p> : null}
+          {lookup.debridChoice.seasonPack && lookup.debridChoice.providers.includes("real-debrid") ? (
+            <label>Real-Debrid season pack
+              <select value={packScope} onChange={(event) => setPackScope(event.target.value)}>
+                <option value="episode">Download the current episode</option>
+                <option value="all">Download all identified episodes</option>
+              </select>
+            </label>
+          ) : null}
+          {lookup.debridChoice.providers.map((provider) => (
+            <div key={provider}>
+              <button type="button" disabled={lookup.startingId !== null}
+                onClick={() => lookup.start(lookup.debridChoice.resultId, "remote", provider,
+                  provider === "real-debrid" ? packScope : "episode")}>
+                ☁ Download with {provider === "torbox" ? "TorBox" : "Real-Debrid"}
+              </button>
+              {provider === "torbox" && lookup.debridChoice.seasonPack
+                ? <p>TorBox may download the whole pack. Playback will select this episode.</p> : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {lookup.debridJob && !lookup.session ? (
+        <div className="notice" role="status">
+          <strong>{lookup.debridJob.name}</strong> · {lookup.debridJob.provider === "torbox" ? "TorBox" : "Real-Debrid"}
+          <p>Remote download: {lookup.debridJob.status}
+            {lookup.debridJob.progress != null ? ` · ${Math.round(lookup.debridJob.progress * 100)}%` : ""}
+          </p>
+          <p>You can leave this page. The provider job remains in <Link href="/debrid-library">Debrid Library</Link>.</p>
+          {lookup.debridChoice?.localAllowed ? <button type="button" onClick={() => lookup.start(lookup.debridChoice.resultId, "local")}>Watch Now with TorPlay instead</button> : null}
+        </div>
+      ) : null}
       {!lookup.searching && lookup.hasSearched && lookup.results.length === 0 && !lookup.usenetResults?.length && !lookup.error ? (
         <div className="notice">No usable authorized sources were found.</div>
       ) : null}

@@ -30,6 +30,7 @@ export default function DebridSettings({ canEdit, section = "playback" }) {
     setConfig(result);
     setDraft({
       mode: result.mode, priority: result.priority, localFallback: result.localFallback,
+      unavailableAction: result.unavailableAction,
     });
   }
 
@@ -44,7 +45,8 @@ export default function DebridSettings({ canEdit, section = "playback" }) {
       .then((result) => {
         if (cancelled) return;
         setConfig(result);
-        setDraft({ mode: result.mode, priority: result.priority, localFallback: result.localFallback });
+        setDraft({ mode: result.mode, priority: result.priority, localFallback: result.localFallback,
+          unavailableAction: result.unavailableAction });
         if (section !== "services") return;
         for (const [provider, details] of Object.entries(result.providers)) {
           if (!details.configured) continue;
@@ -130,7 +132,7 @@ export default function DebridSettings({ canEdit, section = "playback" }) {
     <div className={styles.layout}>
       <div className={styles.card}>
         <h3>Optional debrid playback</h3>
-        <p>Local BitTorrent remains available without a debrid account. Only ready remote files are used.</p>
+        <p>Ready provider files play immediately. Otherwise you can watch locally or ask a provider to download the torrent.</p>
         <label>Playback method
           <select disabled={!canEdit || Boolean(busy)} value={draft.mode}
             onChange={(event) => setDraft({ ...draft, mode: event.target.value })}>
@@ -144,11 +146,20 @@ export default function DebridSettings({ canEdit, section = "playback" }) {
             <input type="checkbox" checked={draft.localFallback}
               disabled={!canEdit || Boolean(busy)}
               onChange={(event) => setDraft({ ...draft, localFallback: event.target.checked })} />
-            Use local BitTorrent when neither provider has the requested file
+            Allow local BitTorrent when neither provider has the requested file
           </label>
         ) : null}
+        {draft.mode !== "local" ? <label>When a torrent is not ready on debrid
+          <select disabled={!canEdit || Boolean(busy)} value={draft.unavailableAction}
+            onChange={(event) => setDraft({ ...draft, unavailableAction: event.target.value })}>
+            <option value="ask">Ask me</option>
+            <option value="local" disabled={draft.mode === "debrid-only" || !draft.localFallback}>Watch immediately with local BitTorrent</option>
+            <option value="remote">Download using my preferred debrid provider</option>
+          </select>
+        </label> : null}
         <button type="button" disabled={!canEdit || Boolean(busy)
-          || (draft.mode === config.mode && draft.localFallback === config.localFallback)}
+          || (draft.mode === config.mode && draft.localFallback === config.localFallback
+            && draft.unavailableAction === config.unavailableAction)}
           onClick={savePolicy}>Save playback method</button>
       </div>
       {message ? <p role="status">{message}</p> : null}
@@ -177,8 +188,8 @@ export default function DebridSettings({ canEdit, section = "playback" }) {
             <h3>{names[provider]}</h3>
             <p>Status: {status[provider] || (config.providers[provider]?.configured ? "Configured" : "Not configured")}</p>
             {provider === "real-debrid"
-              ? <p>Plays completed torrents already in your account. Unknown hashes continue to the next backend.</p>
-              : <p>Uses TorBox&apos;s cached-file lookup and adds cached items only.</p>}
+              ? <p>Plays completed account torrents immediately, or downloads a selected torrent when you choose it.</p>
+              : <p>Plays ready cached files immediately, or downloads a selected torrent when you choose it.</p>}
             {flow?.provider === provider ? (
               <div className={styles.code}>
                 <p>Enter code <strong>{flow.userCode}</strong> at{" "}

@@ -3133,3 +3133,14 @@ footer {
     margin-right: auto;
   }
 }
+.debridLibrary { padding: 2rem 0 4rem; }
+.debridLibrary > p { max-width: 70ch; color: var(--muted, #aeb8c9); }
+.debridLibraryToolbar, .debridLibraryActions { display: flex; gap: .65rem; flex-wrap: wrap; margin: 1rem 0; }
+.debridLibraryToolbar button.active { border-color: #e4bd68; color: #fff; }
+.debridLibraryGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 19rem), 1fr)); gap: 1rem; margin: 1.5rem 0; }
+.debridLibraryCard { min-width: 0; padding: 1.25rem; }
+.debridLibraryCard h2 { font-size: 1.1rem; overflow-wrap: anywhere; }
+.debridLibraryCard progress { width: 100%; }
+.debridLibraryDetail { padding: 1.5rem; margin-top: 2rem; }
+.debridLibraryFile { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: .8rem 0; border-bottom: 1px solid #ffffff25; }
+.debridLibraryFile span { overflow-wrap: anywhere; }

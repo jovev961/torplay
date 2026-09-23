@@ -16,7 +16,7 @@ The self-contained Windows installer does not require Node.js, npm, Docker, Jack
 4. Paste a TMDB **API Read Access Token** from [TMDB API settings](https://www.themoviedb.org/settings/api), test it, and finish setup.
 5. When you are ready to search authorized content, open **Settings → Torrent Sources** and choose a TorPlay Tested Source, explore community Cardigann indexers, or add a custom Torznab source. None are added automatically.
 
-Optional debrid accounts can be connected under **Settings → Playback**. TorPlay still uses your selected torrent sources, and local BitTorrent remains the default. See [Configuration](docs/configuration.md) for playback modes and cache behavior.
+Optional Real-Debrid and TorBox accounts can be connected under **Settings → Services**. Ready provider files play immediately; otherwise you can watch through local BitTorrent or ask a provider to download the torrent remotely. View provider resources in **Debrid Library**. See [Configuration](docs/configuration.md) for playback choices.
 
 TorPlay then opens at [http://localhost](http://localhost). Other devices on the same private household network can use [http://torplay.local](http://torplay.local). The system-tray icon provides Open, Logs, Start/Restart, Stop, login-startup, Retry, and Exit controls.
 
