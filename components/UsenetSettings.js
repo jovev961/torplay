@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import styles from "./UsenetSettings.module.css";
 
 async function request(url, options) {
   const response = await fetch(url, { cache: "no-store", ...options });
@@ -25,11 +26,11 @@ export default function UsenetSettings() {
   }
 
   if (!config) return <p>Loading optional Usenet settings…</p>;
-  return <div className="settingCard">
-    <h3>Usenet · Optional</h3>
-    <p>Search NZBs through your Newznab indexers and prepare media through TorBox. Requires a TorBox account with Usenet support.</p>
+  return <div className={styles.card}>
+    <h3>Usenet</h3>
+    <p>Optional: search NZBs through your Newznab indexers and prepare media with TorBox. Your TorBox account needs Usenet support.</p>
     <p>TorBox Usenet: <strong>{config.capability}</strong></p>
-    <label><input type="checkbox" checked={config.enabled} disabled={!config.canEdit || busy}
+    <label className={styles.toggle}><input type="checkbox" checked={config.enabled} disabled={!config.canEdit || busy}
       onChange={(event) => void act(async () => {
         const next = await request("/api/settings/usenet", { method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -37,7 +38,7 @@ export default function UsenetSettings() {
         setConfig({ ...config, ...next });
       })} /> Enable Usenet results and NZB upload</label>
     <h4>Newznab indexers</h4>
-    {config.indexers.map((indexer) => <div key={indexer.id}>
+    {config.indexers.map((indexer) => <div className={styles.indexer} key={indexer.id}>
       <span>{indexer.name} · API key configured</span>{" "}
       <button type="button" disabled={!config.canEdit || busy} onClick={() => void act(async () => {
         await request(`/api/settings/usenet/indexers/${indexer.id}`, { method: "POST",
@@ -50,7 +51,7 @@ export default function UsenetSettings() {
         setConfig({ ...config, ...next });
       })}>Remove</button>
     </div>)}
-    <form onSubmit={(event) => { event.preventDefault(); void act(async () => {
+    <form className={styles.form} onSubmit={(event) => { event.preventDefault(); void act(async () => {
       const next = await request("/api/settings/usenet/indexers", { method: "POST",
         headers: { "Content-Type": "application/json" }, body: JSON.stringify(draft) });
       setConfig({ ...config, ...next });

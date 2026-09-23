@@ -131,9 +131,10 @@ export default function DebridSettings({ canEdit, section = "playback" }) {
   return section === "playback" ? (
     <div className={styles.layout}>
       <div className={styles.card}>
-        <h3>Optional debrid playback</h3>
-        <p>Ready provider files play immediately. Otherwise you can watch locally or ask a provider to download the torrent.</p>
-        <label>Playback method
+        <span className={styles.kicker}>Playback preference</span>
+        <h3>How should TorPlay play videos?</h3>
+        <p>Choose whether to stream from torrent peers or check your connected provider accounts first.</p>
+        <label>Preferred playback method
           <select disabled={!canEdit || Boolean(busy)} value={draft.mode}
             onChange={(event) => setDraft({ ...draft, mode: event.target.value })}>
             <option value="local">Local BitTorrent Only</option>
@@ -149,7 +150,7 @@ export default function DebridSettings({ canEdit, section = "playback" }) {
             Allow local BitTorrent when neither provider has the requested file
           </label>
         ) : null}
-        {draft.mode !== "local" ? <label>When a torrent is not ready on debrid
+        {draft.mode !== "local" ? <label>When the video is not ready on a provider
           <select disabled={!canEdit || Boolean(busy)} value={draft.unavailableAction}
             onChange={(event) => setDraft({ ...draft, unavailableAction: event.target.value })}>
             <option value="ask">Ask me</option>
@@ -167,8 +168,9 @@ export default function DebridSettings({ canEdit, section = "playback" }) {
   ) : (
     <div className={styles.layout}>
       <div className={styles.card}>
-        <h3>Preferred debrid provider</h3>
-        <p>When debrid playback is enabled, TorPlay checks this provider first.</p>
+        <span className={styles.kicker}>Provider order</span>
+        <h3>Which provider should TorPlay check first?</h3>
+        <p>If both accounts are connected, TorPlay checks your preferred provider first.</p>
         <label>Preferred provider
           <select disabled={!canEdit || Boolean(busy)} value={draft.priority[0]}
             onChange={(event) => setDraft({ ...draft, priority: [event.target.value,
@@ -186,7 +188,9 @@ export default function DebridSettings({ canEdit, section = "playback" }) {
         {Object.keys(names).map((provider) => (
           <div className={styles.card} key={provider}>
             <h3>{names[provider]}</h3>
-            <p>Status: {status[provider] || (config.providers[provider]?.configured ? "Configured" : "Not configured")}</p>
+            <span className={config.providers[provider]?.configured ? styles.connected : styles.disconnected}>
+              {status[provider] || (config.providers[provider]?.configured ? "Configured" : "Not connected")}
+            </span>
             {provider === "real-debrid"
               ? <p>Plays completed account torrents immediately, or downloads a selected torrent when you choose it.</p>
               : <p>Plays ready cached files immediately, or downloads a selected torrent when you choose it.</p>}
@@ -201,16 +205,17 @@ export default function DebridSettings({ canEdit, section = "playback" }) {
             {canEdit ? (
               <div className={styles.actions}>
                 <button type="button" disabled={Boolean(busy) || Boolean(flow)}
-                  onClick={() => perform(provider, "start")}>Connect</button>
+                  onClick={() => perform(provider, "start")}>{config.providers[provider]?.configured ? "Reconnect" : "Connect account"}</button>
                 <button type="button" disabled={Boolean(busy) || !config.providers[provider]?.configured}
-                  onClick={() => perform(provider, "test")}>Test</button>
+                  onClick={() => perform(provider, "test")}>Test connection</button>
                 <button type="button" disabled={Boolean(busy) || !config.providers[provider]?.configured}
                   onClick={() => perform(provider, "disconnect")}>Disconnect</button>
               </div>
             ) : null}
             {canEdit ? (
-              <div className={styles.key}>
-                <label>Or connect with {provider === "real-debrid" ? "private API token" : "API key"}
+              <details className={styles.key}>
+                <summary>Use an API key instead</summary>
+                <label>{provider === "real-debrid" ? "Private API token" : "API key"}
                   <input type="password" autoComplete="new-password" value={keys[provider]}
                     disabled={Boolean(busy) || Boolean(flow)}
                     placeholder={config.providers[provider]?.configured ? "Leave blank to keep current credential" : ""}
@@ -218,7 +223,7 @@ export default function DebridSettings({ canEdit, section = "playback" }) {
                 </label>
                 <button type="button" disabled={Boolean(busy) || Boolean(flow) || !keys[provider].trim()}
                   onClick={() => perform(provider, "key", { apiKey: keys[provider] })}>Save and test key</button>
-              </div>
+              </details>
             ) : null}
           </div>
         ))}

@@ -7,10 +7,10 @@ export default function SettingsPage() {
   return (
     <main className="shell homeShell">
       <AppHeader active="settings" />
-      <section className="catalogHero compactCatalogHero">
-        <span className="eyebrow">TorPlay settings</span>
-        <h1>Configure services without exposing credentials.</h1>
-        <p>Manage the integrations used for metadata, source discovery, subtitles, and playback.</p>
+      <section className="settingsHero">
+        <span className="eyebrow">Make TorPlay yours</span>
+        <h1>Settings</h1>
+        <p>Connect the services you use, choose where videos come from, and adjust how they play.</p>
       </section>
       <SettingsManager />
     </main>

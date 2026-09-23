@@ -7,6 +7,8 @@ import {
 } from "../lib/settings/navigation.js";
 
 test("settings navigation exposes every category and selects one valid hash", () => {
+  assert.equal(SETTINGS_SECTIONS[0][1], "Overview");
+  assert.equal(SETTINGS_SECTIONS[2][1], "Video Sources");
   assert.deepEqual(SETTINGS_SECTIONS.map(([id]) => id), [
     "general",
     "services",

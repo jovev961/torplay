@@ -1,29 +1,27 @@
 .settingsLayout {
   display: grid;
-  grid-template-columns: 190px minmax(0, 1fr);
+  grid-template-columns: 210px minmax(0, 1fr);
   align-items: start;
-  gap: 34px;
+  gap: 28px;
 }
 
 .settingsNav {
   position: sticky;
   top: 22px;
   display: grid;
-  overflow: hidden;
+  gap: 4px;
+  padding: 7px;
   border: 1px solid var(--border);
   border-radius: 14px;
   background: var(--panel);
 }
 
 .settingsNav a {
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--border);
+  padding: 11px 12px;
+  border-radius: 9px;
   color: var(--muted);
-  font-size: 0.9rem;
-}
-
-.settingsNav a:last-child {
-  border-bottom: 0;
+  font-size: 0.88rem;
+  font-weight: 700;
 }
 
 .settingsNav a:hover,
@@ -35,6 +33,8 @@
 }
 
 .settingsNav .activeNavItem {
+  color: var(--text);
+  background: #392022;
   box-shadow: inset 3px 0 0 var(--accent);
 }
 
@@ -54,6 +54,30 @@
   gap: 13px;
   margin-bottom: 15px;
 }
+
+.overviewGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr)); gap: 12px; }
+.overviewCard { display: flex; flex-direction: column; align-items: flex-start; gap: 9px; min-height: 224px; padding: 20px; border: 1px solid var(--border); border-radius: 14px; background: var(--panel); }
+.overviewCard:hover, .overviewCard:focus-visible { border-color: #a0413d; outline: none; background: #1b2027; }
+.overviewStep { color: var(--muted); font-size: .7rem; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; }
+.overviewCard strong { font-size: 1.1rem; }
+.overviewCard p { margin: 0; color: var(--muted); font-size: .82rem; line-height: 1.5; }
+.overviewReady, .overviewNeeded, .overviewNeutral { margin-top: auto; padding: 5px 8px; border-radius: 999px; font-size: .7rem; font-weight: 800; }
+.overviewReady { color: #b5f0cb; background: #16492c; }
+.overviewNeeded { color: #ffe2a6; background: #5a4219; }
+.overviewNeutral { color: #d1d7de; background: #343b43; }
+.overviewAction { color: #f4b8b9; font-size: .8rem; font-weight: 800; }
+.settingsGroup { display: grid; gap: 12px; margin-top: 20px; }
+.settingsGroup h3, .settingsGroup p { margin: 0; }
+.settingsGroup > p { color: var(--muted); font-size: .84rem; }
+.advancedGroup, .diagnostics { margin-top: 18px; border: 1px solid var(--border); border-radius: 13px; background: #101419; }
+.advancedGroup summary, .diagnostics summary { padding: 15px 18px; color: var(--text); cursor: pointer; font-weight: 800; }
+.advancedGroup[open] summary, .diagnostics[open] summary { border-bottom: 1px solid var(--border); }
+.advancedGroup > p { margin: 15px 18px; color: var(--muted); font-size: .84rem; }
+.advancedGroup > .providerGrid { margin: 0 18px 18px; }
+.advancedGroup > :last-child:not(summary) { margin-bottom: 18px; }
+.diagnostics > .summaryCard { margin: 16px; }
+.diagnostics > .capabilityGrid { margin: 16px; }
+.diagnostics > .sectionNote { margin: 16px; }
 
 .sectionHeading > span {
   margin-top: 4px;
@@ -1059,12 +1083,11 @@
     position: static;
     display: flex;
     overflow-x: auto;
+    gap: 2px;
   }
 
   .settingsNav a {
     flex: none;
-    border-right: 1px solid var(--border);
-    border-bottom: 0;
   }
 
   .settingsNav .activeNavItem {

@@ -61,33 +61,45 @@ export default function SourcePanel({
       ) : lookup.error ? <div className="notice error" role="alert">{lookup.error}</div> : null}
       {lookup.searching ? <div className="notice">Searching sources…</div> : null}
       {lookup.debridChoice && !lookup.session && (!lookup.debridJob || lookup.debridJob.status === "failed") ? (
-        <div className="notice" role="group" aria-label="Choose how to watch">
-          <h3>This release is not ready on your debrid services.</h3>
-          {lookup.debridChoice.error ? <p role="alert">{lookup.debridChoice.error}</p> : null}
+        <div className="debridChoice" role="group" aria-label="Choose how to watch">
+          <div className="debridChoiceIntro">
+            <span className="eyebrow">Choose how to watch</span>
+            <h3>This release is not ready on your debrid services.</h3>
+            <p>Watch from torrent peers now, or let a connected provider prepare it for later.</p>
+          </div>
+          {lookup.debridChoice.error ? <p className="debridChoiceError" role="alert">{lookup.debridChoice.error}</p> : null}
           {!lookup.debridChoice.localAllowed && !lookup.debridChoice.providers.length
             ? <p>No connected provider can prepare this torrent right now. Check Settings → Services.</p> : null}
-          {lookup.debridChoice.localAllowed ? <button type="button" disabled={lookup.startingId !== null}
-            onClick={() => lookup.start(lookup.debridChoice.resultId, "local")}>▶ Watch Now with TorPlay</button> : null}
-          {lookup.debridChoice.localAllowed ? <p>Stream directly from torrent peers.</p> : null}
-          {lookup.debridChoice.seasonPack && lookup.debridChoice.providers.includes("real-debrid") ? (
-            <label>Real-Debrid season pack
-              <select value={packScope} onChange={(event) => setPackScope(event.target.value)}>
-                <option value="episode">Download the current episode</option>
-                <option value="all">Download all identified episodes</option>
-              </select>
-            </label>
-          ) : null}
-          {lookup.debridChoice.providers.map((provider) => (
-            <div key={provider}>
-              <button type="button" disabled={lookup.startingId !== null}
-                onClick={() => lookup.start(lookup.debridChoice.resultId, "remote", provider,
-                  provider === "real-debrid" ? packScope : "episode")}>
-                ☁ Download with {provider === "torbox" ? "TorBox" : "Real-Debrid"}
-              </button>
-              {provider === "torbox" && lookup.debridChoice.seasonPack
-                ? <p>TorBox may download the whole pack. Playback will select this episode.</p> : null}
-            </div>
-          ))}
+          <div className="debridChoiceOptions">
+            {lookup.debridChoice.localAllowed ? <div className="debridChoiceOption">
+              <div><h4>Watch now with TorPlay</h4><p>Stream directly from torrent peers.</p></div>
+              <button className="primaryButton" type="button" disabled={lookup.startingId !== null}
+                onClick={() => lookup.start(lookup.debridChoice.resultId, "local")}>▶ Watch now</button>
+            </div> : null}
+            {lookup.debridChoice.providers.map((provider) => (
+              <div className="debridChoiceOption" key={provider}>
+                <div>
+                  <h4>Download with {provider === "torbox" ? "TorBox" : "Real-Debrid"}</h4>
+                  <p>Prepare this release in your provider account. You can leave this page while it downloads.</p>
+                </div>
+                {provider === "real-debrid" && lookup.debridChoice.seasonPack ? (
+                  <label className="debridChoiceScope">What to download
+                    <select value={packScope} onChange={(event) => setPackScope(event.target.value)}>
+                      <option value="episode">Only the current episode</option>
+                      <option value="all">All identified episodes</option>
+                    </select>
+                  </label>
+                ) : null}
+                {provider === "torbox" && lookup.debridChoice.seasonPack
+                  ? <p className="debridChoiceHint">TorBox may download the whole pack. Playback will select this episode.</p> : null}
+                <button className="debridChoiceSecondary" type="button" disabled={lookup.startingId !== null}
+                  onClick={() => lookup.start(lookup.debridChoice.resultId, "remote", provider,
+                    provider === "real-debrid" ? packScope : "episode")}>
+                  Download with {provider === "torbox" ? "TorBox" : "Real-Debrid"}
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
       ) : null}
       {lookup.debridJob && !lookup.session ? (
