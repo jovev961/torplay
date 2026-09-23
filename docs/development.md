@@ -66,7 +66,7 @@ The command rejects non-Windows and non-x64 hosts rather than producing an incom
 
 Run `npm ci` and `npm run release:linux` on Ubuntu 24.04 x86_64. The command runs tests, lint, and a standalone production build; downloads checksum-pinned Node 24.21.0, appimagetool 1.9.1, and the static AppImage runtime; validates Linux native files and secret exclusion; then writes `dist/linux/TorPlay-<version>-x86_64.AppImage` and its `.sha256` file. It rejects other build architectures.
 
-The manual **Linux AppImage** workflow uses an Ubuntu 24.04 runner and uploads these files as a CI artifact for 14 days. It does not publish a GitHub Release or bump the application version. Before merging, smoke-test the AppImage on a clean Ubuntu 24.04 x86_64 desktop, including browser launch and Quit without installing runtime packages. See [Linux deployment](linux-deployment.md).
+The **Linux AppImage** workflow runs for pull requests into `develop` and can also be started manually once it is available on the default branch. It uses an Ubuntu 24.04 runner and uploads these files as a CI artifact for 14 days. It does not publish a GitHub Release or bump the application version. Before a public release, smoke-test the AppImage on a clean Ubuntu 24.04 x86_64 desktop, including browser launch and Quit without installing runtime packages. See [Linux deployment](linux-deployment.md).
 
 ## Data during development
 

@@ -22,7 +22,7 @@ Profiles, history, configuration, and logs are kept under `%LOCALAPPDATA%\TorPla
 
 ## Run on Ubuntu 24.04 x86_64
 
-The Linux AppImage bundles TorPlay's runtime and media tools. Download the AppImage and checksum from the manually triggered **Linux AppImage** workflow artifact, verify the checksum, make the AppImage executable, and launch it. TorPlay opens in your default browser on this computer only. See the [Linux AppImage guide](docs/linux-deployment.md) for exact commands, first-run setup, Quit, updates, and troubleshooting.
+The Linux AppImage bundles TorPlay's runtime and media tools. Download the AppImage and checksum from a successful **Linux AppImage** workflow artifact, verify the checksum, make the AppImage executable, and launch it. TorPlay opens in your default browser on this computer only. See the [Linux AppImage guide](docs/linux-deployment.md) for exact commands, first-run setup, Quit, updates, and troubleshooting.
 
 ## Developer/source setup
 
