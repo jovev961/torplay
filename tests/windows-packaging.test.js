@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { spawn } from "node:child_process";
+import { build } from "esbuild";
 import os from "node:os";
 import path from "node:path";
 import net from "node:net";
@@ -146,7 +148,7 @@ test("the control channel requests a graceful supervisor stop", async () => {
   }
 });
 
-test("the control channel bounds shutdown when a client keeps its socket open", async () => {
+test("the control channel bounds shutdown when a client keeps its socket open", { timeout: 5_000 }, async (t) => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "torplay-control-drain-"));
   const endpoint = path.join(directory, "control.sock");
   const control = await startControlServer({ endpoint, closeDrainMs: 5 });
@@ -155,14 +157,43 @@ test("the control channel bounds shutdown when a client keeps its socket open", 
     socket.destroy(new Error("Timed out connecting to the control server."));
   }, 5_000);
   try {
-    await once(socket, "connect");
+    await once(socket, "connect", { signal: t.signal });
     clearTimeout(connectTimeout);
     await control.close();
-    if (!socket.destroyed) await once(socket, "close");
+    if (!socket.destroyed) await once(socket, "close", { signal: t.signal });
     assert.equal(socket.destroyed, true);
+    assert.equal(control.server.listening, false);
   } finally {
     clearTimeout(connectTimeout);
     socket.destroy();
+    try {
+      await control.close();
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  }
+});
+
+test("failed control connections clean up the server and allow the endpoint to be reused", { timeout: 5_000 }, async (t) => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "torplay-control-failure-"));
+  const endpoint = path.join(directory, "control.sock");
+  let control;
+  let socket;
+  try {
+    control = await startControlServer({ endpoint, closeDrainMs: 5 });
+    socket = net.createConnection(`${control.endpoint}-missing`);
+    try {
+      await assert.rejects(once(socket, "connect", { signal: t.signal }));
+    } finally {
+      socket.destroy();
+      await Promise.all([control.close(), control.close()]);
+    }
+    assert.equal(control.server.listening, false);
+    control = await startControlServer({ endpoint });
+    assert.match(await sendControlCommand({ endpoint: control.endpoint }), /^OK stopping/);
+  } finally {
+    socket?.destroy();
+    await control?.close();
     await rm(directory, { recursive: true, force: true });
   }
 });
@@ -448,6 +479,40 @@ test("the Windows runner identifies its process tree and exits with its supervis
     child.exitCode = 0;
     child.emit("exit", 0, null);
     assert.equal(exitCode, 0);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("the bundled runner stays alive until its supervisor exits across repeated starts", async () => {
+  const directory = await realpath(await mkdtemp(path.join(os.tmpdir(), "torplay-bundled-runner-")));
+  const paths = installedPaths({ installDir: directory, dataDir: path.join(directory, "data") });
+  try {
+    await mkdir(path.dirname(paths.runnerEntry), { recursive: true });
+    await copyFile(process.execPath, paths.nodePath);
+    await writeFile(paths.homeEntry, 'setTimeout(() => process.exit(7), 2500);\n');
+    await build({
+      entryPoints: [fileURLToPath(new URL("../scripts/windows-runner.js", import.meta.url))],
+      outfile: paths.runnerEntry,
+      bundle: true, platform: "node", format: "esm", target: "node24",
+    });
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const child = spawn(process.execPath, [paths.runnerEntry], {
+        env: { ...process.env, TORPLAY_INSTALL_DIR: directory, TORPLAY_DATA_DIR: paths.dataDir },
+        stdio: "ignore",
+      });
+      const timeout = setTimeout(() => child.kill(), 10_000);
+      try {
+        const [code, signal] = await once(child, "exit");
+        assert.equal(signal, null);
+        assert.equal(code, 7, `the runner must exit with its supervisor, not an imported CLI:\n${await readFile(paths.logPath, "utf8")}`);
+      } finally {
+        clearTimeout(timeout);
+        if (child.exitCode === null && child.signalCode === null) child.kill();
+      }
+    }
+    const log = await readFile(paths.logPath, "utf8");
+    assert.equal(log.match(/TorPlay exited with code 7/g)?.length, 2);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

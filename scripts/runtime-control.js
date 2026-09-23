@@ -68,11 +68,13 @@ export function startControlServer({
   const resolvedEndpoint = normalizeControlEndpoint(endpoint);
   const sockets = new Set();
   let stopRequested = false;
+  let closePromise;
 
   const server = net.createServer((socket) => {
     let input = "";
     sockets.add(socket);
     socket.once("close", () => sockets.delete(socket));
+    socket.on("error", () => socket.destroy());
 
     socket.setEncoding("utf8");
 
@@ -106,21 +108,18 @@ export function startControlServer({
       resolve({
         server,
         endpoint: resolvedEndpoint,
-        close: () => new Promise((done) => {
-          let finished = false;
-          const finish = () => {
-            if (finished) return;
-            finished = true;
-            clearTimeout(timer);
-            done();
-          };
-          const timer = setTimeout(() => {
-            for (const socket of sockets) socket.destroy();
-            finish();
-          }, closeDrainMs);
-          timer.unref?.();
-          server.close(finish);
-        }),
+        close: () => {
+          closePromise ??= new Promise((done) => {
+            const timer = setTimeout(() => {
+              for (const socket of sockets) socket.destroy();
+            }, closeDrainMs);
+            server.close(() => {
+              clearTimeout(timer);
+              done();
+            });
+          });
+          return closePromise;
+        },
       });
     });
   });
