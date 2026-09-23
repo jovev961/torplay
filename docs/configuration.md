@@ -7,7 +7,7 @@ TorPlay configuration is server-only. Never expose provider keys, Jackett downlo
 - Development and source runtime: `.env.local` when advanced manual configuration is desired
 - Installed Windows runtime: `%LOCALAPPDATA%\TorPlay\config\torplay.env`
 
-On a fresh launch, TorPlay redirects provider-dependent pages to **Setup** to validate and save TMDB. TorPlay includes no torrent indexers. Afterwards, open **Settings** to add a compatible custom Torznab or imported Cardigann source and to manage optional Jackett, metadata, and subtitles. Setup and Settings can be changed through `localhost`, the configured `.local` hostname, or a private LAN address. A blank secret input keeps the configured value, while **Remove** explicitly deletes it.
+On a fresh launch, TorPlay redirects provider-dependent pages to **Setup** to validate and save TMDB. TorPlay includes no torrent indexers. Afterwards, open **Settings** to add a compatible custom Torznab or imported Cardigann source and to manage optional FlareSolverr, metadata, and subtitles. Setup and Settings can be changed through `localhost`, the configured `.local` hostname, or a private LAN address. A blank secret input keeps the configured value, while **Remove** explicitly deletes it.
 
 TorPlay stores Settings changes atomically in the runtime's configuration file and restricts its permissions where the operating system supports that. Credentials supplied by the host environment remain read-only. Provider changes take effect immediately. Do not commit real credentials.
 
@@ -18,21 +18,18 @@ Create a TMDB account, follow the official [TMDB API getting-started guide](http
 | Variable | Required | Default | Description |
 | --- | --- | --- | --- |
 | `TMDB_API_TOKEN` | Yes | None | TMDB API Read Access Token used for metadata. A v3 API key is not accepted here. |
-| `JACKETT_URL` | Only for optional Jackett | `http://localhost:9117` in templates | Jackett base URL. Must use HTTP or HTTPS. |
-| `JACKETT_API_KEY` | Only for optional Jackett | None | API key shown in the Jackett dashboard. |
 
-## Search and Jackett
+## Search and optional services
 
-OMDb is optional. Request a key from the official [OMDb API key page](https://www.omdbapi.com/apikey.aspx). Jackett is also optional and independently operated; use the official [Jackett project](https://github.com/Jackett/Jackett) when you intentionally want that integration.
+OMDb is optional. Request a key from the official [OMDb API key page](https://www.omdbapi.com/apikey.aspx). Jackett and Prowlarr can be added as user-managed custom Torznab sources. FlareSolverr is optional for Cardigann definitions marked `info_flaresolverr`.
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `JACKETT_MOVIE_INDEXERS` | Empty | Comma-separated Jackett IDs used for movies. Empty searches all configured indexers. |
-| `JACKETT_SHOW_INDEXERS` | Empty | Comma-separated Jackett IDs used for shows. Empty searches all configured indexers. |
+| `FLARESOLVERR_URL` | Unset | URL of an external FlareSolverr service on this computer or a private LAN, such as `http://localhost:8191`. |
 | `OMDB_API_KEY` | Unset | Optional server-side OMDb key used for IMDb ratings on catalog cards and metadata lookups. Ratings are omitted when absent. |
-| `TORPLAY_SEARCH_PROVIDERS` | Unset | Optional full-provider allowlist using `jackett` and stable `custom-...` or `cardigann-...` IDs. Unlisted saved sources are excluded. |
+| `TORPLAY_SEARCH_PROVIDERS` | Unset | Optional full-provider allowlist using stable `custom-...` or `cardigann-...` IDs. A legacy `jackett` entry still selects converted sources. |
 
-Custom Torznab sources and imported Cardigann definitions are stored in `torrent-providers.json` beside `.env.local` or the installed `torplay.env`. For Cardigann sources, this includes the complete user-supplied YAML and its integrity hash, not only preview metadata. This private file can contain API keys and settings; keep it out of source control and include it only in private backups. Settings writes it atomically with restrictive file permissions where supported. New endpoints and changed credentials must pass validation before saving; Cardigann imports must also pass a live generic-engine search after explicit confirmation. Edits take effect immediately. Existing Jackett credentials are not migrated or duplicated.
+Custom Torznab sources and imported Cardigann definitions are stored in `torrent-providers.json` beside `.env.local` or the installed `torplay.env`. For Cardigann sources, this includes the complete user-supplied YAML and its integrity hash, not only preview metadata. This private file can contain API keys and settings; keep it out of source control and include it only in private backups. Settings writes it atomically with restrictive file permissions where supported. New endpoints and changed credentials must pass validation before saving; Cardigann imports must also pass a live generic-engine search after explicit confirmation. Edits take effect immediately. On upgrade, existing `JACKETT_*` settings are converted once into custom Torznab sources; the original values remain as an inert backup.
 
 Every explicitly named Jackett indexer must already be enabled and configured in Jackett. TorPlay queries configured providers independently and retains results from healthy sources when another fails. Custom and imported source health can be refreshed from Settings.
 

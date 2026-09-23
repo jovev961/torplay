@@ -91,11 +91,10 @@ test("Cardigann v11 definitions are schema checked and report unsupported featur
     });
   }
   assert.doesNotThrow(() => parseDefinition(stringify({ ...definition, download: { before: { path: "/token" } } })));
-  assert.throws(() => parseDefinition(stringify({
+  assert.doesNotThrow(() => parseDefinition(stringify({
     ...definition,
     settings: [{ name: "info_flaresolverr", type: "info_flaresolverr" }],
-  })), (error) => error.code === "CARDIGANN_UNSUPPORTED"
-    && error.unsupportedFeatures[0].path === "definition.settings[0]");
+  })));
 });
 
 test("definition settings validate options and preserve stored secrets", () => {
@@ -270,6 +269,29 @@ test("Cardigann adapter searches HTML and keeps magnets server-side", async () =
   assert.equal(results[0].size, Math.floor(1.5 * 1024 ** 3));
   assert.equal(results[0].seeders, 42);
   assert.match(results[0].source.magnet, /^magnet:/);
+});
+
+test("only marked Cardigann definitions use configured FlareSolverr", async () => {
+  const marked = { ...definition, settings: [{ name: "flare", type: "info_flaresolverr" }] };
+  const provider = { id: "cardigann-flare", name: marked.name, definition: marked, settings: {},
+    capabilities: { mediaTypes: ["Movies", "TV"], modes: marked.caps.modes } };
+  await assert.rejects(cardigannAdapter(provider, { environment: {} }).search({ title: "Sintel", type: "movie" }),
+    { code: "FLARESOLVERR_NOT_CONFIGURED" });
+  let calls = 0;
+  const adapter = cardigannAdapter(provider, {
+    environment: { FLARESOLVERR_URL: "http://localhost:8191" },
+    validateTarget: async (hostname) => assert.equal(hostname, "indexer.example"),
+    fetchImpl: async (_url, options) => {
+      calls += 1;
+      assert.equal(JSON.parse(options.body).cmd, "request.get");
+      return new Response(JSON.stringify({ status: "ok", solution: {
+        url: "https://indexer.example/search?q=Sintel", status: 200,
+        response: '<article class="result"><span class="title">Sintel</span><a href="magnet:?xt=urn:btih:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa">Get</a></article>',
+      } }));
+    },
+  });
+  assert.equal((await adapter.search({ title: "Sintel", type: "movie" })).length, 1);
+  assert.equal(calls, 1);
 });
 
 test("Cardigann adapter supports JSON and XML result documents", async () => {

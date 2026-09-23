@@ -648,8 +648,8 @@ test("fresh Windows configuration leaves required provider credentials for brows
   const template = await readFile(new URL("../installer/windows/torplay.env", import.meta.url), "utf8");
   assert.doesNotMatch(template, /^TMDB_API_TOKEN=/m);
   assert.doesNotMatch(template, /^JACKETT_API_KEY=/m);
-  assert.match(template, /^JACKETT_MOVIE_INDEXERS=$/m);
-  assert.match(template, /^JACKETT_SHOW_INDEXERS=$/m);
+  assert.match(template, /^FLARESOLVERR_URL=$/m);
+  assert.doesNotMatch(template, /^JACKETT_(?:URL|MOVIE_INDEXERS|SHOW_INDEXERS)=/m);
   assert.doesNotMatch(template, /TORPLAY_(?:CONFIGURED_)?NATIVE_PROVIDERS/);
   assert.doesNotMatch(template, /DOCKER|COMPOSE|TORPLAY_MANAGED_JACKETT/i);
 });

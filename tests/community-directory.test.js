@@ -105,7 +105,7 @@ test("community selection uses complete import, compatibility, confirmation, dup
   try {
     await directory.list();
     assert.deepEqual(readCustomProviders(environment), []);
-    yaml = stringify({ ...definition, settings: [{ name: "challenge", type: "info_flaresolverr" }] });
+    yaml = stringify({ ...definition, login: { method: "post", path: "/login", captcha: { type: "image", selector: "img", input: "captcha" } } });
     await assert.rejects(directory.importEntry({ id: "zulu.yml", revision }), (error) => error.code === "CARDIGANN_UNSUPPORTED");
     yaml = "# retain full definition\n" + stringify(definition);
     const preview = await directory.importEntry({ id: "zulu.yml", revision });
@@ -147,11 +147,11 @@ test("directory API requires same-origin LAN access before any upstream request"
   } finally { communityDirectory.list = original; }
 });
 
-test("onboarding source availability respects the Jackett provider override", async () => {
+test("onboarding source availability respects the migrated Jackett provider override", async () => {
   const folder = await mkdtemp(path.join(os.tmpdir(), "torplay-onboarding-"));
   try {
-    const environment = { TORPLAY_CONFIG_PATH: path.join(folder, "config.env"), JACKETT_API_KEY: "configured" };
-    assert.equal((await settingsState({ environment })).torrentSources.jackettActive, true);
-    assert.equal((await settingsState({ environment: { ...environment, TORPLAY_SEARCH_PROVIDERS: "" } })).torrentSources.jackettActive, false);
+    const environment = { TORPLAY_CONFIG_PATH: path.join(folder, "config.env"), JACKETT_URL: "http://localhost:9117", JACKETT_API_KEY: "configured" };
+    assert.equal((await settingsState({ environment })).torrentSources.customActive, true);
+    assert.equal((await settingsState({ environment: { ...environment, TORPLAY_SEARCH_PROVIDERS: "" } })).torrentSources.customActive, false);
   } finally { await rm(folder, { recursive: true, force: true }); }
 });

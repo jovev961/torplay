@@ -53,7 +53,7 @@ The credential is stored only on the TorPlay computer. Provider settings can be 
 
 ### Add torrent sources
 
-After setup, open **Settings → Torrent Sources** and add a compatible third-party source. TorPlay does not include torrent indexers. You can configure a custom Torznab endpoint, import a compatible Cardigann definition, or use an independently operated Jackett instance. These services are not installed or managed by TorPlay. See [Torrent providers](torrent-providers.md) for details.
+After setup, open **Settings → Torrent Sources** and add a compatible third-party source. TorPlay does not include torrent indexers. You can configure a custom Torznab endpoint (including independently operated Jackett or Prowlarr) or import a compatible Cardigann definition. External services are not installed or managed by TorPlay. See [Torrent providers](torrent-providers.md) for details.
 
 ### Optional API services
 
@@ -64,7 +64,9 @@ These services enhance specific features but are not required for normal operati
 | OMDb | IMDb ratings on catalog cards | [OMDb API key](https://www.omdbapi.com/apikey.aspx) |
 | OpenSubtitles | Additional subtitle results | [OpenSubtitles API consumers](https://www.opensubtitles.com/en/consumers) |
 | SubDL | Additional subtitle results | [SubDL API panel](https://subdl.com/panel/api) |
-| Jackett | Optional external Torznab/indexer bridge | [Jackett project](https://github.com/Jackett/Jackett) |
+| FlareSolverr | Browser challenge handling for Cardigann definitions that require it | [FlareSolverr project](https://github.com/FlareSolverr/FlareSolverr) |
+
+Jackett remains available as an external custom Torznab source; see the [Jackett project](https://github.com/Jackett/Jackett).
 
 Add optional credentials from [http://torplay.local/settings](http://torplay.local/settings), the displayed LAN address, or `http://localhost/settings` on the TorPlay computer. Torrent and embedded subtitles continue to work without external subtitle keys.
 

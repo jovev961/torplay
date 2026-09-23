@@ -17,7 +17,7 @@ function setupRequest(providers, host = "localhost:3000") {
   });
 }
 
-test("setup validates both candidates before saving and returns no credentials", async () => {
+test("setup validates TMDB before saving and returns no credentials", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "torplay-setup-"));
   const filename = path.join(directory, "torplay.env");
   const previous = {
@@ -37,29 +37,25 @@ test("setup validates both candidates before saving and returns no credentials",
     globalThis.fetch = async (url) => String(url).includes("themoviedb")
       ? new Response("{}", { status: 401 })
       : new Response("<caps></caps>");
-    const providers = {
-      tmdb: { apiToken: "private-tmdb-token" },
-      jackett: { url: "http://localhost:9117", apiKey: "private-jackett-key" },
-    };
+    const providers = { tmdb: { apiToken: "private-tmdb-token" } };
     const rejected = await POST(setupRequest(providers));
     const rejectedBody = await rejected.json();
     assert.equal(rejected.status, 422);
     assert.equal(rejectedBody.ready, false);
     await assert.rejects(readFile(filename, "utf8"), { code: "ENOENT" });
 
-    globalThis.fetch = async (url) => String(url).includes("localhost:9117")
-      ? new Response("<caps></caps>")
-      : new Response("{}");
+    globalThis.fetch = async () => new Response("{}");
     const accepted = await POST(setupRequest(providers, "torplay.local"));
     const acceptedText = await accepted.text();
     const acceptedBody = JSON.parse(acceptedText);
     assert.equal(accepted.status, 200);
     assert.equal(acceptedBody.ready, true);
     assert.equal(acceptedText.includes("private-tmdb-token"), false);
-    assert.equal(acceptedText.includes("private-jackett-key"), false);
     const source = await readFile(filename, "utf8");
     assert.match(source, /^TMDB_API_TOKEN=private-tmdb-token$/m);
-    assert.match(source, /^JACKETT_API_KEY=private-jackett-key$/m);
+    assert.doesNotMatch(source, /^JACKETT_API_KEY=/m);
+    const obsolete = await POST(setupRequest({ ...providers, jackett: { apiKey: "old" } }));
+    assert.equal(obsolete.status, 400);
     delete process.env.JACKETT_API_KEY;
     delete process.env.JACKETT_URL;
     globalThis.fetch = async (url) => {

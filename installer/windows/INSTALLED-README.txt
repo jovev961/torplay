@@ -30,7 +30,7 @@ Persistent profiles and watch history:
   %LOCALAPPDATA%\TorPlay\data\torplay.db
 
 TorPlay does not include torrent indexers. Add a compatible third-party source in Settings.
-An independently operated Jackett instance can be connected through Settings.
+An independently operated Jackett or Prowlarr instance can be added as a custom Torznab source in Settings.
 
 Migration from the source-checkout runtime:
   1. Stop the old TorPlay runtime.

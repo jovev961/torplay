@@ -21,19 +21,18 @@ test("returns safe missing and unconfigured states without making requests", asy
 });
 
 test("validates configured providers without including credentials in results", async () => {
-  const secrets = ["tmdb-secret", "jackett-secret", "omdb-secret", "open-secret", "subdl-secret"];
+  const secrets = ["tmdb-secret", "omdb-secret", "open-secret", "subdl-secret"];
   const results = await validateSettingsProviders(undefined, {
     environment: {
       TMDB_API_TOKEN: secrets[0],
-      JACKETT_URL: "http://localhost:9117",
-      JACKETT_API_KEY: secrets[1],
-      OMDB_API_KEY: secrets[2],
-      OPENSUBTITLES_API_KEY: secrets[3],
-      SUBDL_API_KEY: secrets[4],
+      FLARESOLVERR_URL: "http://localhost:8191",
+      OMDB_API_KEY: secrets[1],
+      OPENSUBTITLES_API_KEY: secrets[2],
+      SUBDL_API_KEY: secrets[3],
     },
     fetchImpl: async (url) => {
       const value = String(url);
-      if (value.includes("jackett" ) || value.includes("localhost:9117")) return response("<caps></caps>");
+      if (value.includes("localhost:8191")) return response({ status: "ok", sessions: [] });
       if (value.includes("omdbapi")) return response({ Response: "True" });
       if (value.includes("subdl")) return response({ status: true });
       return response({ data: [] });

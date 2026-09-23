@@ -5,7 +5,7 @@ import { normalizeCandidate } from "../lib/search/contract.js";
 import { PROVIDER_RESULT_CACHE_TTL_MS, searchConfiguredProvider } from "../lib/search/provider.js";
 import { uniqueResults } from "../lib/search/processing.js";
 import { findAuthorizedSources } from "../lib/search/service.js";
-import { parseJackettXml } from "../lib/search/jackett.js";
+import { parseTorznabXml } from "../lib/search/torznab-xml.js";
 
 const hash = "0123456789012345678901234567890123456789";
 const context = { title: "Sintel", type: "movie" };
@@ -27,9 +27,9 @@ test("normalizes hash-only candidates and strips unknown provider payload", () =
   assert.equal(normalizeCandidate({ title: "v2 only", infoHash: "a".repeat(64) }, provider("native")), null);
 });
 
-test("Jackett and replacement-provider candidates pass through the same contract", async () => {
+test("Torznab and replacement-provider candidates pass through the same contract", async () => {
   const xml = `<rss><channel><item><title>Sintel</title><torznab:attr name="infohash" value="${hash}"/><torznab:attr name="seeders" value="2"/><torznab:attr name="peers" value="5"/></item></channel></rss>`;
-  for (const search of [async () => [candidate], async () => parseJackettXml(xml)]) {
+  for (const search of [async () => [candidate], async () => parseTorznabXml(xml)]) {
     const results = await searchConfiguredProvider(context, { ...quiet, providers: [provider("test", search)] });
     assert.equal(results[0].providerId, "test");
     assert.equal(results[0].infoHash, hash);
