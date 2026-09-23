@@ -14,12 +14,12 @@ async function request(url, body, method = "POST") {
   return result;
 }
 
-export default function DebridSettings({ canEdit }) {
+export default function DebridSettings({ canEdit, section = "playback" }) {
   const [config, setConfig] = useState(null);
   const [draft, setDraft] = useState(null);
   const [status, setStatus] = useState({});
   const [flow, setFlow] = useState(null);
-  const [key, setKey] = useState("");
+  const [keys, setKeys] = useState({ "real-debrid": "", torbox: "" });
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
 
@@ -45,6 +45,7 @@ export default function DebridSettings({ canEdit }) {
         if (cancelled) return;
         setConfig(result);
         setDraft({ mode: result.mode, priority: result.priority, localFallback: result.localFallback });
+        if (section !== "services") return;
         for (const [provider, details] of Object.entries(result.providers)) {
           if (!details.configured) continue;
           void request(`/api/settings/debrid/${provider}`, { action: "test" })
@@ -58,7 +59,7 @@ export default function DebridSettings({ canEdit }) {
       })
       .catch((error) => { if (!cancelled) setMessage(error.message); });
     return () => { cancelled = true; };
-  }, []);
+  }, [section]);
 
   useEffect(() => {
     if (!flow) return undefined;
@@ -95,7 +96,10 @@ export default function DebridSettings({ canEdit }) {
         setStatus((current) => ({ ...current, [provider]: "connecting" }));
       } else {
         setStatus((current) => ({ ...current, [provider]: result.status }));
-        if (action === "key") setKey("");
+        if (action === "key") {
+          setKeys((current) => ({ ...current, [provider]: "" }));
+          setFlow(null);
+        }
         if (["key", "disconnect"].includes(action)) await refresh();
       }
     } catch (error) {
@@ -111,7 +115,7 @@ export default function DebridSettings({ canEdit }) {
     try {
       setConfig((current) => ({ ...current, ...draft }));
       await request("/api/settings/debrid", draft, "PATCH");
-      setMessage("Debrid playback settings saved.");
+      setMessage("Debrid settings saved.");
     } catch (error) {
       setMessage(error.message);
       await refresh();
@@ -122,7 +126,7 @@ export default function DebridSettings({ canEdit }) {
 
   if (!draft || !config) return <p>Loading optional debrid settings…</p>;
   const second = draft.priority.find((id) => id !== draft.priority[0]);
-  return (
+  return section === "playback" ? (
     <div className={styles.layout}>
       <div className={styles.card}>
         <h3>Optional debrid playback</h3>
@@ -135,15 +139,6 @@ export default function DebridSettings({ canEdit }) {
             <option value="debrid-only">Debrid Only</option>
           </select>
         </label>
-        <label>Preferred provider
-          <select disabled={!canEdit || Boolean(busy)} value={draft.priority[0]}
-            onChange={(event) => setDraft({ ...draft, priority: [event.target.value,
-              event.target.value === "real-debrid" ? "torbox" : "real-debrid"] })}>
-            <option value="real-debrid">Real-Debrid</option>
-            <option value="torbox">TorBox</option>
-          </select>
-        </label>
-        <p>Fallback provider: {names[second]}</p>
         {draft.mode === "prefer-debrid" ? (
           <label className={styles.check}>
             <input type="checkbox" checked={draft.localFallback}
@@ -153,9 +148,28 @@ export default function DebridSettings({ canEdit }) {
           </label>
         ) : null}
         <button type="button" disabled={!canEdit || Boolean(busy)
-          || JSON.stringify(draft) === JSON.stringify({
-            mode: config.mode, priority: config.priority, localFallback: config.localFallback,
-          })} onClick={savePolicy}>Save playback method</button>
+          || (draft.mode === config.mode && draft.localFallback === config.localFallback)}
+          onClick={savePolicy}>Save playback method</button>
+      </div>
+      {message ? <p role="status">{message}</p> : null}
+    </div>
+  ) : (
+    <div className={styles.layout}>
+      <div className={styles.card}>
+        <h3>Preferred debrid provider</h3>
+        <p>When debrid playback is enabled, TorPlay checks this provider first.</p>
+        <label>Preferred provider
+          <select disabled={!canEdit || Boolean(busy)} value={draft.priority[0]}
+            onChange={(event) => setDraft({ ...draft, priority: [event.target.value,
+              event.target.value === "real-debrid" ? "torbox" : "real-debrid"] })}>
+            <option value="real-debrid">Real-Debrid</option>
+            <option value="torbox">TorBox</option>
+          </select>
+        </label>
+        <p>Next provider: {names[second]}</p>
+        <button type="button" disabled={!canEdit || Boolean(busy)
+          || draft.priority[0] === config.priority[0]}
+          onClick={savePolicy}>Save preferred provider</button>
       </div>
       <div className={styles.grid}>
         {Object.keys(names).map((provider) => (
@@ -183,14 +197,16 @@ export default function DebridSettings({ canEdit }) {
                   onClick={() => perform(provider, "disconnect")}>Disconnect</button>
               </div>
             ) : null}
-            {provider === "torbox" && canEdit ? (
+            {canEdit ? (
               <div className={styles.key}>
-                <label>Or connect with API key
-                  <input type="password" autoComplete="new-password" value={key}
-                    onChange={(event) => setKey(event.target.value)} />
+                <label>Or connect with {provider === "real-debrid" ? "private API token" : "API key"}
+                  <input type="password" autoComplete="new-password" value={keys[provider]}
+                    disabled={Boolean(busy) || Boolean(flow)}
+                    placeholder={config.providers[provider]?.configured ? "Leave blank to keep current credential" : ""}
+                    onChange={(event) => setKeys((current) => ({ ...current, [provider]: event.target.value }))} />
                 </label>
-                <button type="button" disabled={Boolean(busy) || !key.trim()}
-                  onClick={() => perform("torbox", "key", { apiKey: key })}>Save and test key</button>
+                <button type="button" disabled={Boolean(busy) || Boolean(flow) || !keys[provider].trim()}
+                  onClick={() => perform(provider, "key", { apiKey: keys[provider] })}>Save and test key</button>
               </div>
             ) : null}
           </div>
