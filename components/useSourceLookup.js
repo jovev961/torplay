@@ -54,6 +54,12 @@ export function torrentSessionPollDelay(session) {
 
 export function useSourceLookup() {
   const [results, setResults] = useState([]);
+  const [usenetResults, setUsenetResults] = useState([]);
+  const [usenetJobs, setUsenetJobs] = useState([]);
+  const [usenetJob, setUsenetJob] = useState(null);
+  const [usenetEnabled, setUsenetEnabled] = useState(false);
+  const [usenetPollFailures, setUsenetPollFailures] = useState(0);
+  const [mediaContext, setMediaContext] = useState(null);
   const [searching, setSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [startingId, setStartingId] = useState(null);
@@ -89,6 +95,50 @@ export function useSourceLookup() {
     for (const controller of pendingRequests.current) controller.abort();
     pendingRequests.current.clear();
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/settings/usenet", { cache: "no-store" })
+      .then((response) => response.ok ? response.json() : null)
+      .then((data) => { if (!cancelled) setUsenetEnabled(data?.enabled === true); })
+      .catch(() => {});
+    void fetch("/api/usenet/jobs", { cache: "no-store" })
+      .then((response) => response.ok ? response.json() : { jobs: [] })
+      .then((data) => { if (!cancelled) setUsenetJobs(data.jobs || []); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (!usenetJob?.id || ["ready", "failed", "cancelled", "timed-out"].includes(usenetJob.status)) return undefined;
+    const age = Date.now() - (usenetJob.createdAt || Date.now());
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      if (Date.now() - usenetJob.createdAt > 2 * 60 * 60 * 1000) {
+        if (!cancelled) setUsenetJob((current) => ({ ...current, status: "timed-out" }));
+        return;
+      }
+      try {
+        const next = await readJson(await fetch(`/api/usenet/jobs/${encodeURIComponent(usenetJob.id)}`, { cache: "no-store" }));
+        if (cancelled) return;
+        setUsenetPollFailures(0);
+        setError("");
+        setUsenetJob(next);
+        if (next.status === "ready" && !session) {
+          const playback = await readJson(await fetch(`/api/usenet/jobs/${encodeURIComponent(next.id)}`, { method: "POST" }));
+          if (!cancelled) setSession(playback);
+        }
+      } catch (pollError) {
+        if (!cancelled) {
+          setError(pollError.message);
+          setUsenetPollFailures((current) => Math.min(current + 1, 5));
+        }
+      }
+    }, age > 2 * 60 * 60 * 1000 ? 0 : Math.min(60_000,
+      (age < 2 * 60_000 ? 5_000 : age < 15 * 60_000 ? 15_000 : 30_000)
+      * 2 ** usenetPollFailures));
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [usenetJob, session, usenetPollFailures]);
 
   useEffect(() => {
     const pollDelay = torrentSessionPollDelay(session);
@@ -161,6 +211,8 @@ export function useSourceLookup() {
     setError("");
     setErrorCode("");
     setResults([]);
+    setUsenetResults([]);
+    setMediaContext(criteria);
     setSelectedFileId(null);
 
     const params = new URLSearchParams({ type: criteria.type, q: criteria.query });
@@ -174,6 +226,7 @@ export function useSourceLookup() {
       const response = await request(`/api/search?${params}`, { cache: "no-store" });
       const data = await readJson(response);
       setResults(data.results);
+      setUsenetResults(data.usenetResults || []);
     } catch (searchError) {
       if (searchError.name !== "AbortError") {
         setError(searchError.message);
@@ -182,6 +235,57 @@ export function useSourceLookup() {
     } finally {
       setSearching(false);
     }
+  }
+
+  async function startUsenet(resultId) {
+    setStartingId(resultId);
+    setError("");
+    try {
+      const job = await readJson(await request("/api/usenet/jobs", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resultId }),
+      }));
+      setUsenetJob(job);
+      setUsenetPollFailures(0);
+      setUsenetJobs((current) => [job, ...current.filter((item) => item.id !== job.id)]);
+      if (job.status === "ready") setSession(await readJson(await request(`/api/usenet/jobs/${encodeURIComponent(job.id)}`, { method: "POST" })));
+    } catch (startError) { setError(startError.message); }
+    finally { setStartingId(null); }
+  }
+
+  async function uploadNzb(file) {
+    setStartingId("upload");
+    setError("");
+    try {
+      const form = new FormData();
+      form.set("file", file);
+      if (mediaContext) form.set("mediaContext", JSON.stringify(mediaContext));
+      const job = await readJson(await request("/api/usenet/jobs", { method: "POST", body: form }));
+      setUsenetJob(job);
+      setUsenetPollFailures(0);
+      setUsenetJobs((current) => [job, ...current.filter((item) => item.id !== job.id)]);
+      if (job.status === "ready") setSession(await readJson(await request(`/api/usenet/jobs/${encodeURIComponent(job.id)}`, { method: "POST" })));
+    } catch (uploadError) { setError(uploadError.message); }
+    finally { setStartingId(null); }
+  }
+
+  async function resumeUsenet(id) {
+    try {
+      const next = await readJson(await request(`/api/usenet/jobs/${encodeURIComponent(id)}`, { cache: "no-store" }));
+      setUsenetJob(next);
+      setUsenetPollFailures(0);
+      if (next.status === "ready") {
+        setSession(await readJson(await request(`/api/usenet/jobs/${encodeURIComponent(id)}`, { method: "POST" })));
+      }
+    } catch (resumeError) { setError(resumeError.message); }
+  }
+
+  async function deleteUsenet(id) {
+    try {
+      await request(`/api/usenet/jobs/${encodeURIComponent(id)}`, { method: "DELETE" });
+      setUsenetJobs((current) => current.filter((item) => item.id !== id));
+      if (usenetJob?.id === id) { setUsenetJob(null); setSession(null); }
+    } catch (deleteError) { setError(deleteError.message); }
   }
 
   async function start(resultId) {
@@ -220,6 +324,10 @@ export function useSourceLookup() {
     errorCode,
     hasSearched,
     results,
+    usenetResults,
+    usenetJobs,
+    usenetJob,
+    usenetEnabled,
     searching,
     selectedFileId,
     session,
@@ -228,6 +336,10 @@ export function useSourceLookup() {
     adoptSession,
     setSelectedFileId,
     start,
+    startUsenet,
+    uploadNzb,
+    resumeUsenet,
+    deleteUsenet,
     stop,
   };
 }

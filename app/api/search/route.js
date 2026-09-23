@@ -1,4 +1,5 @@
 import { findAuthorizedSources } from "../../../lib/search/service.js";
+import { findUsenetSources } from "../../../lib/usenet/search.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,8 +31,14 @@ export async function GET(request) {
       season: options.type === "show" ? optionalInteger(options.season, "Season", { allowZero: true }) : null,
       episode: options.type === "show" ? optionalInteger(options.episode, "Episode") : null,
     };
-    const results = await findAuthorizedSources(mediaContext);
-    return Response.json({ results }, { headers: { "Cache-Control": "no-store" } });
+    const [torrents, usenet] = await Promise.allSettled([
+      findAuthorizedSources(mediaContext), findUsenetSources(mediaContext),
+    ]);
+    if (torrents.status === "rejected" && usenet.status === "rejected") throw torrents.reason;
+    const results = torrents.status === "fulfilled" ? torrents.value : [];
+    const usenetResults = usenet.status === "fulfilled" ? usenet.value : [];
+    if (!results.length && !usenetResults.length && torrents.status === "rejected") throw torrents.reason;
+    return Response.json({ results, usenetResults }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     const message = error.message || "Search failed.";
     const status = Number.isInteger(error.status) ? error.status : 502;
