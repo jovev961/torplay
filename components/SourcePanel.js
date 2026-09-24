@@ -261,7 +261,9 @@ export default function SourcePanel({
         <div className="notice">This source has no recognized video files.</div>
       ) : null}
       {unmatchedPack ? (
-        <div className="notice">No exact SxxExx filename matched. Choose the episode file manually.</div>
+        <div className="notice">{lookup.session.backend === "debrid"
+          ? <>No exact episode mapping was found. Map the file in <Link href="/debrid-library">Debrid Library</Link>.</>
+          : "No exact SxxExx filename matched. Choose the episode file manually."}</div>
       ) : null}
 
       {lookup.session?.files?.length > 0 ? (
@@ -303,7 +305,7 @@ export default function SourcePanel({
               <div className="videoPlaceholder">Choose a video file to begin.</div>
             )}
           </div>
-          {episode && episodeFiles.length > 1 ? (
+          {episode && lookup.session.backend !== "debrid" && episodeFiles.length > 1 ? (
             <div className="episodeFileList" aria-label="Episodes in this source">
               {episodeFiles.map(({ file, display }) => {
                 const active = selectedFile?.id === file.id;

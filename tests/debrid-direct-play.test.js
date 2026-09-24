@@ -2,22 +2,24 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createDatabase } from "../lib/database/sqlite.js";
 import { associateDebridItem, mapDebridEpisodeFile, rememberReadyResource,
-  resolveDirectDebridPlayback } from "../lib/debrid/library.js";
+  resolveDirectDebridPlayback, listReadyDebridEpisodes } from "../lib/debrid/library.js";
 import { findPlaybackSessionEpisode, getPlaybackMediaContext, stopPlayback } from "../lib/debrid/session.js";
+import { readyEpisodesForSeason } from "../lib/video/ready-episodes.js";
 
 const hash = "e".repeat(40);
 const show = { type: "show", tmdbId: 101, season: 1, episode: 1 };
 const baseConfig = { mode: "prefer-debrid", priority: ["real-debrid", "torbox"],
   credentials: { "real-debrid": { apiKey: "private" } } };
 
-function readyProvider({ id = "rd-pack", provider = "real-debrid", missing = false,
+function readyProvider({ id = "rd-pack", provider = "real-debrid", missing = false, infoHash = hash,
   filenames = ["Example.S01E01.mkv", "Example.S01E02.mkv"] } = {}) {
   const calls = { resources: 0, streams: [], submissions: 0, lists: 0 };
   const raw = provider === "real-debrid"
-    ? { id, hash, status: "downloaded", filename: "Example pack", links: ["https://host.example/1", "https://host.example/2"],
-      files: [1, 2].map((number) => ({ id: number, path: `/${filenames[number - 1]}`, bytes: 1000, selected: 1 })) }
-    : { id: Number(id), hash, name: "Example pack", download_present: true, download_finished: true,
-      files: [1, 2].map((number) => ({ id: number, name: filenames[number - 1], size: 1000 })) };
+    ? { id, hash: infoHash, status: "downloaded", filename: "Example pack",
+      links: filenames.map((_, index) => `https://host.example/${index + 1}`),
+      files: filenames.map((name, index) => ({ id: index + 1, path: `/${name}`, bytes: 1000, selected: 1 })) }
+    : { id: Number(id), hash: infoHash, name: "Example pack", download_present: true, download_finished: true,
+      files: filenames.map((name, index) => ({ id: index + 1, name, size: 1000 })) };
   return { calls,
     async getAccountInfo() { return { id: provider === "real-debrid" ? 1 : 2 }; },
     async getResource() {
@@ -161,5 +163,70 @@ test("deleted preferred resource falls through to the other provider and removes
     assert.equal(db.prepare("SELECT count(*) AS count FROM debrid_media_links WHERE provider = 'real-debrid'").get().count, 0);
     await stopPlayback(result.session.id);
     assert.deepEqual(await resolveDirectDebridPlayback({ ...show, tmdbId: 999 }, deps), { kind: "miss" });
+  } finally { db.close(); }
+});
+
+test("ready episode index filters seasons numerically without new provider reads on season switches", async () => {
+  const db = createDatabase(":memory:");
+  const rd = readyProvider({ filenames: [
+    "Example.S01E10.mkv", "Example.S02E03.mkv", "Example.S01E02.mkv",
+    "Example.S01E01.mkv", "Example.S01E11.mkv", "Example.S01E03.mkv",
+    "Example.S02E01.mkv", "Unknown.mkv",
+  ] });
+  const deps = dependencies(db, { "real-debrid": rd });
+  try {
+    await associateDebridItem("real-debrid", "rd-pack", show, deps);
+    const indexed = await listReadyDebridEpisodes(show.tmdbId, deps);
+    assert.equal(indexed.temporarilyUnavailable, false);
+    assert.deepEqual(readyEpisodesForSeason(indexed.episodes, 1).map((entry) => entry.episode),
+      [1, 2, 3, 10, 11]);
+    assert.deepEqual(readyEpisodesForSeason(indexed.episodes, 2).map((entry) => entry.episode), [1, 3]);
+    assert.deepEqual(readyEpisodesForSeason(indexed.episodes, 3), []);
+    assert.equal(indexed.episodes.length, 7);
+    const resourceReads = rd.calls.resources;
+    readyEpisodesForSeason(indexed.episodes, 1);
+    readyEpisodesForSeason(indexed.episodes, 2);
+    assert.equal(rd.calls.resources, resourceReads);
+    await listReadyDebridEpisodes(show.tmdbId, deps);
+    assert.equal(rd.calls.resources, resourceReads);
+    assert.equal(rd.calls.lists, 0);
+  } finally { db.close(); }
+});
+
+test("ready episode index honors preferred provider and includes manual and metadata mappings", async () => {
+  const db = createDatabase(":memory:");
+  const rd = readyProvider({ filenames: ["The First Story.mkv", "OP-2.mkv"] });
+  const tb = readyProvider({ id: "42", provider: "torbox", infoHash: "f".repeat(40) });
+  const config = { ...baseConfig, priority: ["torbox", "real-debrid"],
+    credentials: { ...baseConfig.credentials, torbox: { apiKey: "other-private" } } };
+  const deps = dependencies(db, { "real-debrid": rd, torbox: tb }, config);
+  try {
+    await associateDebridItem("real-debrid", "rd-pack", show, deps);
+    await mapDebridEpisodeFile("real-debrid", "rd-pack", "2", 1, 2, deps);
+    await associateDebridItem("torbox", "42", show, deps);
+    const indexed = await listReadyDebridEpisodes(show.tmdbId, deps);
+    assert.deepEqual(indexed.episodes.map((entry) => [entry.episode, entry.provider]),
+      [[1, "torbox"], [2, "torbox"]]);
+    assert.equal(db.prepare("SELECT source FROM episode_file_mappings WHERE info_hash = ? AND tmdb_id = ? AND season_number = 1 AND episode_number = 2")
+      .get(hash, show.tmdbId).source, "manual");
+  } finally { db.close(); }
+});
+
+test("ready episode index respects provider cooldown after HTTP 429", async () => {
+  const db = createDatabase(":memory:");
+  const rd = readyProvider();
+  const deps = dependencies(db, { "real-debrid": rd });
+  try {
+    await associateDebridItem("real-debrid", "rd-pack", show, deps);
+    rd.getResource = async () => {
+      rd.calls.resources += 1;
+      throw Object.assign(new Error("Rate limited"), {
+        code: "rate-limited", upstreamStatus: 429, retryAfter: "30",
+      });
+    };
+    assert.equal((await listReadyDebridEpisodes(show.tmdbId, deps)).temporarilyUnavailable, true);
+    const reads = rd.calls.resources;
+    assert.equal((await listReadyDebridEpisodes(show.tmdbId, deps)).temporarilyUnavailable, true);
+    assert.equal(rd.calls.resources, reads);
   } finally { db.close(); }
 });

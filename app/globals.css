@@ -1964,6 +1964,10 @@ a {
   overflow: hidden;
 }
 
+button.episodeFileChoice {
+  cursor: pointer;
+}
+
 .episodeFileChoice:hover,
 .episodeFileChoice:focus-within {
   border-color: #7b838c;
