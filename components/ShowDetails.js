@@ -204,6 +204,7 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
         return;
       }
       let ready = { session: result.session, fileId: result.fileId };
+      if (result.strategy === "debrid") pendingSessionRef.current = result.session;
       if (result.strategy === "new-torrent") {
         pendingSessionRef.current = result.session;
         ready = await pollPreparedSession(result.session, result.nextEpisode, controller.signal);
@@ -265,7 +266,7 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
       setSelectedEpisode(selected);
       setPlaybackIntent("start");
       setLaunchedEpisodeKey(`${prepared.nextEpisode.season}:${prepared.nextEpisode.number}`);
-      if (prepared.strategy === "new-torrent") {
+      if (["new-torrent", "debrid"].includes(prepared.strategy)) {
         pendingSessionRef.current = null;
         lookup.adoptSession(prepared.session, prepared.fileId);
       } else {

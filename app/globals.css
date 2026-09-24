@@ -2035,6 +2035,10 @@ a {
   overflow-wrap: anywhere;
 }
 
+.debridAssociationFields > label { display: grid; gap: 5px; }
+.debridAssociationFields input, .debridAssociationFields select { max-width: 100%; }
+.debridAssociationSearch { flex: 1 1 220px; }
+
 .episodeFileChoice.active {
   border-color: var(--accent);
   box-shadow: inset 3px 0 0 var(--accent);

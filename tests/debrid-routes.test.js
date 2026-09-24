@@ -5,6 +5,8 @@ import { POST as providerPost } from "../app/api/settings/debrid/[provider]/rout
 import { GET as libraryGet } from "../app/api/debrid/library/route.js";
 import { DELETE as libraryDelete } from "../app/api/debrid/library/[provider]/[id]/route.js";
 import { POST as libraryPlay } from "../app/api/debrid/library/[provider]/[id]/play/route.js";
+import { POST as associationPost } from "../app/api/debrid/library/[provider]/[id]/association/route.js";
+import { POST as directPlay } from "../app/api/playback/debrid/route.js";
 import { POST as torrentStart } from "../app/api/torrents/route.js";
 
 test("unknown playback sessions cannot proxy remote media", async () => {
@@ -68,4 +70,14 @@ test("library account data and destructive actions reject public or foreign orig
       "content-type": "application/json" }, body: JSON.stringify({ resultId: "none" }),
   }));
   assert.equal(foreignStart.status, 403);
+  const foreignAssociation = await associationPost(new Request("http://localhost/api/debrid/library/torbox/7/association", {
+    method: "POST", headers: { host: "localhost", origin: "https://attacker.example",
+      "content-type": "application/json" }, body: JSON.stringify({ type: "show", tmdbId: 1, season: 1 }),
+  }), params);
+  assert.equal(foreignAssociation.status, 403);
+  const foreignDirectPlay = await directPlay(new Request("http://localhost/api/playback/debrid", {
+    method: "POST", headers: { host: "localhost", origin: "https://attacker.example",
+      "content-type": "application/json" }, body: JSON.stringify({ type: "show", tmdbId: 1, season: 1, episode: 2 }),
+  }));
+  assert.equal(foreignDirectPlay.status, 403);
 });
