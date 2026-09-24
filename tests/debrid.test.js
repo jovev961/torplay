@@ -13,7 +13,10 @@ import {
 import { providerRequest } from "../lib/debrid/http.js";
 import { DebridError } from "../lib/debrid/http.js";
 import { connectDebridApiKey, disconnectDebrid } from "../lib/debrid/auth.js";
-import { getPlaybackSession, makeDebridProvider, startPlaybackSource, stopPlayback } from "../lib/debrid/session.js";
+import {
+  getPlaybackSession, makeDebridProvider, resolveRemoteUrl, startDebridResourcePlayback,
+  startPlaybackSource, stopPlayback,
+} from "../lib/debrid/session.js";
 import { findEpisodeFile, findLargestFile } from "../lib/video/episode.js";
 
 const hash = "a".repeat(40);
@@ -51,6 +54,7 @@ test("debrid policy defaults to local and redacts credentials", async () => {
 
 test("Real-Debrid reuses only a completed account torrent and validates the exact file link", async () => {
   const calls = [];
+  const remoteValues = [];
   const provider = new RealDebridProvider({
     accessToken: "access", refreshToken: "refresh", clientId: "client",
     clientSecret: "client-secret", expiresAt: Date.now() + 60_000,
@@ -66,7 +70,9 @@ test("Real-Debrid reuses only a completed account torrent and validates the exac
         })), links: ["https://host.invalid/one", "https://host.invalid/three"],
       });
       if (route.endsWith("/unrestrict/link")) {
-        const link = new URLSearchParams(options.body).get("link");
+        const form = new URLSearchParams(options.body);
+        const link = form.get("link");
+        remoteValues.push(form.get("remote"));
         return response(link?.endsWith("/three")
           ? { filename: "Show.S01E03.mkv", filesize: 1_000_000, download: "https://cdn.example/video" }
           : { filename: "Show.S01E01.mkv", filesize: 1_000_000, download: "https://cdn.example/one" });
@@ -82,8 +88,63 @@ test("Real-Debrid reuses only a completed account torrent and validates the exac
   assert.equal(selected.providerId, "3");
   const stream = await provider.resolveStream({}, selected, availability);
   assert.equal(stream.url, "https://cdn.example/video");
+  const remoteStream = await provider.resolveStream({}, selected, availability, { remote: true });
+  assert.equal(remoteStream.url, "https://cdn.example/video");
+  assert.deepEqual(remoteValues, [null, null, "1", "1"]);
   assert.equal(stream.resource.owned, false);
   assert.equal(calls.some((route) => route.includes("addMagnet") || route.includes("selectFiles")), false);
+});
+
+test("Real-Debrid library playback retries a rejected link with remote traffic", async () => {
+  const remoteValues = [];
+  const provider = {
+    async resolveStream(_torrent, selection, _availability, options = {}) {
+      remoteValues.push(options.remote === true);
+      return {
+        url: options.remote ? "https://cdn.example/remote" : "https://cdn.example/normal",
+        resource: { id: "ready", owned: false },
+      };
+    },
+  };
+  const rejected = new DebridError("remote-stream-unavailable", "Rejected");
+  rejected.upstreamStatus = 451;
+  const session = await startDebridResourcePlayback({
+    providerId: "real-debrid", provider, resourceId: "ready",
+    availability: { files: [episodeFiles[2]] }, selection: episodeFiles[2],
+  }, {
+    probe: async (url) => {
+      if (url.endsWith("/normal")) throw rejected;
+    },
+  });
+  assert.deepEqual(remoteValues, [false, true]);
+  assert.equal(session.status, "ready");
+  await stopPlayback(session.id);
+});
+
+test("simultaneous Real-Debrid range failures share one remote URL refresh", async () => {
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const remoteValues = [];
+  const file = episodeFiles[2];
+  const session = {
+    providerId: "real-debrid", torrent: { id: "ready" }, availability: { files: [file] },
+    streamUrls: new Map([[file.providerId, "https://cdn.example/old"]]),
+    streamUrlRefreshes: new Map(),
+    provider: {
+      async resolveStream(_torrent, _selection, _availability, options) {
+        remoteValues.push(options.remote);
+        await gate;
+        return { url: "https://cdn.example/refreshed" };
+      },
+    },
+  };
+  const first = resolveRemoteUrl(session, file, true, "https://cdn.example/old");
+  const second = resolveRemoteUrl(session, file, true, "https://cdn.example/old");
+  release();
+  assert.deepEqual(await Promise.all([first, second]), [
+    "https://cdn.example/refreshed", "https://cdn.example/refreshed",
+  ]);
+  assert.deepEqual(remoteValues, [true]);
 });
 
 test("Real-Debrid treats an empty account as a cache miss without requesting page 1", async () => {

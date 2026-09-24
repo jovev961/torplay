@@ -14,6 +14,9 @@ export async function POST(request, context) {
       headers: { "Cache-Control": "no-store" },
     });
   } catch (error) {
-    return Response.json({ error: error.message }, { status: error.status || 422 });
+    return Response.json({
+      code: error.code || "DEBRID_PLAYBACK_FAILED",
+      error: error.message,
+    }, { status: error.status || 422 });
   }
 }
