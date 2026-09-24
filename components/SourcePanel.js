@@ -1,13 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { findEpisodeFile, findLargestFile } from "../lib/video/episode.js";
 import { episodeFileCardModel, episodeFilePresentation, formatFileSize } from "../lib/video/episode-display.js";
 import VideoPlayer from "./VideoPlayer.js";
 
 function formatSpeed(value) {
   return Number.isFinite(value) && value > 0 ? `${formatFileSize(value)}/s` : "0 B/s";
+}
+
+function providerName(id) {
+  return id === "torbox" ? "TorBox" : "Real-Debrid";
 }
 
 export default function SourcePanel({
@@ -17,10 +21,15 @@ export default function SourcePanel({
   episode = null,
   episodeChoices = [],
   playback = {},
+  onSourceReset = null,
 }) {
   const [downloadFileIds, setDownloadFileIds] = useState(null);
   const [requestedDownloadFileId, setRequestedDownloadFileId] = useState(null);
   const [expandedFileId, setExpandedFileId] = useState(null);
+  const choiceRef = useRef(null);
+  useEffect(() => {
+    if (lookup.debridChoice?.resultId) choiceRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [lookup.debridChoice?.resultId]);
   const reviewId = lookup.debridJob?.resourceId;
   const selectedDownloadIds = downloadFileIds && downloadFileIds.resourceId === reviewId
     ? downloadFileIds.ids : null;
@@ -56,9 +65,20 @@ export default function SourcePanel({
           <h2 id="source-heading">{heading}</h2>
         </div>
         {lookup.session ? (
-          <button className="sourceStopButton" type="button" onClick={lookup.stop}>
-            {lookup.session.backend === "debrid" ? "Stop playback" : "Stop & clean up"}
-          </button>
+          <div className="sourceHeadingActions">
+            <button className="secondaryButton" type="button" onClick={() => void (async () => {
+              await onSourceReset?.();
+              await lookup.changeSource();
+            })()}>
+              Change source
+            </button>
+            <button className="sourceStopButton" type="button" onClick={() => void (async () => {
+              await onSourceReset?.();
+              await lookup.stop();
+            })()}>
+              {lookup.session.backend === "debrid" ? "Stop playback" : "Stop & clean up"}
+            </button>
+          </div>
         ) : null}
       </div>
 
@@ -68,12 +88,29 @@ export default function SourcePanel({
         </div>
       ) : lookup.error ? <div className="notice error" role="alert">{lookup.error}</div> : null}
       {lookup.searching ? <div className="notice">Searching sources…</div> : null}
+      {!lookup.session && lookup.readySources?.length > 0 ? (
+        <div className="readySourceResults" aria-label="Ready Debrid sources">
+          <div><span className="eyebrow">Ready to watch</span><p>Choose a ready provider source, or pick a torrent below.</p></div>
+          {lookup.readySources.map((source) => (
+            <article className="readySource" key={`${source.provider}:${source.resourceId}`}>
+              <div><strong>{source.name || playerTitle}</strong><span>Ready on {providerName(source.provider)}</span></div>
+              <button className="primaryButton compact" type="button" disabled={lookup.startingId !== null}
+                onClick={() => void lookup.startReadySource(source)}>
+                {lookup.startingId === `library:${source.provider}:${source.resourceId}` ? "Opening…" : `Watch with ${providerName(source.provider)}`}
+              </button>
+            </article>
+          ))}
+        </div>
+      ) : null}
+      {!lookup.session && lookup.readyUnavailable ? <div className="notice" role="status">
+        A Debrid provider could not be checked right now. Torrent choices are still available.
+      </div> : null}
       {lookup.debridChoice && !lookup.session && (!lookup.debridJob || lookup.debridJob.status === "failed") ? (
-        <div className="debridChoice" role="group" aria-label="Choose how to watch">
+        <div className="debridChoice" role="group" aria-label="Choose how to watch" ref={choiceRef}>
           <div className="debridChoiceIntro">
             <span className="eyebrow">Choose how to watch</span>
-            <h3>This release is not ready on your debrid services.</h3>
-            <p>Watch from torrent peers now, or let a connected provider prepare it for later.</p>
+            <h3>{lookup.results.find((result) => result.id === lookup.debridChoice.resultId)?.title || "Selected torrent"}</h3>
+            <p>Pick a ready provider, prepare this torrent with a provider, or stream from torrent peers.</p>
           </div>
           {lookup.debridChoice.error ? <p className="debridChoiceError" role="alert">{lookup.debridChoice.error}</p> : null}
           {!lookup.debridChoice.localAllowed && !lookup.debridChoice.providers.length
@@ -87,22 +124,29 @@ export default function SourcePanel({
             {lookup.debridChoice.providers.map((provider) => (
               <div className="debridChoiceOption" key={provider}>
                 <div>
-                  <h4>Download with {provider === "torbox" ? "TorBox" : "Real-Debrid"}</h4>
-                  <p>Prepare this release in your provider account. You can leave this page while it downloads.</p>
+                  <h4>{providerName(provider)}</h4>
+                  <p className={lookup.debridChoice.availability?.[provider] === "ready" ? "sourceReady" : ""}>
+                    {lookup.debridChoice.availability?.[provider] === "ready" ? "Ready to watch this movie or episode."
+                      : lookup.debridChoice.availability?.[provider] === "not-ready" ? "Not ready yet. Prepare it in your account."
+                        : "Could not confirm readiness. You can ask this provider to prepare it."}
+                  </p>
                 </div>
-                {provider === "real-debrid" && lookup.debridChoice.seasonPack
+                {lookup.debridChoice.availability?.[provider] !== "ready" && provider === "real-debrid" && lookup.debridChoice.seasonPack
                   ? <p className="debridChoiceHint">Review the pack&apos;s video files before Real-Debrid starts downloading them.</p> : null}
-                {provider === "torbox" && lookup.debridChoice.seasonPack
+                {lookup.debridChoice.availability?.[provider] !== "ready" && provider === "torbox" && lookup.debridChoice.seasonPack
                   ? <p className="debridChoiceHint">TorBox downloads the pack as one resource. You can choose an episode file when it is ready.</p> : null}
-                <button className="debridChoiceSecondary" type="button" disabled={lookup.startingId !== null}
+                <button className={lookup.debridChoice.availability?.[provider] === "ready" ? "primaryButton compact" : "debridChoiceSecondary"}
+                  type="button" disabled={lookup.startingId !== null}
                   onClick={() => {
-                    if (provider === "torbox" && lookup.debridChoice.seasonPack
+                    const ready = lookup.debridChoice.availability?.[provider] === "ready";
+                    if (!ready && provider === "torbox" && lookup.debridChoice.seasonPack
                       && !window.confirm("TorBox may download this entire pack. Continue?")) return;
-                    lookup.start(lookup.debridChoice.resultId, "remote", provider,
+                    lookup.start(lookup.debridChoice.resultId, ready ? "ready" : "remote", provider,
                       provider === "real-debrid" && lookup.debridChoice.seasonPack ? "all" : "episode",
                       provider === "torbox" && lookup.debridChoice.seasonPack);
                   }}>
-                  Download with {provider === "torbox" ? "TorBox" : "Real-Debrid"}
+                  {lookup.debridChoice.availability?.[provider] === "ready"
+                    ? `Watch with ${providerName(provider)}` : `Prepare with ${providerName(provider)}`}
                 </button>
               </div>
             ))}
@@ -148,8 +192,8 @@ export default function SourcePanel({
           {lookup.debridChoice?.localAllowed ? <button type="button" onClick={() => lookup.start(lookup.debridChoice.resultId, "local")}>Watch Now with TorPlay instead</button> : null}
         </div>
       ) : null}
-      {!lookup.session && !lookup.searching && lookup.hasSearched && lookup.results.length === 0
-        && !lookup.usenetResults?.length && !lookup.error ? (
+      {!lookup.session && !lookup.searching && !lookup.readyLoading && lookup.hasSearched && lookup.results.length === 0
+        && !lookup.usenetResults?.length && !lookup.readySources?.length && !lookup.error ? (
         <div className="notice">No usable authorized sources were found.</div>
       ) : null}
 
@@ -157,7 +201,7 @@ export default function SourcePanel({
         <div className="sourceResults" aria-live="polite">
           <h3>Torrents</h3>
           {lookup.results.map((result) => (
-            <article className="sourceResult" key={result.id}>
+            <article className={lookup.debridChoice?.resultId === result.id ? "sourceResult selected" : "sourceResult"} key={result.id}>
               <div>
                 <h3>{result.title}</h3>
                 <div className="metadata">
@@ -171,16 +215,23 @@ export default function SourcePanel({
                     Magnet: {result.hasMagnet ? "Yes" : "No"}
                   </span>
                 </div>
+                <div className="sourceAvailability">
+                  {Object.entries(lookup.torrentAvailability?.[result.id]?.availability || {}).map(([provider, status]) => (
+                    <span className={status === "ready" ? "sourceReady" : status === "not-ready" ? "sourceNotReady" : "sourceUnknown"}
+                      key={provider}>{providerName(provider)}: {status === "ready" ? "Ready" : status === "not-ready" ? "Not ready" : "Could not check"}</span>
+                  ))}
+                  {lookup.availabilityChecking && !lookup.torrentAvailability?.[result.id]
+                    ? <span className="sourceUnknown">Checking Debrid…</span> : null}
+                </div>
               </div>
               <button
                 className="primaryButton compact"
                 type="button"
                 disabled={!result.canStart || lookup.startingId !== null}
-                onClick={() => lookup.start(result.id)}
+                onClick={() => lookup.selectResult(result.id)}
               >
                 {lookup.startingId === result.id
-                  ? "Resolving playback…"
-                  : result.verification === "verified" ? "Use source" : "Verify & use"}
+                  ? "Checking torrent…" : "Choose torrent"}
               </button>
             </article>
           ))}

@@ -470,6 +470,26 @@ test("resolver continues after an unavailable provider and obeys reversed priori
   await stopPlayback(session.id);
 });
 
+test("explicit ready choice never switches provider or falls back to local playback", async () => {
+  const calls = [];
+  const source = { magnet: `magnet:?xt=urn:btih:${"f".repeat(40)}`, mediaContext: context };
+  const config = { mode: "prefer-debrid", priority: ["real-debrid", "torbox"],
+    localFallback: true, credentials: { "real-debrid": { apiKey: "test" }, torbox: { apiKey: "test" } } };
+  await assert.rejects(startPlaybackSource(source, {
+    action: "ready", remoteProvider: "real-debrid", config,
+    providerFactory: (id) => ({
+      async checkAvailability() { calls.push(id); return { status: id === "torbox" ? "available" : "miss", files: episodeFiles }; },
+    }),
+    startLocal: async () => { calls.push("local"); return { id: "wrong" }; },
+  }), (error) => error.code === "not-ready");
+  assert.deepEqual(calls, ["real-debrid"]);
+  await assert.rejects(startPlaybackSource({}, {
+    action: "ready", remoteProvider: "real-debrid", config,
+    startLocal: async () => { calls.push("local"); return { id: "wrong" }; },
+  }));
+  assert.deepEqual(calls, ["real-debrid"]);
+});
+
 test("two cache misses ask by default; explicit local choice never submits remotely", async () => {
   const source = {
     magnet: `magnet:?xt=urn:btih:${"c".repeat(40)}`, mediaContext: context,

@@ -72,6 +72,7 @@ test("active debrid playback hides the empty search notice and shows a clear sto
     error: "", errorCode: "", searching: false, hasSearched: true, usenetEnabled: false };
   const active = renderToStaticMarkup(createElement(SourcePanel, { lookup, heading: "Episode" }));
   assert.match(active, /class="sourceStopButton"[^>]*>Stop playback<\/button>/);
+  assert.match(active, /Change source/);
   assert.match(active, /Ready through Real-Debrid/);
   assert.doesNotMatch(active, /No usable authorized sources were found/);
 
@@ -86,4 +87,32 @@ test("active debrid playback hides the empty search notice and shows a clear sto
   assert.match(automatic, /Buffering torrent data, probing codecs, and preparing playback/);
   assert.doesNotMatch(automatic, /Prepare &amp; play|Prepare & play/);
   assert.match(active, /Prepare &amp; play/);
+});
+
+test("source panel offers ready library playback and shows torrent provider status before selection", async () => {
+  const built = await build({
+    entryPoints: [path.resolve("components/SourcePanel.js")],
+    bundle: true, platform: "node", format: "cjs", write: false,
+    jsx: "automatic", loader: { ".js": "jsx" },
+    external: ["react", "react-dom", "next/*"],
+  });
+  const loadedModule = { exports: {} };
+  new Function("require", "module", "exports", built.outputFiles[0].text)(
+    createRequire(import.meta.url), loadedModule, loadedModule.exports,
+  );
+  const html = renderToStaticMarkup(createElement(loadedModule.exports.default, {
+    heading: "Sources", lookup: {
+      session: null, hasSearched: true, searching: false, startingId: null,
+      results: [{ id: "torrent-1", title: "Show S01", canStart: true, indexer: "Index",
+        size: 1000, seeders: 4, verification: "verified", hasMagnet: true }],
+      readySources: [{ provider: "real-debrid", resourceId: "ready-1", name: "Show pack" }],
+      torrentAvailability: { "torrent-1": { availability: { "real-debrid": "ready", torbox: "not-ready" } } },
+      usenetResults: [], usenetJobs: [], error: "", errorCode: "", usenetEnabled: false,
+    },
+  }));
+  assert.match(html, /Watch with Real-Debrid/);
+  assert.match(html, /Real-Debrid: Ready/);
+  assert.match(html, /TorBox: Not ready/);
+  assert.match(html, /Choose torrent/);
+  assert.doesNotMatch(html, /Prepare &amp; play/);
 });

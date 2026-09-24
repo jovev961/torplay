@@ -4,7 +4,7 @@ import Image from "next/image";
 import { useEffect, useEffectEvent, useMemo, useReducer, useRef, useState } from "react";
 import SourcePanel from "./SourcePanel.js";
 import ReadyEpisodes from "./ReadyEpisodes.js";
-import { releaseTorrentSession, useSourceLookup } from "./useSourceLookup.js";
+import { useSourceLookup } from "./useSourceLookup.js";
 import useSavedProgress from "./useSavedProgress.js";
 import { useProfile } from "./ProfileProvider.js";
 import { formatPlaybackTime } from "../lib/history/presentation.js";
@@ -40,7 +40,6 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
   const [readyUnavailable, setReadyUnavailable] = useState(false);
   const lookup = useSourceLookup();
   const playbackRef = useRef(null);
-  const pendingSessionRef = useRef(null);
   const autoplayAbortRef = useRef(null);
   const preparingNextRef = useRef(false);
   const advancingRef = useRef(false);
@@ -102,9 +101,6 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
 
   useEffect(() => () => {
     autoplayAbortRef.current?.abort();
-    if (pendingSessionRef.current) {
-      void releaseTorrentSession(pendingSessionRef.current.id).catch(() => {});
-    }
   }, []);
 
   useEffect(() => {
@@ -114,10 +110,6 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
   async function clearAutoplay(nextPhase = "reset") {
     autoplayAbortRef.current?.abort();
     autoplayAbortRef.current = null;
-    if (pendingSessionRef.current) {
-      await releaseTorrentSession(pendingSessionRef.current.id).catch(() => {});
-      pendingSessionRef.current = null;
-    }
     preparingNextRef.current = false;
     advancingRef.current = false;
     dispatchAutoplay({ type: nextPhase });
@@ -189,38 +181,6 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
     return readJson(response);
   }
 
-  async function pollPreparedSession(initialSession, nextEpisode, signal) {
-    let current = initialSession;
-    for (let attempt = 0; attempt < 120; attempt += 1) {
-      if (current.status === "ready") {
-        const file = current.files.find((entry) => entry.id === current.suggestedFileId)
-          || findEpisodeFile(current.files, nextEpisode.season, nextEpisode.number, {
-          allowSingleFileFallback: false,
-        });
-        if (!file) throw new Error("The prepared torrent does not contain the next episode.");
-        return { session: current, fileId: file.id };
-      }
-      if (current.status === "error") throw new Error(current.error || "The next source could not start.");
-      await new Promise((resolve, reject) => {
-        const finish = () => {
-          signal.removeEventListener("abort", abort);
-          resolve();
-        };
-        const timer = setTimeout(finish, 1_000);
-        const abort = () => {
-          clearTimeout(timer);
-          signal.removeEventListener("abort", abort);
-          reject(new DOMException("Aborted", "AbortError"));
-        };
-        if (signal.aborted) return abort();
-        signal.addEventListener("abort", abort, { once: true });
-      });
-      const response = await fetch(`/api/torrents/${encodeURIComponent(current.id)}`, { cache: "no-store", signal });
-      current = await readJson(response);
-    }
-    throw new Error("The next source did not become ready in time.");
-  }
-
   async function prepareNextEpisode(endReached = false) {
     if (!lookup.session?.id || autoplay.phase !== "idle" || preparingNextRef.current) {
       if (endReached) dispatchAutoplay({ type: "ended" });
@@ -248,14 +208,7 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
         dispatchAutoplay({ type: "manual", payload: result });
         return;
       }
-      let ready = { session: result.session, fileId: result.fileId };
-      if (result.strategy === "debrid") pendingSessionRef.current = result.session;
-      if (result.strategy === "new-torrent") {
-        pendingSessionRef.current = result.session;
-        ready = await pollPreparedSession(result.session, result.nextEpisode, controller.signal);
-        pendingSessionRef.current = ready.session;
-      }
-      dispatchAutoplay({ type: "ready", payload: { ...result, ...ready } });
+      dispatchAutoplay({ type: "ready", payload: result });
     } catch (error) {
       if (error.name !== "AbortError") {
         dispatchAutoplay({ type: "manual", payload: { error: error.message, nextEpisode: resolvedEpisode } });
@@ -293,19 +246,17 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
     const prepared = autoplay;
     try {
       const { nextSeason, selected } = await resolveEpisodeDetails(prepared.nextEpisode);
-      if (prepared.strategy === "reuse") {
-        const response = await fetch("/api/playback/next-episode", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "advance",
-            sessionId: lookup.session.id,
-            season: prepared.nextEpisode.season,
-            episode: prepared.nextEpisode.number,
-          }),
-        });
-        await readJson(response);
-      }
+      const response = await fetch("/api/playback/next-episode", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "advance",
+          sessionId: lookup.session.id,
+          season: prepared.nextEpisode.season,
+          episode: prepared.nextEpisode.number,
+        }),
+      });
+      await readJson(response);
 
       setSeason(nextSeason);
       setPlayingSeason(nextSeason);
@@ -314,12 +265,7 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
       setPlaybackIntent("start");
       setLaunchedEpisodeKey(`${prepared.nextEpisode.season}:${prepared.nextEpisode.number}`);
       setAutoStartEpisodeKey(`${prepared.nextEpisode.season}:${prepared.nextEpisode.number}`);
-      if (["new-torrent", "debrid"].includes(prepared.strategy)) {
-        pendingSessionRef.current = null;
-        lookup.adoptSession(prepared.session, prepared.fileId);
-      } else {
-        lookup.setSelectedFileId(prepared.fileId);
-      }
+      lookup.setSelectedFileId(prepared.fileId);
       advancingRef.current = false;
       dispatchAutoplay({ type: "reset" });
     } catch (error) {
@@ -383,6 +329,7 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
                 number: item.number,
                 title: item.title,
               }))}
+              onSourceReset={() => clearAutoplay()}
               playback={{
                 profileId: activeProfile?.id,
                 media,
@@ -432,7 +379,7 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
       ) : null}
       {autoplay.phase === "manual" ? (
         <div className="nextEpisodePrompt notice error">
-          <p>Could not automatically find a playable source{autoplay.nextEpisode ? ` for ${episodeCode(autoplay.nextEpisode.season, autoplay.nextEpisode.number)}` : ""}. {autoplay.error || ""}</p>
+          <p>Choose a source{autoplay.nextEpisode ? ` for ${episodeCode(autoplay.nextEpisode.season, autoplay.nextEpisode.number)}` : ""}. {autoplay.error || ""}</p>
           <div>{autoplay.nextEpisode ? <button className="primaryButton compact" type="button" onClick={() => void chooseNextSource()}>Choose Source</button> : null}<button className="secondaryButton" type="button" onClick={() => void cancelAutoplay()}>Back to Show</button></div>
         </div>
       ) : null}
