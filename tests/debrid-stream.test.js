@@ -91,16 +91,16 @@ test("invalid upstream range fails before returning media bytes", async () => {
       resolveImpl,
       requestImpl: mockRequest(200, {}, "full media"),
     },
-  ), /invalid media range/);
+  ), /byte ranges/);
 });
 
-test("expired media URL is resolved once more before returning the requested range", async () => {
+test("HTTP 451 media URL is resolved once more before returning the requested range", async () => {
   let attempts = 0;
   const resolved = [];
   const requestImpl = (url, options, callback) => {
     attempts += 1;
     return mockRequest(
-      attempts === 1 ? 403 : 206,
+      attempts === 1 ? 451 : 206,
       attempts === 1 ? {} : { "content-range": "bytes 2-4/10" },
       attempts === 1 ? "" : "cde",
     )(url, options, callback);
@@ -115,6 +115,48 @@ test("expired media URL is resolved once more before returning the requested ran
     { resolveImpl, requestImpl },
   );
   assert.equal(await response.text(), "cde");
+  assert.deepEqual(resolved, [false, true]);
+});
+
+test("remote transport failure refreshes the URL once", async () => {
+  let attempts = 0;
+  const resolved = [];
+  const requestImpl = (url, options, callback) => {
+    attempts += 1;
+    if (attempts > 1) {
+      return mockRequest(206, { "content-range": "bytes 2-4/10" }, "cde")(
+        url, options, callback);
+    }
+    const request = new EventEmitter();
+    request.end = () => queueMicrotask(() => request.emit("error", new Error("connection closed")));
+    request.destroy = () => {};
+    return request;
+  };
+  const response = await proxyRemoteFile(
+    new Request("https://torplay.local/media", { headers: { Range: "bytes=2-4" } }),
+    file,
+    async (force) => {
+      resolved.push(force);
+      return "https://cdn.example/file";
+    },
+    { resolveImpl, requestImpl },
+  );
+  assert.equal(await response.text(), "cde");
+  assert.deepEqual(resolved, [false, true]);
+});
+
+test("a repeated HTTP 451 returns an actionable provider error after one refresh", async () => {
+  const resolved = [];
+  await assert.rejects(proxyRemoteFile(
+    new Request("https://torplay.local/media", { headers: { Range: "bytes=2-4" } }),
+    file,
+    async (force) => {
+      resolved.push(force);
+      return "https://cdn.example/file";
+    },
+    { resolveImpl, requestImpl: mockRequest(451, {}, "") },
+  ), (error) => error.code === "remote-stream-unavailable"
+    && error.upstreamStatus === 451 && /HTTP 451/.test(error.message));
   assert.deepEqual(resolved, [false, true]);
 });
 

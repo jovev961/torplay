@@ -38,9 +38,13 @@ export async function streamVideoFile(request, match, includeBody = true) {
       try {
         return await proxyRemoteFile(new Request(request.url, {
           method: "HEAD", headers: request.headers, signal: request.signal,
-        }), match.file, (force) => resolveRemoteUrl(match.session, match.file, force));
-      } catch {
-        return Response.json({ code: "REMOTE_STREAM_UNAVAILABLE", error: "The remote stream is unavailable." }, { status: 502 });
+        }), match.file, (force, previousUrl) => resolveRemoteUrl(
+          match.session, match.file, force, previousUrl));
+      } catch (error) {
+        return Response.json({
+          code: error.code || "REMOTE_STREAM_UNAVAILABLE",
+          error: error.message || "The remote stream is unavailable.",
+        }, { status: error.status || 502 });
       }
     }
     const finish = beginStream(match.session);
@@ -53,7 +57,8 @@ export async function streamVideoFile(request, match, includeBody = true) {
     });
     try {
       const response = await proxyRemoteFile(proxyRequest, match.file,
-        (force) => resolveRemoteUrl(match.session, match.file, force), {
+        (force, previousUrl) => resolveRemoteUrl(
+          match.session, match.file, force, previousUrl), {
           onClose: () => {
             finish();
             match.session.activeControllers.delete(controller);
@@ -64,10 +69,13 @@ export async function streamVideoFile(request, match, includeBody = true) {
         match.session.activeControllers.delete(controller);
       }
       return response;
-    } catch {
+    } catch (error) {
       finish();
       match.session.activeControllers.delete(controller);
-      return Response.json({ code: "REMOTE_STREAM_UNAVAILABLE", error: "The remote stream is unavailable." }, { status: 502 });
+      return Response.json({
+        code: error.code || "REMOTE_STREAM_UNAVAILABLE",
+        error: error.message || "The remote stream is unavailable.",
+      }, { status: error.status || 502 });
     }
   }
 
