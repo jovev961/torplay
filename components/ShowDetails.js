@@ -34,6 +34,7 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
   });
   const [playbackIntent, setPlaybackIntent] = useState(initialIntent);
   const [launchedEpisodeKey, setLaunchedEpisodeKey] = useState(null);
+  const [autoStartEpisodeKey, setAutoStartEpisodeKey] = useState(null);
   const [readyEpisodes, setReadyEpisodes] = useState([]);
   const [readyLoading, setReadyLoading] = useState(true);
   const [readyUnavailable, setReadyUnavailable] = useState(false);
@@ -130,6 +131,7 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
     if (!lookup.session?.id) {
       setSelectedEpisode(null);
       setLaunchedEpisodeKey(null);
+      setAutoStartEpisodeKey(null);
       await clearAutoplay();
     }
     try {
@@ -153,6 +155,7 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
     setSelectedEpisode(selected);
     setPlaybackIntent(null);
     setLaunchedEpisodeKey(null);
+    setAutoStartEpisodeKey(null);
   }
 
   async function launchEpisode(intent, episode = selectedEpisode) {
@@ -160,6 +163,7 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
     await clearAutoplay();
     setPlaybackIntent(intent);
     setLaunchedEpisodeKey(`${episode.season}:${episode.number}`);
+    setAutoStartEpisodeKey(null);
     await lookup.search({
       type: "show",
       query: show.title,
@@ -309,6 +313,7 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
       setSelectedEpisode(selected);
       setPlaybackIntent("start");
       setLaunchedEpisodeKey(`${prepared.nextEpisode.season}:${prepared.nextEpisode.number}`);
+      setAutoStartEpisodeKey(`${prepared.nextEpisode.season}:${prepared.nextEpisode.number}`);
       if (["new-torrent", "debrid"].includes(prepared.strategy)) {
         pendingSessionRef.current = null;
         lookup.adoptSession(prepared.session, prepared.fileId);
@@ -342,6 +347,7 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
       setSelectedEpisode(selected);
       setPlaybackIntent("start");
       setLaunchedEpisodeKey(`${nextEpisode.season}:${nextEpisode.number}`);
+      setAutoStartEpisodeKey(null);
       await lookup.search({
         type: "show",
         query: show.title,
@@ -382,6 +388,7 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
                 media,
                 initialPosition: playbackIntent === "resume" ? saved.progress?.position || 0 : 0,
                 resetProgress: playbackIntent === "start",
+                autoStart: autoStartEpisodeKey === selectedEpisodeKey,
                 onNearEnd: handleNearEnd,
                 onEnded: handleEpisodeEnded,
               }}

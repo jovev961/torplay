@@ -1,7 +1,7 @@
 "use client";
 
 import Hls from "hls.js";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import {
   normalizeSubtitleAppearance,
   readSubtitleAppearance,
@@ -104,6 +104,7 @@ export default function VideoPlayer({
   media = null,
   initialPosition = 0,
   resetProgress = false,
+  autoStart = false,
   onNearEnd = null,
   onEnded = null,
 }) {
@@ -133,7 +134,7 @@ export default function VideoPlayer({
   const [subtitleError, setSubtitleError] = useState("");
   const [playbackHint, setPlaybackHint] = useState("");
   const [playbackState, setPlaybackState] = useState(
-    file.playbackMode === "native" ? "native" : "idle",
+    file.playbackMode === "native" ? "native" : autoStart ? "preparing" : "idle",
   );
   const [playbackDetails, setPlaybackDetails] = useState(null);
   const [playing, setPlaying] = useState(false);
@@ -318,6 +319,30 @@ export default function VideoPlayer({
       if (error.name !== "AbortError") failPlayback(error.message);
     }
   }
+
+  const startAutomatically = useEffectEvent(() => {
+    if (file.playbackMode === "transcode") {
+      initialSeekAppliedRef.current = true;
+      void preparePlayback(initialPosition);
+      return;
+    }
+    const video = videoRef.current;
+    if (!video) return;
+    void video.play().catch((error) => {
+      if (error.name === "NotAllowedError" || error.name === "AbortError") {
+        setPlaybackHint("Playback is ready. Press play to begin.");
+      } else {
+        setPlaybackError(`The browser could not start playback: ${error.message}`);
+      }
+    });
+  });
+
+  useEffect(() => {
+    if (!autoStart) return undefined;
+    let cancelled = false;
+    queueMicrotask(() => { if (!cancelled) startAutomatically(); });
+    return () => { cancelled = true; };
+  }, [autoStart, file.id, file.playbackMode, sessionId]);
 
   async function getRemoteOrigin() {
     if (remoteOriginRef.current) return remoteOriginRef.current;
