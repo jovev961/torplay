@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useEffect, useEffectEvent, useMemo, useReducer, useRef, useState } from "react";
 import SourcePanel from "./SourcePanel.js";
+import ReadyEpisodes from "./ReadyEpisodes.js";
 import { releaseTorrentSession, useSourceLookup } from "./useSourceLookup.js";
 import useSavedProgress from "./useSavedProgress.js";
 import { useProfile } from "./ProfileProvider.js";
@@ -23,6 +24,8 @@ function episodeCode(season, episode) {
 export default function ShowDetails({ show, initialSeason, initialEpisodeNumber = null, initialIntent = null }) {
   const { activeProfile } = useProfile();
   const [season, setSeason] = useState(initialSeason);
+  const [playingSeason, setPlayingSeason] = useState(initialSeason);
+  const [selectedSeasonNumber, setSelectedSeasonNumber] = useState(initialSeason.number);
   const [loadingSeason, setLoadingSeason] = useState(false);
   const [seasonError, setSeasonError] = useState("");
   const [selectedEpisode, setSelectedEpisode] = useState(() => {
@@ -31,12 +34,16 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
   });
   const [playbackIntent, setPlaybackIntent] = useState(initialIntent);
   const [launchedEpisodeKey, setLaunchedEpisodeKey] = useState(null);
+  const [readyEpisodes, setReadyEpisodes] = useState([]);
+  const [readyLoading, setReadyLoading] = useState(true);
+  const [readyUnavailable, setReadyUnavailable] = useState(false);
   const lookup = useSourceLookup();
   const playbackRef = useRef(null);
   const pendingSessionRef = useRef(null);
   const autoplayAbortRef = useRef(null);
   const preparingNextRef = useRef(false);
   const advancingRef = useRef(false);
+  const lastReadySessionRef = useRef(null);
   const [autoplay, dispatchAutoplay] = useReducer(autoplayReducer, {
     phase: "idle",
     endReached: false,
@@ -54,6 +61,12 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
   }) : null, [selectedEpisode, show]);
   const saved = useSavedProgress(activeProfile?.id, media);
   const resumable = saved.progress && !saved.progress.completed && saved.progress.position >= 30;
+  const readySessionId = lookup.session?.backend === "debrid" ? lookup.session.id : null;
+  const playerFile = lookup.session?.status === "ready" && selectedEpisode
+    ? lookup.session.files.find((file) => file.id === lookup.selectedFileId)
+      || lookup.session.files.find((file) => file.id === lookup.session.suggestedFileId)
+      || findEpisodeFile(lookup.session.files, selectedEpisode.season, selectedEpisode.number)
+    : null;
   const advanceAfterEnd = useEffectEvent(() => {
     void playNextEpisode();
   });
@@ -63,6 +76,22 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
       playbackRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   }, [selectedEpisode]);
+
+  useEffect(() => {
+    if (!readySessionId && lastReadySessionRef.current) return undefined;
+    if (readySessionId) lastReadySessionRef.current = readySessionId;
+    const controller = new AbortController();
+    void fetch(`/api/playback/debrid/episodes?tmdbId=${encodeURIComponent(show.id)}`,
+      { cache: "no-store", signal: controller.signal })
+      .then(readJson)
+      .then((data) => {
+        setReadyEpisodes(data.episodes || []);
+        setReadyUnavailable(data.temporarilyUnavailable === true);
+      })
+      .catch((error) => { if (error.name !== "AbortError") setReadyUnavailable(true); })
+      .finally(() => { if (!controller.signal.aborted) setReadyLoading(false); });
+    return () => controller.abort();
+  }, [show.id, readySessionId]);
 
   useEffect(() => {
     if (lookup.session?.id) {
@@ -95,12 +124,14 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
 
   async function changeSeason(event) {
     const number = Number(event.target.value);
+    setSelectedSeasonNumber(number);
     setLoadingSeason(true);
     setSeasonError("");
-    setSelectedEpisode(null);
-    setLaunchedEpisodeKey(null);
-    await clearAutoplay();
-    await lookup.stop();
+    if (!lookup.session?.id) {
+      setSelectedEpisode(null);
+      setLaunchedEpisodeKey(null);
+      await clearAutoplay();
+    }
     try {
       const response = await fetch(`/api/metadata/shows/${show.id}/seasons/${number}`, {
         cache: "no-store",
@@ -108,6 +139,7 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
       setSeason(await readJson(response));
     } catch (error) {
       setSeasonError(error.message);
+      setSelectedSeasonNumber(season.number);
     } finally {
       setLoadingSeason(false);
     }
@@ -117,6 +149,7 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
     const selected = { ...item, season: season.number };
     await clearAutoplay();
     await lookup.stop();
+    setPlayingSeason(season);
     setSelectedEpisode(selected);
     setPlaybackIntent(null);
     setLaunchedEpisodeKey(null);
@@ -136,6 +169,14 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
       season: episode.season,
       episode: episode.number,
     });
+  }
+
+  async function playReadyEpisode(number) {
+    const item = season.episodes.find((entry) => entry.number === number)
+      || { number, title: `Episode ${number}` };
+    const selected = { ...item, season: season.number };
+    await chooseEpisode(item);
+    await launchEpisode("start", selected);
   }
 
   async function getSeason(number) {
@@ -263,6 +304,8 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
       }
 
       setSeason(nextSeason);
+      setPlayingSeason(nextSeason);
+      setSelectedSeasonNumber(nextSeason.number);
       setSelectedEpisode(selected);
       setPlaybackIntent("start");
       setLaunchedEpisodeKey(`${prepared.nextEpisode.season}:${prepared.nextEpisode.number}`);
@@ -294,6 +337,8 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
     try {
       const { nextSeason, selected } = await resolveEpisodeDetails(nextEpisode);
       setSeason(nextSeason);
+      setPlayingSeason(nextSeason);
+      setSelectedSeasonNumber(nextSeason.number);
       setSelectedEpisode(selected);
       setPlaybackIntent("start");
       setLaunchedEpisodeKey(`${nextEpisode.season}:${nextEpisode.number}`);
@@ -327,8 +372,8 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
               heading={`${episodeCode(selectedEpisode.season, selectedEpisode.number)} · ${selectedEpisode.title}`}
               playerTitle={`${show.title} · ${episodeCode(selectedEpisode.season, selectedEpisode.number)} · ${selectedEpisode.title}`}
               episode={{ season: selectedEpisode.season, number: selectedEpisode.number }}
-              episodeChoices={season.episodes.map((item) => ({
-                season: season.number,
+              episodeChoices={playingSeason.episodes.map((item) => ({
+                season: playingSeason.number,
                 number: item.number,
                 title: item.title,
               }))}
@@ -353,6 +398,20 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
               </div>
             </div>
           )}
+          {launchedEpisodeKey === selectedEpisodeKey && playerFile ? (
+            <ReadyEpisodes
+              seasonNumber={selectedSeasonNumber}
+              seasonName={show.seasons.find((item) => item.number === selectedSeasonNumber)?.name}
+              seasonEpisodes={season.number === selectedSeasonNumber ? season.episodes : []}
+              episodes={readyEpisodes}
+              playing={lookup.session?.backend === "debrid"
+                ? { season: selectedEpisode.season, episode: selectedEpisode.number } : null}
+              loading={readyLoading}
+              unavailable={readyUnavailable}
+              disabled={loadingSeason}
+              onPlay={(number) => void playReadyEpisode(number)}
+            />
+          ) : null}
         </div>
       ) : null}
 
@@ -379,7 +438,7 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
           </div>
           <label>
             <span className="srOnly">Choose a season</span>
-            <select value={season?.number ?? ""} onChange={changeSeason} disabled={loadingSeason}>
+            <select value={selectedSeasonNumber} onChange={changeSeason} disabled={loadingSeason}>
               {show.seasons.map((item) => (
                 <option value={item.number} key={item.number}>{item.name}</option>
               ))}
