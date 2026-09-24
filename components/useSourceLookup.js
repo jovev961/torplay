@@ -296,6 +296,9 @@ export function useSourceLookup() {
     }
 
     const params = new URLSearchParams({ type: criteria.type, q: criteria.query });
+    if (criteria.type === "movie" && criteria.originalTitle) {
+      params.set("originalTitle", criteria.originalTitle);
+    }
     if (criteria.season !== undefined) params.set("season", String(criteria.season));
     if (criteria.episode !== undefined) params.set("episode", String(criteria.episode));
     if (criteria.tmdbId !== undefined) params.set("tmdbId", String(criteria.tmdbId));
