@@ -1705,6 +1705,26 @@ a {
   margin-bottom: 20px;
 }
 
+.sourceHeading > div { min-width: 0; }
+.sourceHeading h2 { overflow-wrap: anywhere; }
+.sourceStopButton {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 9px;
+  min-height: 40px;
+  padding: 9px 14px;
+  border: 1px solid #8d4549;
+  border-radius: 10px;
+  color: #ffb9bd;
+  background: #321b20;
+  font-size: .86rem;
+  font-weight: 800;
+}
+.sourceStopButton::before { content: ""; width: 8px; height: 8px; border-radius: 2px; background: currentColor; }
+.sourceStopButton:hover { border-color: #d66b71; color: #ffe0e1; background: #4a242a; }
+.sourceStopButton:focus-visible { outline: 2px solid #ffb9bd; outline-offset: 3px; }
+
 .seasonToolbar select {
   min-width: 160px;
 }
