@@ -66,7 +66,8 @@ test("active debrid playback hides the empty search notice and shows a clear sto
   );
   const SourcePanel = loadedModule.exports.default;
   const lookup = { session: { id: "session", status: "ready", backend: "debrid",
-    provider: "real-debrid", files: [{ id: "1", name: "Episode.mkv", size: 1000 }] },
+    provider: "real-debrid", files: [{ id: "1", name: "Episode.mkv", size: 1000,
+      playbackMode: "transcode" }] },
     selectedFileId: "1", stop() {}, results: [], usenetResults: [], usenetJobs: [],
     error: "", errorCode: "", searching: false, hasSearched: true, usenetEnabled: false };
   const active = renderToStaticMarkup(createElement(SourcePanel, { lookup, heading: "Episode" }));
@@ -78,4 +79,11 @@ test("active debrid playback hides the empty search notice and shows a clear sto
     lookup: { ...lookup, session: null }, heading: "Episode",
   }));
   assert.match(stopped, /No usable authorized sources were found/);
+
+  const automatic = renderToStaticMarkup(createElement(SourcePanel, {
+    lookup, heading: "Episode", playback: { autoStart: true },
+  }));
+  assert.match(automatic, /Buffering torrent data, probing codecs, and preparing playback/);
+  assert.doesNotMatch(automatic, /Prepare &amp; play|Prepare & play/);
+  assert.match(active, /Prepare &amp; play/);
 });
