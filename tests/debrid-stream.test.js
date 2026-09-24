@@ -33,6 +33,9 @@ test("debrid proxy forwards exact ranges and uses validated public DNS", async (
       options.lookup("cdn.example", {}, (_error, address) => {
         assert.equal(address, "93.184.215.14");
       });
+      options.lookup("cdn.example", { all: true }, (_error, addresses) => {
+        assert.deepEqual(addresses, [{ address: "93.184.215.14", family: 4 }]);
+      });
     });
   const response = await proxyRemoteFile(
     new Request("https://torplay.local/media", { headers: { Range: "bytes=2-4" } }),
@@ -80,6 +83,13 @@ test("remote proxy rejects private redirect targets and excessive redirects", as
     requestImpl: mockRequest(302, { location: "/loop" }, ""),
   }), /too many times/);
   await assert.rejects(openRemoteUrl("https://192.168.1.1/private", {
+    requestImpl: () => { throw new Error("No request expected"); },
+  }), /unsafe/);
+  await assert.rejects(openRemoteUrl("https://cdn.example/file", {
+    resolveImpl: async () => [
+      { address: "93.184.215.14", family: 4 },
+      { address: "192.168.1.1", family: 4 },
+    ],
     requestImpl: () => { throw new Error("No request expected"); },
   }), /unsafe/);
 });
