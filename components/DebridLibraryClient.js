@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import VideoPlayer from "./VideoPlayer.js";
+import DebridLibraryFileRow from "./DebridLibraryFileRow.js";
 import { useProfile } from "./ProfileProvider.js";
 import { releaseTorrentSession } from "./useSourceLookup.js";
 import { formatFileSize } from "../lib/video/episode-display.js";
@@ -48,17 +49,23 @@ export default function DebridLibraryClient() {
   const [selected, setSelected] = useState(null);
   const [session, setSession] = useState(null);
   const [playingFile, setPlayingFile] = useState(null);
+  const [playingProviderFileId, setPlayingProviderFileId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [downloadFileIds, setDownloadFileIds] = useState(null);
   const [requestedFileId, setRequestedFileId] = useState(null);
   const [mapSeason, setMapSeason] = useState(1);
   const [mapEpisode, setMapEpisode] = useState(1);
+  const [editingFileId, setEditingFileId] = useState(null);
+  const [mappingBusy, setMappingBusy] = useState(false);
+  const [mappingError, setMappingError] = useState("");
   const [associationQuery, setAssociationQuery] = useState("");
   const [associationType, setAssociationType] = useState("show");
   const [associationSeason, setAssociationSeason] = useState(1);
   const [associationResults, setAssociationResults] = useState([]);
   const requestId = useRef(0);
+  const playerRef = useRef(null);
+  const sessionIdRef = useRef(null);
 
   const refresh = useCallback(async (nextPage = 1, fresh = false) => {
     const currentRequest = ++requestId.current;
@@ -99,20 +106,43 @@ export default function DebridLibraryClient() {
     return () => { cancelled = true; clearTimeout(timer); };
   }, [selected]);
 
+  useEffect(() => { sessionIdRef.current = session?.id; }, [session?.id]);
+
   useEffect(() => () => {
-    if (session?.id) void releaseTorrentSession(session.id).catch(() => {});
-  }, [session?.id]);
+    if (sessionIdRef.current) void releaseTorrentSession(sessionIdRef.current).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (session?.id && playingFile) playerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [session?.id, playingFile]);
+
+  async function closePlayback() {
+    const previousId = sessionIdRef.current;
+    sessionIdRef.current = null;
+    setSession(null);
+    setPlayingFile(null);
+    setPlayingProviderFileId(null);
+    if (previousId) {
+      try { await releaseTorrentSession(previousId, { explicit: true }); }
+      catch (releaseError) { setError(releaseError.message); }
+    }
+  }
 
   async function open(item) {
     setError("");
     try {
       const detail = await json(await fetch(`/api/debrid/library/${item.provider}/${encodeURIComponent(item.resourceId)}`,
         { cache: "no-store" }));
+      if (selected && (selected.provider !== detail.provider || selected.resourceId !== detail.resourceId)) {
+        await closePlayback();
+      }
       setSelected(detail);
       setDownloadFileIds(null);
       setRequestedFileId(null);
       setMapSeason(detail.mediaContext?.season ?? 1);
       setMapEpisode(detail.mediaContext?.episode ?? 1);
+      setEditingFileId(null);
+      setMappingError("");
       setAssociationQuery("");
       setAssociationResults([]);
       setAssociationType(detail.mediaContext?.type || "show");
@@ -124,14 +154,16 @@ export default function DebridLibraryClient() {
     if (!selected) return;
     setError("");
     try {
-      if (session?.id) await releaseTorrentSession(session.id, { explicit: true });
+      if (session?.id) await closePlayback();
       const response = await fetch(`/api/debrid/library/${selected.provider}/${encodeURIComponent(selected.resourceId)}/play`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ fileId: file.providerId }),
       });
       const next = await json(response);
+      sessionIdRef.current = next.id;
       setSession(next);
       setPlayingFile(next.files.find((entry) => entry.name === file.name) || null);
+      setPlayingProviderFileId(file.providerId);
     } catch (playError) { setError(playError.message); }
   }
 
@@ -148,16 +180,35 @@ export default function DebridLibraryClient() {
     } catch (selectionError) { setError(selectionError.message); }
   }
 
+  function editMapping(file) {
+    const existing = selected.episodeMappings?.find((entry) => entry.fileId === file.providerId);
+    setEditingFileId(file.providerId);
+    setMapSeason(existing?.season ?? selected.mediaContext?.season ?? 1);
+    setMapEpisode(existing?.episode ?? selected.mediaContext?.episode ?? 1);
+    setMappingError("");
+  }
+
   async function mapFile(file) {
     if (!selected) return;
+    const existing = selected.episodeMappings?.filter((entry) => entry.fileId === file.providerId) || [];
+    const target = selected.episodeMappings?.find((entry) => entry.season === mapSeason
+      && entry.episode === mapEpisode);
+    if (target && target.fileId !== file.providerId
+      && !window.confirm(`S${String(mapSeason).padStart(2, "0")}E${String(mapEpisode).padStart(2, "0")} is already mapped to another file. Replace that mapping?`)) return;
+    setMappingBusy(true);
+    setMappingError("");
     try {
       const next = await json(await fetch(`/api/debrid/library/${selected.provider}/${encodeURIComponent(selected.resourceId)}/episode-file`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileId: file.providerId, season: mapSeason, episode: mapEpisode }),
+        body: JSON.stringify({ fileId: file.providerId, season: mapSeason, episode: mapEpisode,
+          replaceExisting: existing.length > 0,
+          expectedTargetFileId: target?.fileId !== file.providerId ? target?.fileId : null }),
       }));
       setSelected(next);
+      setEditingFileId(null);
       setError("");
-    } catch (mappingError) { setError(mappingError.message); }
+    } catch (saveError) { setMappingError(saveError.message); }
+    finally { setMappingBusy(false); }
   }
 
   async function searchAssociation() {
@@ -202,7 +253,8 @@ export default function DebridLibraryClient() {
       if (!response.ok) await json(response);
       if (selected?.provider === item.provider && selected?.resourceId === item.resourceId) {
         setSelected(null);
-        setSession(null);
+        await closePlayback();
+        setEditingFileId(null);
       }
       await refresh(1, true);
     } catch (deleteError) { setError(deleteError.message); }
@@ -226,6 +278,8 @@ export default function DebridLibraryClient() {
             if (value === filter) return;
             requestId.current += 1;
             setSelected(null);
+            void closePlayback();
+            setEditingFileId(null);
             setItems([]);
             setProviders([]);
             setFilter(value);
@@ -311,25 +365,32 @@ export default function DebridLibraryClient() {
           disabled={!requestedFileId || !(downloadFileIds || selected.suggestedSelectionIds).includes(requestedFileId)}
           onClick={() => void confirmFiles()}>Confirm and download</button>
       </div> : null}
-      {selected.mediaContext?.type === "show" ? <div className="debridFileReviewRow">
-        <label>Map season <input type="number" min="0" value={mapSeason}
-          onChange={(event) => setMapSeason(Number(event.target.value))} /></label>
-        <label>Episode <input type="number" min="1" value={mapEpisode}
-          onChange={(event) => setMapEpisode(Number(event.target.value))} /></label>
+      {session && playingFile ? <div className="debridLibraryPlayback" ref={playerRef}>
+        <div className="debridLibraryPlaybackHeading">
+          <div><span className="eyebrow">Now playing</span><h3>{playingFile.name}</h3></div>
+          <button type="button" onClick={() => void closePlayback()}>Close player</button>
+        </div>
+        <div className="videoFrame"><VideoPlayer key={`${session.id}:${playingFile.id}`}
+          sessionId={session.id} file={playingFile} title={selected.name}
+          profileId={activeProfile?.id} media={historyMedia(selected,
+            selected.files.find((file) => file.providerId === playingProviderFileId) || {})} />
+        </div>
       </div> : null}
-      {selected.files.length ? selected.files.map((file) => <div className="debridLibraryFile" key={file.providerId}>
-        <span>{file.name} · {formatFileSize(file.size)}
-          {selected.episodeMappings?.filter((entry) => entry.fileId === file.providerId)
-            .map((entry) => ` · mapped S${String(entry.season).padStart(2, "0")}E${String(entry.episode).padStart(2, "0")}`)
-            .join("") || (selected.mediaContext?.type === "show" ? " · unmapped" : "")}
-        </span>
-        {selected.mediaContext?.type === "show" ? <button type="button" onClick={() => void mapFile(file)}>Map to episode</button> : null}
-        {selected.status === "ready" && file.selected ? <button className="primaryButton compact" type="button" onClick={() => void play(file)}>Play</button> : null}
-      </div>) : <p>File details are not available yet.</p>}
-      {session && playingFile ? <div className="videoFrame"><VideoPlayer key={`${session.id}:${playingFile.id}`}
-        sessionId={session.id} file={playingFile} title={selected.name}
-        profileId={activeProfile?.id} media={historyMedia(selected, selected.files.find((file) => file.name === playingFile.name) || {})} />
-      </div> : null}
+      {selected.files.length ? <div className="debridLibraryFiles">
+        <div className="debridLibraryFilesHeading"><h3>Video files</h3><span>{selected.files.length} files</span></div>
+        {selected.files.map((file) => {
+          const mappings = selected.episodeMappings?.filter((entry) => entry.fileId === file.providerId) || [];
+          const editing = editingFileId === file.providerId;
+          return <DebridLibraryFileRow key={file.providerId} file={file} mappings={mappings}
+            isShow={selected.mediaContext?.type === "show"} ready={selected.status === "ready"}
+            playing={Boolean(session && playingProviderFileId === file.providerId)} editing={editing}
+            mapSeason={mapSeason} mapEpisode={mapEpisode} mappingBusy={mappingBusy}
+            mappingError={editing ? mappingError : ""} onEdit={() => editMapping(file)}
+            onCancel={() => { setEditingFileId(null); setMappingError(""); }}
+            onMap={() => void mapFile(file)} onPlay={() => void play(file)}
+            onSeasonChange={setMapSeason} onEpisodeChange={setMapEpisode} />;
+        })}
+      </div> : <p>File details are not available yet.</p>}
     </section> : null}
   </section>;
 }

@@ -3264,12 +3264,43 @@ footer {
 .debridLibraryDetail { padding: 24px; margin-top: 24px; border: 1px solid var(--border); border-radius: 13px; background: var(--panel); }
 .debridLibraryDetail h2 { margin: 0 0 7px; overflow-wrap: anywhere; }
 .debridLibraryDetail > p { color: var(--muted); }
-.debridLibraryFile { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 12px 0; border-bottom: 1px solid var(--border); }
-.debridLibraryFile span { overflow-wrap: anywhere; }
+.debridLibraryPlayback { margin: 22px 0; scroll-margin-top: 20px; }
+.debridLibraryPlaybackHeading, .debridLibraryFilesHeading { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.debridLibraryPlaybackHeading { margin-bottom: 12px; }
+.debridLibraryPlaybackHeading h3 { margin: 4px 0 0; font-size: 1rem; overflow-wrap: anywhere; }
+.debridLibraryPlaybackHeading button { min-height: 38px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 9px; background: #252b32; color: var(--text); font-weight: 700; }
+.debridLibraryFiles { margin-top: 22px; }
+.debridLibraryFilesHeading { margin-bottom: 12px; }
+.debridLibraryFilesHeading h3 { margin: 0; font-size: 1.15rem; }
+.debridLibraryFilesHeading span { color: var(--muted); font-size: .85rem; }
+.debridLibraryFile { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px 20px; margin-top: 8px; padding: 15px 16px; border: 1px solid var(--border); border-radius: 11px; background: #151a20; }
+.debridLibraryFile.isPlaying { border-color: #a54247; background: #23191d; }
+.debridLibraryFileMain { min-width: 0; }
+.debridLibraryFileMain strong { display: block; line-height: 1.4; overflow-wrap: anywhere; }
+.debridLibraryFileSize { display: inline-block; margin-top: 5px; color: var(--muted); font-size: .82rem; }
+.debridLibraryFilePlaying { display: inline-block; margin-left: 9px; color: #ffc1c2; font-size: .78rem; font-weight: 800; }
+.debridLibraryMappingStatus { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 9px; }
+.debridLibraryMapped, .debridLibraryUnmapped { display: inline-flex; align-items: center; min-height: 27px; padding: 4px 9px; border-radius: 7px; font-size: .78rem; font-weight: 700; line-height: 1.35; }
+.debridLibraryMapped { border: 1px solid #346f4e; color: #a9ebbd; background: #193427; }
+.debridLibraryUnmapped { border: 1px solid #754044; color: #ffb8bc; background: #351f24; }
+.debridLibraryMappingHint { align-self: center; color: var(--muted); font-size: .78rem; }
+.debridLibraryFileActions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.debridLibraryFileActions button, .debridLibraryMapFields button { min-height: 39px; padding: 8px 12px; border-radius: 9px; font-size: .84rem; font-weight: 800; }
+.debridLibraryMapButton, .debridLibraryMapFields button:not(.primaryButton) { border: 1px solid #5d6873; color: var(--text); background: #28313a; }
+.debridLibraryMapButton:hover, .debridLibraryMapButton:focus-visible, .debridLibraryMapFields button:not(.primaryButton):hover { border-color: #94a2b0; background: #35414c; }
+.debridLibraryMapEditor { grid-column: 1 / -1; padding: 15px; border: 1px solid #46515b; border-radius: 9px; background: #20272e; }
+.debridLibraryMapEditor p { margin: 0 0 11px; color: var(--muted); font-size: .84rem; }
+.debridLibraryMapFields { display: flex; align-items: flex-end; gap: 9px; flex-wrap: wrap; }
+.debridLibraryMapFields label { display: grid; gap: 5px; color: var(--text); font-size: .8rem; font-weight: 700; }
+.debridLibraryMapFields input { width: 90px; min-height: 39px; padding: 7px 9px; border: 1px solid #687582; border-radius: 8px; color: var(--text); background: #14191f; }
+.debridLibraryMapEditor .debridLibraryMapError { margin: 10px 0 0; color: #ffb8bc; }
 
 @media (max-width: 560px) {
   .debridLibraryToolbar, .debridLibraryRefresh { width: 100%; }
   .debridLibraryFilters { width: 100%; }
   .debridLibraryFilters button { flex: 1; }
-  .debridLibraryFile { align-items: flex-start; flex-direction: column; }
+  .debridLibraryDetail { padding: 17px; }
+  .debridLibraryFile { grid-template-columns: minmax(0, 1fr); }
+  .debridLibraryFileActions { justify-content: flex-start; }
+  .debridLibraryFileActions button { flex: 1; }
 }

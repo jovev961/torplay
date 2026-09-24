@@ -108,6 +108,32 @@ test("an external pack can be manually corrected and its choice survives refresh
   } finally { db.close(); }
 });
 
+test("changing a mapping removes the old episode and requires confirmation to replace another file", async () => {
+  const db = createDatabase(":memory:");
+  const rd = readyProvider();
+  const deps = dependencies(db, { "real-debrid": rd });
+  try {
+    await associateDebridItem("real-debrid", "rd-pack", show, deps);
+    const changed = await mapDebridEpisodeFile("real-debrid", "rd-pack", "1", 1, 3, deps,
+      { replaceExisting: true });
+    assert.deepEqual(changed.episodeMappings.map(({ fileId, episode }) => [fileId, episode]),
+      [["2", 2], ["1", 3]]);
+    assert.deepEqual(await resolveDirectDebridPlayback(show, deps), { kind: "miss" });
+    await assert.rejects(mapDebridEpisodeFile("real-debrid", "rd-pack", "1", 1, 2, deps,
+      { replaceExisting: true }), { status: 409 });
+    await assert.rejects(mapDebridEpisodeFile("real-debrid", "rd-pack", "1", 1, 2, deps,
+      { replaceExisting: true, expectedTargetFileId: "3" }), { status: 409 });
+    const replaced = await mapDebridEpisodeFile("real-debrid", "rd-pack", "1", 1, 2, deps,
+      { replaceExisting: true, expectedTargetFileId: "2" });
+    assert.deepEqual(replaced.episodeMappings.map(({ fileId, episode }) => [fileId, episode]),
+      [["1", 2]]);
+    const playback = await resolveDirectDebridPlayback({ ...show, episode: 2 }, deps);
+    assert.equal(playback.kind, "hit");
+    assert.deepEqual(rd.calls.streams, ["1"]);
+    await stopPlayback(playback.session.id);
+  } finally { db.close(); }
+});
+
 test("ready movie and preferred TorBox resource play directly", async () => {
   const db = createDatabase(":memory:");
   const rd = readyProvider();
