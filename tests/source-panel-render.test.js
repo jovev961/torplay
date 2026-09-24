@@ -52,3 +52,30 @@ test("debrid episode panel keeps unmapped provider files out of the normal episo
   assert.match(html, /Debrid Library/);
   assert.doesNotMatch(html, /Episodes in this source|Unknown A\.mkv|Unknown B\.mkv/);
 });
+
+test("active debrid playback hides the empty search notice and shows a clear stop action", async () => {
+  const built = await build({
+    entryPoints: [path.resolve("components/SourcePanel.js")],
+    bundle: true, platform: "node", format: "cjs", write: false,
+    jsx: "automatic", loader: { ".js": "jsx" },
+    external: ["react", "react-dom", "next/*"],
+  });
+  const loadedModule = { exports: {} };
+  new Function("require", "module", "exports", built.outputFiles[0].text)(
+    createRequire(import.meta.url), loadedModule, loadedModule.exports,
+  );
+  const SourcePanel = loadedModule.exports.default;
+  const lookup = { session: { id: "session", status: "ready", backend: "debrid",
+    provider: "real-debrid", files: [{ id: "1", name: "Episode.mkv", size: 1000 }] },
+    selectedFileId: "1", stop() {}, results: [], usenetResults: [], usenetJobs: [],
+    error: "", errorCode: "", searching: false, hasSearched: true, usenetEnabled: false };
+  const active = renderToStaticMarkup(createElement(SourcePanel, { lookup, heading: "Episode" }));
+  assert.match(active, /class="sourceStopButton"[^>]*>Stop playback<\/button>/);
+  assert.match(active, /Ready through Real-Debrid/);
+  assert.doesNotMatch(active, /No usable authorized sources were found/);
+
+  const stopped = renderToStaticMarkup(createElement(SourcePanel, {
+    lookup: { ...lookup, session: null }, heading: "Episode",
+  }));
+  assert.match(stopped, /No usable authorized sources were found/);
+});

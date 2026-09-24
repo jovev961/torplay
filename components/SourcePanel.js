@@ -56,7 +56,7 @@ export default function SourcePanel({
           <h2 id="source-heading">{heading}</h2>
         </div>
         {lookup.session ? (
-          <button className="textButton" type="button" onClick={lookup.stop}>
+          <button className="sourceStopButton" type="button" onClick={lookup.stop}>
             {lookup.session.backend === "debrid" ? "Stop playback" : "Stop & clean up"}
           </button>
         ) : null}
@@ -148,7 +148,8 @@ export default function SourcePanel({
           {lookup.debridChoice?.localAllowed ? <button type="button" onClick={() => lookup.start(lookup.debridChoice.resultId, "local")}>Watch Now with TorPlay instead</button> : null}
         </div>
       ) : null}
-      {!lookup.searching && lookup.hasSearched && lookup.results.length === 0 && !lookup.usenetResults?.length && !lookup.error ? (
+      {!lookup.session && !lookup.searching && lookup.hasSearched && lookup.results.length === 0
+        && !lookup.usenetResults?.length && !lookup.error ? (
         <div className="notice">No usable authorized sources were found.</div>
       ) : null}
 
