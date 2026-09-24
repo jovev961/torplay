@@ -33,6 +33,7 @@ export default function MovieSource({ movie, initialIntent = null }) {
     await lookup.search({
       type: "movie",
       query: movie.title,
+      originalTitle: movie.originalTitle,
       tmdbId: movie.id,
       imdbId: movie.imdbId,
       year: movie.year,

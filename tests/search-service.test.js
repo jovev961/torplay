@@ -104,3 +104,67 @@ test("shared search preserves empty results and provider failure status", async 
     searchProvider: async () => { throw Object.assign(new Error("Timed out"), { status: 504 }); },
   }), (error) => error.status === 504);
 });
+
+test("movie search uses English and original titles and deduplicates one torrent", async () => {
+  const queries = [];
+  const results = await findAuthorizedSources({ title: "Ugly", originalTitle: "Çirkin",
+    type: "movie", tmdbId: 77 }, {
+    searchProvider: async ({ title }) => {
+      queries.push(title);
+      return title === "Ugly"
+        ? [candidate("Ugly 1080p", 20, "english"), candidate("Ugly alternate", 4, "shared")]
+        : [candidate("Çirkin 1080p", 10, "original"), candidate("Çirkin duplicate", 2, "shared"),
+          candidate("Other movie", 100, "shared")];
+    },
+    inspectSource: async () => ({}),
+  });
+  assert.deepEqual(queries, ["Ugly", "Çirkin"]);
+  assert.deepEqual(results.map((result) => result.title),
+    ["Ugly 1080p", "Çirkin 1080p", "Ugly alternate"]);
+  assert.equal(results.every((result) => getSearchResult(result.id).mediaContext.tmdbId === 77), true);
+});
+
+test("both title languages retain space inside the 20-result validation limit", async () => {
+  const results = await findAuthorizedSources({ title: "Ugly", originalTitle: "Çirkin", type: "movie" }, {
+    searchProvider: async ({ title }) => title === "Ugly"
+      ? Array.from({ length: 30 }, (_, index) => candidate(`Ugly ${index} 1080p`,
+        100 - index, index.toString(16).padStart(40, "0")))
+      : [candidate("Çirkin 1080p", 1, "original")],
+    inspectSource: async () => ({}),
+  });
+  assert.equal(results.length, 20);
+  assert.equal(results.some((result) => result.title === "Çirkin 1080p"), true);
+});
+
+test("identical titles search once, while one failed alias still allows the other", async () => {
+  let calls = 0;
+  await findAuthorizedSources({ title: "Ugly", originalTitle: " ugly ", type: "movie" }, {
+    searchProvider: async () => { calls += 1; return [candidate("Ugly 1080p")]; },
+    inspectSource: async () => ({}),
+  });
+  assert.equal(calls, 1);
+  const results = await findAuthorizedSources({ title: "Ugly", originalTitle: "Çirkin", type: "movie" }, {
+    searchProvider: async ({ title }) => {
+      if (title === "Ugly") throw new Error("English lookup failed");
+      return [candidate("Çirkin 720p")];
+    },
+    inspectSource: async () => ({}),
+  });
+  assert.deepEqual(results.map((result) => result.title), ["Çirkin 720p"]);
+  await assert.rejects(findAuthorizedSources({ title: "Ugly", originalTitle: "Çirkin", type: "movie" }, {
+    searchProvider: async () => { throw new Error("Search unavailable"); },
+  }), /Search unavailable|No torrent search provider completed/);
+});
+
+test("non-Latin original titles match and TV searches stay single-title", async () => {
+  const movie = await findAuthorizedSources({ title: "The Film", originalTitle: "映画", type: "movie" }, {
+    searchProvider: async ({ title }) => title === "映画" ? [candidate("映画 1080p")] : [],
+    inspectSource: async () => ({}),
+  });
+  assert.deepEqual(movie.map((result) => result.title), ["映画 1080p"]);
+  let calls = 0;
+  await findAuthorizedSources({ title: "Show", originalTitle: "番組", type: "show", season: 1, episode: 1 }, {
+    searchProvider: async () => { calls += 1; return []; },
+  });
+  assert.equal(calls, 1);
+});

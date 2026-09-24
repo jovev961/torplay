@@ -27,6 +27,7 @@ export async function GET(request) {
       tmdbId: optionalInteger(params.get("tmdbId"), "TMDB ID"),
       imdbId: params.get("imdbId") || null,
       title: query,
+      originalTitle: options.type === "movie" ? params.get("originalTitle") : null,
       year: optionalInteger(params.get("year"), "Year", { allowZero: true }),
       season: options.type === "show" ? optionalInteger(options.season, "Season", { allowZero: true }) : null,
       episode: options.type === "show" ? optionalInteger(options.episode, "Episode") : null,
