@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createDatabase } from "../lib/database/sqlite.js";
 import { associateDebridItem, mapDebridEpisodeFile, rememberReadyResource,
-  resolveDirectDebridPlayback, listReadyDebridEpisodes } from "../lib/debrid/library.js";
+  resolveDirectDebridPlayback, inspectDirectDebridAvailability,
+  listReadyDebridEpisodes } from "../lib/debrid/library.js";
 import { findPlaybackSessionEpisode, getPlaybackMediaContext, stopPlayback } from "../lib/debrid/session.js";
 import { readyEpisodesForSeason } from "../lib/video/ready-episodes.js";
 
@@ -153,6 +154,28 @@ test("ready movie and preferred TorBox resource play directly", async () => {
     assert.equal(played.kind, "hit");
     assert.equal(played.session.provider, "real-debrid");
     await stopPlayback(played.session.id);
+  } finally { db.close(); }
+});
+
+test("ready library discovery lists both providers without opening playback", async () => {
+  const db = createDatabase(":memory:");
+  const rd = readyProvider();
+  const tb = readyProvider({ id: "42", provider: "torbox" });
+  const config = { ...baseConfig, credentials: { ...baseConfig.credentials, torbox: { apiKey: "other-private" } } };
+  const deps = dependencies(db, { "real-debrid": rd, torbox: tb }, config);
+  try {
+    await associateDebridItem("real-debrid", "rd-pack", show, deps);
+    await associateDebridItem("torbox", "42", show, deps);
+    const ready = await inspectDirectDebridAvailability(show, deps);
+    assert.deepEqual(ready.sources.map((source) => source.provider), ["real-debrid", "torbox"]);
+    assert.deepEqual(rd.calls.streams, []);
+    assert.deepEqual(tb.calls.streams, []);
+    const selected = await resolveDirectDebridPlayback(show,
+      { ...deps, selection: { provider: "torbox", resourceId: "42" } });
+    assert.equal(selected.session.provider, "torbox");
+    assert.deepEqual(rd.calls.streams, []);
+    assert.deepEqual(tb.calls.streams, ["1"]);
+    await stopPlayback(selected.session.id);
   } finally { db.close(); }
 });
 

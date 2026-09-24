@@ -65,12 +65,18 @@ export function useSourceLookup() {
   const [startingId, setStartingId] = useState(null);
   const [session, setSession] = useState(null);
   const [debridChoice, setDebridChoice] = useState(null);
+  const [readySources, setReadySources] = useState([]);
+  const [readyLoading, setReadyLoading] = useState(false);
+  const [readyUnavailable, setReadyUnavailable] = useState(false);
+  const [torrentAvailability, setTorrentAvailability] = useState({});
+  const [availabilityChecking, setAvailabilityChecking] = useState(false);
   const [debridJob, setDebridJob] = useState(null);
   const [debridPollFailures, setDebridPollFailures] = useState(0);
   const [selectedFileId, setSelectedFileId] = useState(null);
   const [error, setError] = useState("");
   const [errorCode, setErrorCode] = useState("");
   const pendingRequests = useRef(new Set());
+  const searchGeneration = useRef(0);
   const releasedSessionIds = useRef(new Set());
 
   const request = useCallback(async (url, options = {}) => {
@@ -245,7 +251,15 @@ export function useSourceLookup() {
     }
   }
 
+  async function changeSource() {
+    await stop();
+    setDebridChoice(null);
+    setDebridJob(null);
+    if (!results.length && mediaContext) await search(mediaContext);
+  }
+
   async function search(criteria) {
+    const generation = ++searchGeneration.current;
     if (session?.id) await stop();
     setSearching(true);
     setHasSearched(true);
@@ -257,24 +271,28 @@ export function useSourceLookup() {
     setSelectedFileId(null);
     setDebridChoice(null);
     setDebridJob(null);
-
+    setReadySources([]);
+    setReadyLoading(Boolean(["movie", "show"].includes(criteria.type) && criteria.tmdbId));
+    setReadyUnavailable(false);
+    setTorrentAvailability({});
+    setAvailabilityChecking(false);
     if (["movie", "show"].includes(criteria.type) && criteria.tmdbId) {
-      try {
-        const direct = await readJson(await request("/api/playback/debrid", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ type: criteria.type, tmdbId: criteria.tmdbId,
-            ...(criteria.type === "show" ? { season: criteria.season, episode: criteria.episode } : {}) }),
-        }));
-        if (direct.kind === "hit") {
-          setSession(direct.session);
-          setSelectedFileId(direct.fileId);
-          setSearching(false);
-          return;
-        }
-      } catch (directError) {
-        if (directError.name === "AbortError") { setSearching(false); return; }
-        // A debrid lookup is optional; the existing source search is the fallback.
+      const params = new URLSearchParams({ type: criteria.type, tmdbId: String(criteria.tmdbId) });
+      if (criteria.type === "show") {
+        params.set("season", String(criteria.season));
+        params.set("episode", String(criteria.episode));
       }
+      void request(`/api/playback/debrid?${params}`, { cache: "no-store" })
+        .then(readJson).then((data) => {
+          if (searchGeneration.current === generation) {
+            setReadySources(data.sources || []);
+            setReadyUnavailable(data.temporarilyUnavailable === true);
+            setReadyLoading(false);
+          }
+        }).catch(() => { if (searchGeneration.current === generation) {
+          setReadyUnavailable(true);
+          setReadyLoading(false);
+        } });
     }
 
     const params = new URLSearchParams({ type: criteria.type, q: criteria.query });
@@ -287,16 +305,75 @@ export function useSourceLookup() {
     try {
       const response = await request(`/api/search?${params}`, { cache: "no-store" });
       const data = await readJson(response);
+      if (searchGeneration.current !== generation) return;
       setResults(data.results);
       setUsenetResults(data.usenetResults || []);
+      if (data.results.length) {
+        setAvailabilityChecking(true);
+        void request("/api/torrents/availability", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ resultIds: data.results.map((result) => result.id) }),
+        }).then(readJson).then((availability) => {
+          if (searchGeneration.current === generation) {
+            setTorrentAvailability((current) => ({ ...(availability.results || {}), ...current }));
+          }
+        }).catch(() => {}).finally(() => {
+          if (searchGeneration.current === generation) setAvailabilityChecking(false);
+        });
+      }
     } catch (searchError) {
-      if (searchError.name !== "AbortError") {
+      if (searchError.name !== "AbortError" && searchGeneration.current === generation) {
         setError(searchError.message);
         setErrorCode(searchError.code || "");
       }
     } finally {
-      setSearching(false);
+      if (searchGeneration.current === generation) setSearching(false);
     }
+  }
+
+  async function selectResult(resultId) {
+    const generation = searchGeneration.current;
+    setStartingId(resultId);
+    setError("");
+    setErrorCode("");
+    setDebridJob(null);
+    try {
+      const preview = await readJson(await request("/api/torrents/availability", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resultIds: [resultId], resolveUnknown: true }),
+      }));
+      if (searchGeneration.current !== generation) return;
+      setTorrentAvailability((current) => ({ ...current, ...preview.results }));
+      setDebridChoice({ resultId, providers: preview.providers,
+        localAllowed: preview.localAllowed,
+        availability: preview.results[resultId]?.availability || {},
+        seasonPack: mediaContext?.type === "show" });
+    } catch (selectionError) {
+      if (searchGeneration.current === generation) {
+        setError(selectionError.message);
+        setErrorCode(selectionError.code || "");
+      }
+    } finally { setStartingId(null); }
+  }
+
+  async function startReadySource(source) {
+    const generation = searchGeneration.current;
+    setStartingId(`library:${source.provider}:${source.resourceId}`);
+    setError("");
+    try {
+      const playback = await readJson(await request("/api/playback/debrid", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...mediaContext, provider: source.provider, resourceId: source.resourceId }),
+      }));
+      if (searchGeneration.current !== generation) {
+        await releaseSession(playback.session?.id).catch(() => {});
+        return;
+      }
+      setDebridChoice(null);
+      setSession(playback.session);
+      setSelectedFileId(playback.fileId);
+    } catch (startError) { if (searchGeneration.current === generation) setError(startError.message); }
+    finally { setStartingId(null); }
   }
 
   async function startUsenet(resultId) {
@@ -427,15 +504,6 @@ export function useSourceLookup() {
     } catch (selectionError) { setError(selectionError.message); }
   }
 
-  function adoptSession(nextSession, fileId = null) {
-    setError("");
-    setErrorCode("");
-    setResults([]);
-    setHasSearched(true);
-    setSession(nextSession);
-    setSelectedFileId(fileId);
-  }
-
   return {
     error,
     errorCode,
@@ -445,6 +513,11 @@ export function useSourceLookup() {
     usenetJobs,
     usenetJob,
     debridChoice,
+    readySources,
+    readyLoading,
+    readyUnavailable,
+    torrentAvailability,
+    availabilityChecking,
     debridJob,
     usenetEnabled,
     searching,
@@ -452,7 +525,9 @@ export function useSourceLookup() {
     session,
     startingId,
     search,
-    adoptSession,
+    selectResult,
+    startReadySource,
+    changeSource,
     setSelectedFileId,
     selectEpisodeFile,
     confirmDebridFiles,

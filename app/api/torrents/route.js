@@ -24,11 +24,14 @@ export async function POST(request) {
   }
 
   try {
-    if (body?.action && !["local", "remote"].includes(body.action)) {
-      return Response.json({ error: "Invalid playback action." }, { status: 400 });
+    if (!["local", "ready", "remote"].includes(body?.action)) {
+      return Response.json({ error: "Choose how to watch this torrent." }, { status: 400 });
     }
     if (body?.provider && !["real-debrid", "torbox"].includes(body.provider)) {
       return Response.json({ error: "Invalid provider." }, { status: 400 });
+    }
+    if (["ready", "remote"].includes(body.action) && !body.provider) {
+      return Response.json({ error: "Choose a Debrid provider." }, { status: 400 });
     }
     const result = await startPlaybackSource(source, {
       action: body.action, remoteProvider: body.provider, scope: body.scope,

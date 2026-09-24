@@ -6,8 +6,9 @@ import { GET as libraryGet } from "../app/api/debrid/library/route.js";
 import { DELETE as libraryDelete } from "../app/api/debrid/library/[provider]/[id]/route.js";
 import { POST as libraryPlay } from "../app/api/debrid/library/[provider]/[id]/play/route.js";
 import { POST as associationPost } from "../app/api/debrid/library/[provider]/[id]/association/route.js";
-import { POST as directPlay } from "../app/api/playback/debrid/route.js";
+import { GET as directSources, POST as directPlay } from "../app/api/playback/debrid/route.js";
 import { POST as torrentStart } from "../app/api/torrents/route.js";
+import { saveSearchResult } from "../lib/search/result-store.js";
 
 test("unknown playback sessions cannot proxy remote media", async () => {
   const response = await streamGet(
@@ -80,4 +81,21 @@ test("library account data and destructive actions reject public or foreign orig
       "content-type": "application/json" }, body: JSON.stringify({ type: "show", tmdbId: 1, season: 1, episode: 2 }),
   }));
   assert.equal(foreignDirectPlay.status, 403);
+});
+
+test("ready-source discovery stays private and playback requires an explicit choice", async () => {
+  const publicList = await directSources(new Request("https://public.example/api/playback/debrid?type=movie&tmdbId=1", {
+    headers: { host: "public.example" },
+  }));
+  assert.equal(publicList.status, 403);
+  const headers = { host: "localhost", origin: "http://localhost", "content-type": "application/json" };
+  const direct = await directPlay(new Request("http://localhost/api/playback/debrid", {
+    method: "POST", headers, body: JSON.stringify({ type: "movie", tmdbId: 1 }),
+  }));
+  assert.equal(direct.status, 400);
+  const resultId = saveSearchResult({ magnet: `magnet:?xt=urn:btih:${"a".repeat(40)}` });
+  const torrent = await torrentStart(new Request("http://localhost/api/torrents", {
+    method: "POST", headers, body: JSON.stringify({ resultId }),
+  }));
+  assert.equal(torrent.status, 400);
 });

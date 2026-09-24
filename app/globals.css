@@ -1804,6 +1804,21 @@ a {
 .sourceResult:last-child {
   border-bottom: 0;
 }
+.sourceResult.selected { padding-inline: 14px; border: 1px solid var(--accent); border-radius: 10px; background: #1d2025; }
+
+.sourceHeadingActions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.readySourceResults { display: grid; gap: 10px; margin: 18px 0; padding: 18px; border: 1px solid #34664d; border-radius: 14px; background: #14231c; }
+.readySourceResults p { margin: 6px 0 0; color: var(--muted); }
+.readySource { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 14px; border: 1px solid #375b49; border-radius: 10px; background: #192b22; }
+.readySource div { display: grid; gap: 5px; min-width: 0; }
+.readySource strong { overflow-wrap: anywhere; }
+.readySource button { flex: 0 0 auto; }
+@media (max-width: 600px) { .readySource { align-items: stretch; flex-direction: column; } .readySource button { width: 100%; } }
+.readySource span, .sourceReady { color: #82dfa6; }
+.sourceAvailability { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; font-size: .8rem; font-weight: 700; }
+.sourceAvailability span { padding: 5px 9px; border: 1px solid currentColor; border-radius: 999px; }
+.sourceNotReady { color: #ff999f; }
+.sourceUnknown { color: var(--muted); }
 
 .sourceResult h3 {
   margin: 0 0 8px;

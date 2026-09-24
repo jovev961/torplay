@@ -95,18 +95,15 @@ test("next episode reuses the current season or multi-season torrent before sear
   assert.equal(searched, false);
 });
 
-test("next episode uses a ready mapped debrid item before searching sources", async () => {
-  let searched = false;
+test("next episode does not switch to another ready debrid item", async () => {
+  let switched = false;
   const result = await resolveNextEpisodePlayback("session-1", dependencies({
-    resolveDirectDebrid: async (context) => {
-      assert.deepEqual([context.tmdbId, context.season, context.episode], [200, 1, 5]);
-      return { kind: "hit", session: { id: "debrid-next", status: "ready" }, fileId: "2" };
-    },
-    startBestSource: async () => { searched = true; return null; },
+    resolveDirectDebrid: async () => { switched = true; return { kind: "hit" }; },
+    startBestSource: async () => { switched = true; return null; },
   }));
-  assert.equal(result.strategy, "debrid");
-  assert.equal(result.fileId, "2");
-  assert.equal(searched, false);
+  assert.equal(result.status, "manual-required");
+  assert.equal(result.strategy, "search");
+  assert.equal(switched, false);
 });
 
 test("reused torrent context advances only when playback is committed", () => {
@@ -120,27 +117,20 @@ test("reused torrent context advances only when playback is committed", () => {
   assert.deepEqual([updated.season, updated.episode], [1, 5]);
 });
 
-test("missing current-torrent episode uses the ranked verified source flow", async () => {
-  let receivedContext = null;
+test("missing current-torrent episode asks the viewer to choose a source", async () => {
+  let searched = false;
   const result = await resolveNextEpisodePlayback("session-1", dependencies({
-    startBestSource: async (context) => {
-      receivedContext = context;
-      return { session: { id: "session-2", status: "preparing" } };
-    },
+    startBestSource: async () => { searched = true; return { session: { id: "session-2" } }; },
   }));
-  assert.equal(result.strategy, "new-torrent");
-  assert.equal(result.status, "preparing");
-  assert.deepEqual([receivedContext.season, receivedContext.episode], [1, 5]);
+  assert.equal(result.strategy, "search");
+  assert.equal(result.status, "manual-required");
+  assert.equal(searched, false);
 });
 
-test("source failure becomes a manual choice instead of endless loading", async () => {
+test("missing current-torrent episode explains why manual selection is needed", async () => {
   const missing = await resolveNextEpisodePlayback("session-1", dependencies());
   assert.equal(missing.status, "manual-required");
-  const failed = await resolveNextEpisodePlayback("session-1", dependencies({
-    startBestSource: async () => { throw new Error("Provider unavailable"); },
-  }));
-  assert.equal(failed.status, "manual-required");
-  assert.match(failed.error, /Provider unavailable/);
+  assert.match(missing.error, /selected torrent does not contain/);
 });
 
 test("no metadata-confirmed next episode stops cleanly", async () => {
