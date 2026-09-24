@@ -10,7 +10,10 @@ export async function POST(request, context) {
     const { provider, id } = await context.params;
     const body = await request.json();
     return Response.json(await mapDebridEpisodeFile(provider, id, body.fileId,
-      body.season, body.episode));
+      body.season, body.episode, {}, {
+        replaceExisting: body.replaceExisting === true,
+        expectedTargetFileId: body.expectedTargetFileId,
+      }));
   } catch (error) {
     return Response.json({ error: error.message }, { status: error.status || 422 });
   }

@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { createDatabase } from "../lib/database/sqlite.js";
 import { autoMapEpisodeFiles, episodeMappingsForFiles, mappedEpisodeFile, resolveEpisodeFile,
-  saveEpisodeFileMapping } from "../lib/video/episode-mapping.js";
+  replaceEpisodeFileMappings, saveEpisodeFileMapping } from "../lib/video/episode-mapping.js";
 
 const hashA = "a".repeat(40);
 const hashB = "b".repeat(40);
@@ -63,5 +63,21 @@ test("filename and TMDB episode-title mappings stay conservative and preserve ma
     autoMapEpisodeFiles(hashB, context, [files[2]], [{ number: 3, title: "The Hidden Forest" }], db);
     assert.equal(resolveEpisodeFile(hashB, context, [files[2]], 1, 3, { database: db })?.providerId, "3");
     assert.equal(episodeMappingsForFiles(hashB, context, [files[2]], db)[0].source, "episode-list");
+  } finally { db.close(); }
+});
+
+test("remapping removes a prior assignment matched through a moved file path", () => {
+  const db = createDatabase(":memory:");
+  const original = { providerId: "1", name: "Example.S01E01.mkv", path: "Old/Example.S01E01.mkv", size: 1000 };
+  const moved = { ...original, path: "New/Example.S01E01.mkv" };
+  try {
+    saveEpisodeFileMapping(hashA, context, original, db, "filename-match");
+    const previous = episodeMappingsForFiles(hashA, context, [moved], db);
+    assert.equal(previous[0].episode, 1);
+    replaceEpisodeFileMappings(hashA, { ...context, episode: 3 }, moved, previous, db);
+    autoMapEpisodeFiles(hashA, context, [moved], [], db);
+    assert.deepEqual(episodeMappingsForFiles(hashA, context, [moved], db)
+      .map(({ episode, source }) => [episode, source]), [[3, "manual"]]);
+    assert.equal(resolveEpisodeFile(hashA, context, [moved], 1, 1, { database: db }), null);
   } finally { db.close(); }
 });
