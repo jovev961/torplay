@@ -72,6 +72,7 @@ function dependencies(overrides = {}) {
     getMediaContext: () => ({ type: "show", tmdbId: 200, title: "Show", season: 1, episode: 4 }),
     nextEpisode: async () => ({ season: 1, number: 5, title: "Next" }),
     findSessionEpisode: () => null,
+    resolveDirectDebrid: async () => ({ kind: "miss" }),
     startBestSource: async () => null,
     ...overrides,
   };
@@ -91,6 +92,20 @@ test("next episode reuses the current season or multi-season torrent before sear
     assert.equal(result.strategy, "reuse");
     assert.equal(result.fileId, `${nextEpisode.season}-${nextEpisode.number}`);
   }
+  assert.equal(searched, false);
+});
+
+test("next episode uses a ready mapped debrid item before searching sources", async () => {
+  let searched = false;
+  const result = await resolveNextEpisodePlayback("session-1", dependencies({
+    resolveDirectDebrid: async (context) => {
+      assert.deepEqual([context.tmdbId, context.season, context.episode], [200, 1, 5]);
+      return { kind: "hit", session: { id: "debrid-next", status: "ready" }, fileId: "2" };
+    },
+    startBestSource: async () => { searched = true; return null; },
+  }));
+  assert.equal(result.strategy, "debrid");
+  assert.equal(result.fileId, "2");
   assert.equal(searched, false);
 });
 

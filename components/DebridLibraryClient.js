@@ -54,6 +54,10 @@ export default function DebridLibraryClient() {
   const [requestedFileId, setRequestedFileId] = useState(null);
   const [mapSeason, setMapSeason] = useState(1);
   const [mapEpisode, setMapEpisode] = useState(1);
+  const [associationQuery, setAssociationQuery] = useState("");
+  const [associationType, setAssociationType] = useState("show");
+  const [associationSeason, setAssociationSeason] = useState(1);
+  const [associationResults, setAssociationResults] = useState([]);
   const requestId = useRef(0);
 
   const refresh = useCallback(async (nextPage = 1, fresh = false) => {
@@ -109,6 +113,10 @@ export default function DebridLibraryClient() {
       setRequestedFileId(null);
       setMapSeason(detail.mediaContext?.season ?? 1);
       setMapEpisode(detail.mediaContext?.episode ?? 1);
+      setAssociationQuery("");
+      setAssociationResults([]);
+      setAssociationType(detail.mediaContext?.type || "show");
+      setAssociationSeason(detail.mediaContext?.season ?? 1);
     } catch (openError) { setError(openError.message); }
   }
 
@@ -150,6 +158,39 @@ export default function DebridLibraryClient() {
       setSelected(next);
       setError("");
     } catch (mappingError) { setError(mappingError.message); }
+  }
+
+  async function searchAssociation() {
+    setError("");
+    try {
+      const params = new URLSearchParams({ q: associationQuery, type: associationType === "show" ? "tv" : "movie" });
+      const result = await json(await fetch(`/api/metadata/search?${params}`, { cache: "no-store" }));
+      setAssociationResults(result.results || []);
+    } catch (searchError) { setError(searchError.message); }
+  }
+
+  async function associate(result) {
+    if (!selected) return;
+    setError("");
+    try {
+      const next = await json(await fetch(`/api/debrid/library/${selected.provider}/${encodeURIComponent(selected.resourceId)}/association`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: associationType, tmdbId: result.id,
+          ...(associationType === "show" ? { season: associationSeason } : {}) }),
+      }));
+      setSelected(next);
+      setAssociationResults([]);
+    } catch (associationError) { setError(associationError.message); }
+  }
+
+  async function removeAssociation() {
+    if (!selected) return;
+    setError("");
+    try {
+      const next = await json(await fetch(`/api/debrid/library/${selected.provider}/${encodeURIComponent(selected.resourceId)}/association`,
+        { method: "DELETE" }));
+      setSelected(next);
+    } catch (associationError) { setError(associationError.message); }
   }
 
   async function remove(item) {
@@ -230,6 +271,28 @@ export default function DebridLibraryClient() {
     {selected ? <section className="panel debridLibraryDetail">
       <h2>{selected.name}</h2>
       <p>{label[selected.provider]} · {selected.status}</p>
+      {selected.ownership === "external" ? <div className="debridFileReview">
+        <strong>Title for direct playback</strong>
+        <p>{selected.mediaContext?.tmdbId
+          ? `Associated with ${selected.mediaContext.title}. Ready mapped files can play from this title’s page.`
+          : "Associate this provider item with a TMDB title to make its ready files available from Play."}</p>
+        {selected.associationSource === "manual" ? <button type="button" onClick={() => void removeAssociation()}>Remove association</button> : null}
+        <div className="debridFileReviewRow debridAssociationFields">
+          <label>Type <select value={associationType} onChange={(event) => {
+            setAssociationType(event.target.value);
+            setAssociationResults([]);
+          }}><option value="show">TV show</option><option value="movie">Movie</option></select></label>
+          {associationType === "show" ? <label>Season <input type="number" min="0" max="99"
+            value={associationSeason} onChange={(event) => setAssociationSeason(Number(event.target.value))} /></label> : null}
+          <label className="debridAssociationSearch">Search TMDB <input value={associationQuery} maxLength={200}
+            onChange={(event) => setAssociationQuery(event.target.value)} /></label>
+          <button type="button" disabled={!associationQuery.trim()} onClick={() => void searchAssociation()}>Find title</button>
+        </div>
+        {associationResults.slice(0, 10).map((result) => <div className="debridFileReviewRow" key={result.id}>
+          <span>{result.title}{result.year ? ` (${result.year})` : ""}</span>
+          <button type="button" onClick={() => void associate(result)}>Associate</button>
+        </div>)}
+      </div> : null}
       {selected.status === "awaiting-selection" ? <div className="debridFileReview">
         <strong>Review video files before Real-Debrid downloads them</strong>
         <p>Select the pack files you want and identify the requested episode.</p>

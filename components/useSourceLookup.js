@@ -258,6 +258,25 @@ export function useSourceLookup() {
     setDebridChoice(null);
     setDebridJob(null);
 
+    if (["movie", "show"].includes(criteria.type) && criteria.tmdbId) {
+      try {
+        const direct = await readJson(await request("/api/playback/debrid", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: criteria.type, tmdbId: criteria.tmdbId,
+            ...(criteria.type === "show" ? { season: criteria.season, episode: criteria.episode } : {}) }),
+        }));
+        if (direct.kind === "hit") {
+          setSession(direct.session);
+          setSelectedFileId(direct.fileId);
+          setSearching(false);
+          return;
+        }
+      } catch (directError) {
+        if (directError.name === "AbortError") { setSearching(false); return; }
+        // A debrid lookup is optional; the existing source search is the fallback.
+      }
+    }
+
     const params = new URLSearchParams({ type: criteria.type, q: criteria.query });
     if (criteria.season !== undefined) params.set("season", String(criteria.season));
     if (criteria.episode !== undefined) params.set("episode", String(criteria.episode));
