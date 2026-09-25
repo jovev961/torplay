@@ -452,9 +452,12 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
                 hasPreviousEpisode: hasPreviousEpisode && !previousBusy,
                 hasNextEpisode,
                 nextEpisodePrompt: autoplay.phase === "ready" ? {
-                  text: `Next: ${autoplay.nextEpisode?.title || "episode"}`,
+                  title: "Next episode is ready",
+                  text: `${episodeCode(autoplay.nextEpisode.season, autoplay.nextEpisode.number)} · ${autoplay.nextEpisode.title}`,
                   action: "Play now",
                   onAction: () => void playNextEpisode(),
+                  secondaryAction: "Cancel",
+                  onSecondaryAction: () => void cancelAutoplay(),
                 } : autoplay.phase === "manual" && autoplay.nextEpisode ? {
                   text: autoplay.error || "Choose a source for the next episode.",
                   action: "Choose source",
@@ -493,13 +496,6 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
 
       {autoplay.phase === "resolving" ? <div className="nextEpisodePrompt notice">Finding the next episode…</div> : null}
       {episodeNavigationError ? <div className="nextEpisodePrompt notice error" role="alert">{episodeNavigationError}</div> : null}
-      {autoplay.phase === "ready" ? (
-        <div className="nextEpisodePrompt panel" role="dialog" aria-label="Next episode">
-          <strong>Next episode is ready</strong>
-          <span>{episodeCode(autoplay.nextEpisode.season, autoplay.nextEpisode.number)} · {autoplay.nextEpisode.title}</span>
-          <div><button className="primaryButton compact" type="button" onClick={() => void playNextEpisode()}>Play Now</button><button className="secondaryButton" type="button" onClick={() => void cancelAutoplay()}>Cancel</button></div>
-        </div>
-      ) : null}
       {autoplay.phase === "manual" ? (
         <div className="nextEpisodePrompt notice error">
           <p>Choose a source{autoplay.nextEpisode ? ` for ${episodeCode(autoplay.nextEpisode.season, autoplay.nextEpisode.number)}` : ""}. {autoplay.error || ""}</p>

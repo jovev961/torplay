@@ -1171,9 +1171,14 @@ export default function VideoPlayer({
             onClick={() => void toggleFullscreen()}>Exit fullscreen</button>
           {sourcePicker}
         </div> : null}
-        {!suspended && isFullscreen && nextEpisodePrompt ? <div className="playerEpisodePrompt" role="status">
+        {!suspended && nextEpisodePrompt ? <div className="playerEpisodePrompt" role="dialog" aria-label="Next episode">
+          {nextEpisodePrompt.title ? <strong>{nextEpisodePrompt.title}</strong> : null}
           <span>{nextEpisodePrompt.text}</span>
-          <button type="button" onClick={nextEpisodePrompt.onAction}>{nextEpisodePrompt.action}</button>
+          <div className="playerEpisodePromptActions">
+            <button type="button" onClick={nextEpisodePrompt.onAction}>{nextEpisodePrompt.action}</button>
+            {nextEpisodePrompt.secondaryAction ? <button className="playerEpisodePromptSecondary" type="button"
+              onClick={nextEpisodePrompt.onSecondaryAction}>{nextEpisodePrompt.secondaryAction}</button> : null}
+          </div>
         </div> : null}
 
         {visibleSubtitleCues.length > 0 ? (
