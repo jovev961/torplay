@@ -98,16 +98,12 @@ test("active debrid playback hides the empty search notice and shows a clear sto
   assert.match(episodeControls, /aria-label="Next episode"[^>]*disabled/);
 
   const nextEpisode = renderToStaticMarkup(createElement(SourcePanel, {
-    lookup, heading: "Episode", playback: { nextEpisodePrompt: {
+    lookup, heading: "Episode", playback: { nextEpisodePrompt: { kind: "ready",
       title: "Next episode is ready", text: "S01E02 · The next story",
       action: "Play now", onAction() {}, secondaryAction: "Cancel", onSecondaryAction() {},
     } },
   }));
-  assert.match(nextEpisode, /class="playerEpisodePrompt"[^>]*aria-label="Next episode"/);
-  assert.match(nextEpisode, /Next episode is ready/);
-  assert.match(nextEpisode, /S01E02 · The next story/);
-  assert.match(nextEpisode, /<button[^>]*>Play now<\/button>/);
-  assert.match(nextEpisode, /<button[^>]*>Cancel<\/button>/);
+  assert.doesNotMatch(nextEpisode, /class="playerEpisodePrompt"/);
 });
 
 test("source panel offers ready library playback and shows torrent provider status before selection", async () => {

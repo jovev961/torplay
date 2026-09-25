@@ -7,7 +7,9 @@ import {
   SettingsError,
   configurationWritable,
   parseSettingsEnvironment,
+  playbackPreferences,
   settingsState,
+  updatePlaybackPreferences,
   updateProviderSettings,
   validateAndUpdateProvidersSettings,
 } from "../lib/settings/config.js";
@@ -29,6 +31,27 @@ test("parses supported environment assignments without exposing comments", () =>
     TMDB_API_TOKEN: "token value",
     FLARESOLVERR_URL: "http://localhost:8191",
   });
+});
+
+test("shared playback switches default off and persist independently", async () => {
+  const { directory, filename } = await fixture("# Preserve me\n");
+  const environment = { TORPLAY_CONFIG_PATH: filename };
+  try {
+    assert.deepEqual(playbackPreferences(environment), {
+      autoSkipIntrosRecaps: false, autoPlayNextEpisode: false,
+    });
+    await updatePlaybackPreferences({ autoSkipIntrosRecaps: true, autoPlayNextEpisode: false },
+      { environment, configPath: filename });
+    assert.deepEqual(playbackPreferences(environment), {
+      autoSkipIntrosRecaps: true, autoPlayNextEpisode: false,
+    });
+    assert.match(await readFile(filename, "utf8"), /TORPLAY_AUTO_SKIP_INTRO_RECAP=true/);
+    assert.match(await readFile(filename, "utf8"), /# Preserve me/);
+    await assert.rejects(updatePlaybackPreferences({ autoSkipIntrosRecaps: "yes", autoPlayNextEpisode: true },
+      { environment, configPath: filename }), SettingsError);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test("updates FlareSolverr settings atomically while preserving legacy configuration", async () => {

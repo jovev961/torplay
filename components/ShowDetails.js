@@ -49,6 +49,10 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
   const advancingRef = useRef(false);
   const lastReadySessionRef = useRef(null);
   const pendingSourceClearedRef = useRef(false);
+  const manualNextRequestedRef = useRef(false);
+  const [playbackPreferences, setPlaybackPreferences] = useState({
+    autoSkipIntrosRecaps: false, autoPlayNextEpisode: false,
+  });
   const [autoplay, dispatchAutoplay] = useReducer(autoplayReducer, {
     phase: "idle",
     endReached: false,
@@ -144,14 +148,30 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
   }, []);
 
   useEffect(() => {
-    if (autoplay.phase === "ready" && autoplay.endReached) advanceAfterEnd();
-  }, [autoplay.endReached, autoplay.phase]);
+    let cancelled = false;
+    void fetch("/api/settings", { cache: "no-store" })
+      .then(readJson)
+      .then((snapshot) => {
+        if (!cancelled) setPlaybackPreferences({
+          autoSkipIntrosRecaps: snapshot.playback.autoSkipIntrosRecaps === true,
+          autoPlayNextEpisode: snapshot.playback.autoPlayNextEpisode === true,
+        });
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (autoplay.phase === "ready" && (manualNextRequestedRef.current
+      || (autoplay.endReached && playbackPreferences.autoPlayNextEpisode))) advanceAfterEnd();
+  }, [autoplay.endReached, autoplay.phase, playbackPreferences.autoPlayNextEpisode]);
 
   async function clearAutoplay(nextPhase = "reset") {
     autoplayAbortRef.current?.abort();
     autoplayAbortRef.current = null;
     preparingNextRef.current = false;
     advancingRef.current = false;
+    manualNextRequestedRef.current = false;
     dispatchAutoplay({ type: nextPhase });
     setEpisodeNavigationError("");
   }
@@ -253,8 +273,10 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
     return readJson(response);
   }
 
-  async function prepareNextEpisode(endReached = false) {
-    if (!lookup.session?.id || autoplay.phase !== "idle" || preparingNextRef.current) {
+  async function prepareNextEpisode(endReached = false, fromManual = false) {
+    if (fromManual) manualNextRequestedRef.current = true;
+    if (!lookup.session?.id || !["idle", ...(fromManual ? ["cancelled"] : [])].includes(autoplay.phase)
+      || preparingNextRef.current) {
       if (endReached) dispatchAutoplay({ type: "ended" });
       return;
     }
@@ -341,6 +363,7 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
   async function playNextEpisode() {
     if (autoplay.phase !== "ready" || advancingRef.current) return;
     advancingRef.current = true;
+    manualNextRequestedRef.current = false;
     dispatchAutoplay({ type: "advancing" });
     const prepared = autoplay;
     try {
@@ -358,6 +381,15 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
 
   async function cancelAutoplay() {
     await clearAutoplay("cancel");
+  }
+
+  async function savePlaybackPreferences(next) {
+    const result = await readJson(await fetch("/api/settings/playback", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(next),
+    }));
+    setPlaybackPreferences(result.preferences);
   }
 
   async function playPreviousEpisode() {
@@ -396,7 +428,8 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
   function playNextFromControls() {
     if (autoplay.phase === "ready") void playNextEpisode();
     else if (autoplay.phase === "manual") void chooseNextSource();
-    else if (!["advancing", "cancelled", "end"].includes(autoplay.phase)) void prepareNextEpisode(true);
+    else if (autoplay.phase === "resolving") manualNextRequestedRef.current = true;
+    else if (!["advancing", "end"].includes(autoplay.phase)) void prepareNextEpisode(false, true);
   }
 
   async function chooseNextSource() {
@@ -451,17 +484,31 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
                 onNextEpisode: playNextFromControls,
                 hasPreviousEpisode: hasPreviousEpisode && !previousBusy,
                 hasNextEpisode,
+                playbackPreferences,
+                onPlaybackPreferencesChange: savePlaybackPreferences,
                 nextEpisodePrompt: autoplay.phase === "ready" ? {
-                  title: "Next episode is ready",
+                  kind: "ready",
+                  immediate: manualNextRequestedRef.current,
+                  title: "Up Next",
                   text: `${episodeCode(autoplay.nextEpisode.season, autoplay.nextEpisode.number)} · ${autoplay.nextEpisode.title}`,
-                  action: "Play now",
+                  action: "Play Next Episode",
                   onAction: () => void playNextEpisode(),
                   secondaryAction: "Cancel",
                   onSecondaryAction: () => void cancelAutoplay(),
-                } : autoplay.phase === "manual" && autoplay.nextEpisode ? {
+                } : autoplay.phase === "manual" ? {
+                  kind: "manual",
+                  immediate: manualNextRequestedRef.current,
+                  title: autoplay.nextEpisode ? "Choose a source" : "Next episode unavailable",
                   text: autoplay.error || "Choose a source for the next episode.",
-                  action: "Choose source",
-                  onAction: () => void chooseNextSource(),
+                  action: autoplay.nextEpisode ? "Choose source" : null,
+                  onAction: autoplay.nextEpisode ? () => void chooseNextSource() : null,
+                  secondaryAction: "Dismiss",
+                  onSecondaryAction: () => void cancelAutoplay(),
+                } : ["resolving", "advancing"].includes(autoplay.phase) ? {
+                  kind: "loading",
+                  immediate: manualNextRequestedRef.current,
+                  title: "Up Next",
+                  text: autoplay.phase === "advancing" ? "Starting the next episode…" : "Finding the next episode…",
                 } : null,
               }}
             />
@@ -494,14 +541,7 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
         </div>
       ) : null}
 
-      {autoplay.phase === "resolving" ? <div className="nextEpisodePrompt notice">Finding the next episode…</div> : null}
       {episodeNavigationError ? <div className="nextEpisodePrompt notice error" role="alert">{episodeNavigationError}</div> : null}
-      {autoplay.phase === "manual" ? (
-        <div className="nextEpisodePrompt notice error">
-          <p>Choose a source{autoplay.nextEpisode ? ` for ${episodeCode(autoplay.nextEpisode.season, autoplay.nextEpisode.number)}` : ""}. {autoplay.error || ""}</p>
-          <div>{autoplay.nextEpisode ? <button className="primaryButton compact" type="button" onClick={() => void chooseNextSource()}>Choose Source</button> : null}<button className="secondaryButton" type="button" onClick={() => void cancelAutoplay()}>Back to Show</button></div>
-        </div>
-      ) : null}
 
       <section className="seasonSection" aria-labelledby="episodes-heading">
         <div className="seasonToolbar">
