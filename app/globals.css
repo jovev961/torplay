@@ -209,15 +209,11 @@ a {
 }
 
 .brandMark {
-  display: grid;
-  width: 28px;
-  height: 28px;
-  border-radius: 9px;
-  color: white;
-  background: linear-gradient(145deg, #ff3540, #9f0710);
-  font-size: 0.72rem;
-  place-items: center;
-  box-shadow: 0 7px 22px rgba(229, 9, 20, 0.22);
+  display: block;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  object-fit: contain;
 }
 
 .mainNav {
