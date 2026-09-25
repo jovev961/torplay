@@ -3,9 +3,11 @@ import test from "node:test";
 import {
   isFullscreenActive,
   lockFullscreenViewport,
+  needsHomeScreenForImmersivePlayback,
   supportsFullscreen,
   toggleBrowserFullscreen,
 } from "../lib/video/fullscreen.js";
+import manifest from "../app/manifest.js";
 
 test("uses the standard element fullscreen API when available", async () => {
   const calls = [];
@@ -50,6 +52,15 @@ test("uses viewport fullscreen instead of native iPhone video fullscreen", async
   }), "enter");
   assert.deepEqual(calls, ["viewport"]);
   assert.equal(video.webkitDisplayingFullscreen, undefined);
+});
+
+test("requests a fullscreen Home Screen launch and suggests it only from an iPhone browser tab", () => {
+  assert.equal(manifest().display, "fullscreen");
+  assert.equal(manifest().start_url, "/");
+  assert.equal(needsHomeScreenForImmersivePlayback({ userAgent: "iPhone Safari", standalone: false }), true);
+  assert.equal(needsHomeScreenForImmersivePlayback({ userAgent: "iPhone Safari", standalone: true }), false);
+  assert.equal(needsHomeScreenForImmersivePlayback({ userAgent: "iPhone Safari" }, true), false);
+  assert.equal(needsHomeScreenForImmersivePlayback({ userAgent: "Android Chrome" }), false);
 });
 
 test("falls back to viewport fullscreen when element fullscreen is rejected", async () => {
