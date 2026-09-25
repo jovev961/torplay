@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import ProfileAvatar from "./ProfileAvatar.js";
 import { useProfile } from "./ProfileProvider.js";
@@ -73,7 +74,7 @@ export default function AppHeader({ active = "" }) {
   return (
     <header className="appHeader" ref={headerRef}>
       <Link className="brand" href="/" aria-label="TorPlay home">
-        <span className="brandMark" aria-hidden="true">▶</span>
+        <Image className="brandMark" src="/torplay-logo.png" alt="" width={34} height={34} />
         <span>TorPlay</span>
       </Link>
 
