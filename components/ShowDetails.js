@@ -35,6 +35,10 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
   const [playbackIntent, setPlaybackIntent] = useState(initialIntent);
   const [launchedEpisodeKey, setLaunchedEpisodeKey] = useState(null);
   const [autoStartEpisodeKey, setAutoStartEpisodeKey] = useState(null);
+  const [transitionPosition, setTransitionPosition] = useState(null);
+  const [episodeNavigationError, setEpisodeNavigationError] = useState("");
+  const [previousBusy, setPreviousBusy] = useState(false);
+  const [pendingEpisode, setPendingEpisode] = useState(null);
   const [readyEpisodes, setReadyEpisodes] = useState([]);
   const [readyLoading, setReadyLoading] = useState(true);
   const [readyUnavailable, setReadyUnavailable] = useState(false);
@@ -44,11 +48,18 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
   const preparingNextRef = useRef(false);
   const advancingRef = useRef(false);
   const lastReadySessionRef = useRef(null);
+  const pendingSourceClearedRef = useRef(false);
   const [autoplay, dispatchAutoplay] = useReducer(autoplayReducer, {
     phase: "idle",
     endReached: false,
   });
   const selectedEpisodeKey = selectedEpisode ? `${selectedEpisode.season}:${selectedEpisode.number}` : null;
+  const currentEpisodeIndex = selectedEpisode?.season === playingSeason.number
+    ? playingSeason.episodes.findIndex((item) => item.number === selectedEpisode.number) : -1;
+  const hasPreviousEpisode = currentEpisodeIndex > 0
+    || show.seasons.some((item) => item.number > 0 && item.number < selectedEpisode?.season);
+  const hasNextEpisode = currentEpisodeIndex >= 0 && currentEpisodeIndex < playingSeason.episodes.length - 1
+    || show.seasons.some((item) => item.number > selectedEpisode?.season);
   const media = useMemo(() => selectedEpisode ? ({
     mediaType: "tv",
     tmdbId: show.id,
@@ -67,6 +78,35 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
       || lookup.session.files.find((file) => file.id === lookup.session.suggestedFileId)
       || findEpisodeFile(lookup.session.files, selectedEpisode.season, selectedEpisode.number)
     : null;
+  useEffect(() => {
+    if (!pendingEpisode) return undefined;
+    if (!lookup.session) {
+      pendingSourceClearedRef.current = true;
+      return undefined;
+    }
+    if (lookup.session.status !== "ready" || !pendingSourceClearedRef.current) return undefined;
+    const file = lookup.session.files.find((entry) => entry.id === lookup.selectedFileId)
+      || lookup.session.files.find((entry) => entry.id === lookup.session.suggestedFileId)
+      || findEpisodeFile(lookup.session.files, pendingEpisode.selected.season, pendingEpisode.selected.number);
+    if (!file) return undefined;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setSeason(pendingEpisode.nextSeason);
+      setPlayingSeason(pendingEpisode.nextSeason);
+      setSelectedSeasonNumber(pendingEpisode.nextSeason.number);
+      setSelectedEpisode(pendingEpisode.selected);
+      setPlaybackIntent(pendingEpisode.resumePosition > 0 ? "resume" : "start");
+      setTransitionPosition(pendingEpisode.resumePosition);
+      const key = `${pendingEpisode.selected.season}:${pendingEpisode.selected.number}`;
+      setLaunchedEpisodeKey(key);
+      setAutoStartEpisodeKey(key);
+      lookup.setSelectedFileId(file.id);
+      setPendingEpisode(null);
+      setEpisodeNavigationError("");
+    });
+    return () => { cancelled = true; };
+  }, [lookup, lookup.selectedFileId, lookup.session, pendingEpisode]);
   const advanceAfterEnd = useEffectEvent(() => {
     void playNextEpisode();
   });
@@ -113,6 +153,7 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
     preparingNextRef.current = false;
     advancingRef.current = false;
     dispatchAutoplay({ type: nextPhase });
+    setEpisodeNavigationError("");
   }
 
   async function changeSeason(event) {
@@ -141,6 +182,31 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
 
   async function chooseEpisode(item) {
     const selected = { ...item, season: season.number };
+    if (pendingEpisode) {
+      await clearAutoplay();
+      await beginSourceSelection(selected);
+      return;
+    }
+    if (lookup.session?.id && launchedEpisodeKey === selectedEpisodeKey && playerFile) {
+      if (selected.season === selectedEpisode.season && selected.number === selectedEpisode.number) return;
+      await clearAutoplay();
+      setEpisodeNavigationError("");
+      try {
+        const result = await readJson(await fetch("/api/playback/next-episode", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId: lookup.session.id, direction: "selected",
+            target: { season: selected.season, episode: selected.number } }),
+        }));
+        if (result.status === "ready") {
+          await commitReusableEpisode(selected, result.fileId);
+        } else if (result.status === "manual-required") {
+          await beginSourceSelection(selected);
+        }
+      } catch (error) {
+        setEpisodeNavigationError(error.message);
+      }
+      return;
+    }
     await clearAutoplay();
     await lookup.stop();
     setPlayingSeason(season);
@@ -148,6 +214,7 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
     setPlaybackIntent(null);
     setLaunchedEpisodeKey(null);
     setAutoStartEpisodeKey(null);
+    setTransitionPosition(null);
   }
 
   async function launchEpisode(intent, episode = selectedEpisode) {
@@ -156,6 +223,7 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
     setPlaybackIntent(intent);
     setLaunchedEpisodeKey(`${episode.season}:${episode.number}`);
     setAutoStartEpisodeKey(null);
+    setTransitionPosition(null);
     await lookup.search({
       type: "show",
       query: show.title,
@@ -171,6 +239,10 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
     const item = season.episodes.find((entry) => entry.number === number)
       || { number, title: `Episode ${number}` };
     const selected = { ...item, season: season.number };
+    if (pendingEpisode || (lookup.session?.id && launchedEpisodeKey === selectedEpisodeKey && playerFile)) {
+      await chooseEpisode(item);
+      return;
+    }
     await chooseEpisode(item);
     await launchEpisode("start", selected);
   }
@@ -226,6 +298,33 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
     return { nextSeason, selected };
   }
 
+  async function commitReusableEpisode(episode, fileId, resumePosition = 0) {
+    const { nextSeason, selected } = await resolveEpisodeDetails(episode);
+    await readJson(await fetch("/api/playback/next-episode", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "advance", sessionId: lookup.session.id,
+        season: selected.season, episode: selected.number }),
+    }));
+    setSeason(nextSeason);
+    setPlayingSeason(nextSeason);
+    setSelectedSeasonNumber(nextSeason.number);
+    setSelectedEpisode(selected);
+    setPlaybackIntent(resumePosition > 0 ? "resume" : "start");
+    setTransitionPosition(resumePosition);
+    const key = `${selected.season}:${selected.number}`;
+    setLaunchedEpisodeKey(key);
+    setAutoStartEpisodeKey(key);
+    lookup.setSelectedFileId(fileId);
+  }
+
+  async function beginSourceSelection(episode, resumePosition = 0) {
+    const { nextSeason, selected } = await resolveEpisodeDetails(episode);
+    pendingSourceClearedRef.current = !lookup.session;
+    setPendingEpisode({ nextSeason, selected, resumePosition });
+    await lookup.search({ type: "show", query: show.title, tmdbId: show.id, imdbId: show.imdbId,
+      year: show.year, season: selected.season, episode: selected.number });
+  }
+
   function handleNearEnd() {
     void prepareNextEpisode(false);
   }
@@ -245,27 +344,7 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
     dispatchAutoplay({ type: "advancing" });
     const prepared = autoplay;
     try {
-      const { nextSeason, selected } = await resolveEpisodeDetails(prepared.nextEpisode);
-      const response = await fetch("/api/playback/next-episode", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "advance",
-          sessionId: lookup.session.id,
-          season: prepared.nextEpisode.season,
-          episode: prepared.nextEpisode.number,
-        }),
-      });
-      await readJson(response);
-
-      setSeason(nextSeason);
-      setPlayingSeason(nextSeason);
-      setSelectedSeasonNumber(nextSeason.number);
-      setSelectedEpisode(selected);
-      setPlaybackIntent("start");
-      setLaunchedEpisodeKey(`${prepared.nextEpisode.season}:${prepared.nextEpisode.number}`);
-      setAutoStartEpisodeKey(`${prepared.nextEpisode.season}:${prepared.nextEpisode.number}`);
-      lookup.setSelectedFileId(prepared.fileId);
+      await commitReusableEpisode(prepared.nextEpisode, prepared.fileId);
       advancingRef.current = false;
       dispatchAutoplay({ type: "reset" });
     } catch (error) {
@@ -281,30 +360,53 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
     await clearAutoplay("cancel");
   }
 
+  async function playPreviousEpisode() {
+    if (!lookup.session?.id || previousBusy || !hasPreviousEpisode) return;
+    setPreviousBusy(true);
+    setEpisodeNavigationError("");
+    await clearAutoplay();
+    try {
+      const result = await readJson(await fetch("/api/playback/next-episode", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: lookup.session.id, direction: "previous" }),
+      }));
+      if (result.status === "end-of-series") return;
+      const { selected } = await resolveEpisodeDetails(result.nextEpisode);
+      let resumePosition = 0;
+      if (activeProfile?.id) {
+        const params = new URLSearchParams({ mediaType: "tv", tmdbId: String(show.id),
+          seasonNumber: String(selected.season), episodeNumber: String(selected.number) });
+        const progress = await readJson(await fetch(
+          `/api/profiles/${encodeURIComponent(activeProfile.id)}/progress?${params}`, { cache: "no-store" }));
+        if (progress.progress && !progress.progress.completed) resumePosition = progress.progress.position || 0;
+      }
+      if (result.status === "manual-required") {
+        setEpisodeNavigationError("The current source does not have the previous episode. Choose a source below.");
+        await beginSourceSelection(selected, resumePosition);
+        return;
+      }
+      await commitReusableEpisode(selected, result.fileId, resumePosition);
+    } catch (error) {
+      setEpisodeNavigationError(error.message);
+    } finally {
+      setPreviousBusy(false);
+    }
+  }
+
+  function playNextFromControls() {
+    if (autoplay.phase === "ready") void playNextEpisode();
+    else if (autoplay.phase === "manual") void chooseNextSource();
+    else if (!["advancing", "cancelled", "end"].includes(autoplay.phase)) void prepareNextEpisode(true);
+  }
+
   async function chooseNextSource() {
     if (!autoplay.nextEpisode) return;
     const nextEpisode = autoplay.nextEpisode;
     await clearAutoplay();
     try {
-      const { nextSeason, selected } = await resolveEpisodeDetails(nextEpisode);
-      setSeason(nextSeason);
-      setPlayingSeason(nextSeason);
-      setSelectedSeasonNumber(nextSeason.number);
-      setSelectedEpisode(selected);
-      setPlaybackIntent("start");
-      setLaunchedEpisodeKey(`${nextEpisode.season}:${nextEpisode.number}`);
-      setAutoStartEpisodeKey(null);
-      await lookup.search({
-        type: "show",
-        query: show.title,
-        tmdbId: show.id,
-        imdbId: show.imdbId,
-        year: show.year,
-        season: nextEpisode.season,
-        episode: nextEpisode.number,
-      });
+      await beginSourceSelection(nextEpisode);
     } catch (error) {
-      dispatchAutoplay({ type: "manual", payload: { error: error.message, nextEpisode } });
+      setEpisodeNavigationError(error.message);
     }
   }
 
@@ -329,15 +431,35 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
                 number: item.number,
                 title: item.title,
               }))}
-              onSourceReset={() => clearAutoplay()}
+              onSourceReset={() => {
+                setPendingEpisode(null);
+                return clearAutoplay();
+              }}
+              transitionPending={Boolean(pendingEpisode)}
+              pendingEpisodeTitle={pendingEpisode
+                ? `${episodeCode(pendingEpisode.selected.season, pendingEpisode.selected.number)} · ${pendingEpisode.selected.title}`
+                : null}
               playback={{
                 profileId: activeProfile?.id,
                 media,
-                initialPosition: playbackIntent === "resume" ? saved.progress?.position || 0 : 0,
+                initialPosition: transitionPosition ?? (playbackIntent === "resume" ? saved.progress?.position || 0 : 0),
                 resetProgress: playbackIntent === "start",
                 autoStart: autoStartEpisodeKey === selectedEpisodeKey,
                 onNearEnd: handleNearEnd,
                 onEnded: handleEpisodeEnded,
+                onPreviousEpisode: playPreviousEpisode,
+                onNextEpisode: playNextFromControls,
+                hasPreviousEpisode: hasPreviousEpisode && !previousBusy,
+                hasNextEpisode,
+                nextEpisodePrompt: autoplay.phase === "ready" ? {
+                  text: `Next: ${autoplay.nextEpisode?.title || "episode"}`,
+                  action: "Play now",
+                  onAction: () => void playNextEpisode(),
+                } : autoplay.phase === "manual" && autoplay.nextEpisode ? {
+                  text: autoplay.error || "Choose a source for the next episode.",
+                  action: "Choose source",
+                  onAction: () => void chooseNextSource(),
+                } : null,
               }}
             />
           ) : (
@@ -370,6 +492,7 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
       ) : null}
 
       {autoplay.phase === "resolving" ? <div className="nextEpisodePrompt notice">Finding the next episode…</div> : null}
+      {episodeNavigationError ? <div className="nextEpisodePrompt notice error" role="alert">{episodeNavigationError}</div> : null}
       {autoplay.phase === "ready" ? (
         <div className="nextEpisodePrompt panel" role="dialog" aria-label="Next episode">
           <strong>Next episode is ready</strong>

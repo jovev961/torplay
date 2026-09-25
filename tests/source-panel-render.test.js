@@ -87,6 +87,15 @@ test("active debrid playback hides the empty search notice and shows a clear sto
   assert.match(automatic, /Buffering torrent data, probing codecs, and preparing playback/);
   assert.doesNotMatch(automatic, /Prepare &amp; play|Prepare & play/);
   assert.match(active, /Prepare &amp; play/);
+
+  const episodeControls = renderToStaticMarkup(createElement(SourcePanel, {
+    lookup, heading: "Episode", playback: {
+      onPreviousEpisode() {}, onNextEpisode() {},
+      hasPreviousEpisode: true, hasNextEpisode: false,
+    },
+  }));
+  assert.match(episodeControls, /aria-label="Previous episode"/);
+  assert.match(episodeControls, /aria-label="Next episode"[^>]*disabled/);
 });
 
 test("source panel offers ready library playback and shows torrent provider status before selection", async () => {

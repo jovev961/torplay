@@ -177,6 +177,19 @@ export function useRemotePlayback(videoRef) {
     }
   }, [loadCastSource]);
 
+  const switchCastSource = useCallback(async (sourceFactory) => {
+    setCastBusy(true);
+    setError("");
+    try {
+      return await loadCastSource(sourceFactory);
+    } catch (castError) {
+      setError(errorMessage(castError, "The next episode could not start on the Cast device."));
+      return null;
+    } finally {
+      setCastBusy(false);
+    }
+  }, [loadCastSource]);
+
   const stopCast = useCallback(() => {
     const source = castSourceRef.current;
     castContextRef.current?.endCurrentSession?.(true);
@@ -241,6 +254,7 @@ export function useRemotePlayback(videoRef) {
     setCastVolume,
     showAirPlayPicker,
     startCast,
+    switchCastSource,
     stopCast,
     toggleCastMute,
     toggleCastPlayback,

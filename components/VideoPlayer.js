@@ -25,6 +25,7 @@ import {
   toggleBrowserFullscreen,
 } from "../lib/video/fullscreen.js";
 import { closesPlayerMenu, nextMenuIndex } from "../lib/video/menu-navigation.js";
+import { clampSeekTarget, seekHasArrived, skipTarget } from "../lib/video/seek-target.js";
 import { useRemotePlayback } from "./useRemotePlayback.js";
 
 async function responseJson(response) {
@@ -86,6 +87,8 @@ function Icon({ name }) {
     fullscreen: <path d="M5 5h5v2H7v3H5V5zm9 0h5v5h-2V7h-3V5zM5 14h2v3h3v2H5v-5zm12 0h2v5h-5v-2h3v-3z" />,
     compress: <path d="M8 8H5V6h5v5H8V8zm8 0v3h-2V6h5v2h-3zM8 16v-3h2v5H5v-2h3zm8 0h3v2h-5v-5h2v3z" />,
     pip: <path d="M4 6h16v12H4V6zm2 2v8h12V8H6zm7 3h4v4h-4v-4z" />,
+    previous: <path d="M5 5h2v14H5V5zm14 0v14L8 12l11-7z" />,
+    next: <path d="M17 5h2v14h-2V5zM5 5l11 7-11 7V5z" />,
     cast: <path d="M3 18v3h3a3 3 0 0 0-3-3zm0-5v2a6 6 0 0 1 6 6h2a8 8 0 0 0-8-8zm0-5v2c6.08 0 11 4.92 11 11h2C16 13.82 10.18 8 3 8zm2-5a2 2 0 0 0-2 2v5h2V5h14v10h-6v2h6a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2H5z" />,
     settings: <path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zm9 4.8v-2.6l-2.1-.6a7 7 0 0 0-.7-1.6l1.1-1.9-1.9-1.9-1.9 1.1a7 7 0 0 0-1.6-.7L13.3 3h-2.6l-.6 2.1a7 7 0 0 0-1.6.7L6.6 4.7 4.7 6.6l1.1 1.9a7 7 0 0 0-.7 1.6l-2.1.6v2.6l2.1.6a7 7 0 0 0 .7 1.6l-1.1 1.9 1.9 1.9 1.9-1.1a7 7 0 0 0 1.6.7l.6 2.1h2.6l.6-2.1a7 7 0 0 0 1.6-.7l1.9 1.1 1.9-1.9-1.1-1.9a7 7 0 0 0 .7-1.6l2.1-.6z" />,
   };
@@ -107,16 +110,32 @@ export default function VideoPlayer({
   autoStart = false,
   onNearEnd = null,
   onEnded = null,
+  onPreviousEpisode = null,
+  onNextEpisode = null,
+  hasPreviousEpisode = false,
+  hasNextEpisode = false,
+  suspended = false,
+  sourcePicker = null,
+  nextEpisodePrompt = null,
 }) {
   const playerRef = useRef(null);
   const videoRef = useRef(null);
   const captionMenuRef = useRef(null);
   const captionButtonRef = useRef(null);
+  const sourcePickerRef = useRef(null);
   const hlsRef = useRef(null);
   const abortRef = useRef(null);
   const pollRef = useRef(null);
   const hideTimerRef = useRef(null);
   const seekTimerRef = useRef(null);
+  const seekTargetRef = useRef(null);
+  const playbackGenerationRef = useRef(0);
+  const sourceIdentityRef = useRef(null);
+  const touchTapRef = useRef(null);
+  const tapTimerRef = useRef(null);
+  const feedbackTimerRef = useRef(null);
+  const suppressTouchClickRef = useRef(false);
+  const subtitleChoiceRef = useRef(null);
   const preparedRef = useRef(false);
   const activeSubtitleRef = useRef(null);
   const subtitleSelectionModeRef = useRef("automatic");
@@ -129,6 +148,7 @@ export default function VideoPlayer({
   const nearEndNotifiedRef = useRef(false);
   const earlyEndRecoveryRef = useRef(false);
   const castWasActiveRef = useRef(false);
+  const castTransitionRef = useRef(false);
   const remoteOriginRef = useRef(null);
   const [playbackError, setPlaybackError] = useState("");
   const [subtitleError, setSubtitleError] = useState("");
@@ -143,6 +163,7 @@ export default function VideoPlayer({
   const [duration, setDuration] = useState(0);
   const [bufferedRanges, setBufferedRanges] = useState([]);
   const [seekPreview, setSeekPreview] = useState(null);
+  const [skipFeedback, setSkipFeedback] = useState(null);
   const [volume, setVolume] = useState(1);
   const [muted, setMuted] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
@@ -167,6 +188,8 @@ export default function VideoPlayer({
   const remotePlayback = useRemotePlayback(videoRef);
   const baseUrl = `/api/torrents/${encodeURIComponent(sessionId)}/files/${encodeURIComponent(file.id)}`;
   const playbackUrl = `${baseUrl}/playback`;
+  const sourceIdentity = [sessionId, file.id, profileId || "guest", media?.mediaType || "media",
+    media?.tmdbId || "unknown", media?.seasonNumber ?? -1, media?.episodeNumber ?? -1].join(":");
   const subtitles = subtitleDiscovery.tracks;
   const subtitleUrl = `${baseUrl}/subtitles`;
   const subtitleStyleClass = subtitleAppearanceClassName(subtitleAppearance);
@@ -232,6 +255,8 @@ export default function VideoPlayer({
     stopPolling();
     hlsRef.current?.destroy();
     hlsRef.current = null;
+    seekTargetRef.current = null;
+    setSeekPreview(null);
     setPlaybackState("failed");
     setPlaybackError(message || "The video could not be prepared for playback.");
   }
@@ -256,7 +281,7 @@ export default function VideoPlayer({
     );
   }
 
-  function attachHls(manifestUrl) {
+  function attachHls(manifestUrl, generation = playbackGenerationRef.current) {
     const video = videoRef.current;
     if (!video) return;
 
@@ -264,9 +289,14 @@ export default function VideoPlayer({
     if (Hls.isSupported()) {
       const hls = new Hls({ enableWorker: false });
       hlsRef.current = hls;
-      hls.on(Hls.Events.MEDIA_ATTACHED, () => hls.loadSource(manifestUrl));
-      hls.on(Hls.Events.MANIFEST_PARSED, () => startPreparedVideo(video));
+      hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+        if (generation === playbackGenerationRef.current) hls.loadSource(manifestUrl);
+      });
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        if (generation === playbackGenerationRef.current) startPreparedVideo(video);
+      });
       hls.on(Hls.Events.ERROR, (_event, data) => {
+        if (generation !== playbackGenerationRef.current) return;
         if (!data.fatal) return;
         if (data.type === Hls.ErrorTypes.MEDIA_ERROR && !recoveryRef.current.media) {
           recoveryRef.current.media = true;
@@ -284,7 +314,9 @@ export default function VideoPlayer({
       });
       hls.attachMedia(video);
     } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-      video.addEventListener("canplay", () => startPreparedVideo(video), { once: true });
+      video.addEventListener("canplay", () => {
+        if (generation === playbackGenerationRef.current) startPreparedVideo(video);
+      }, { once: true });
       video.src = manifestUrl;
       video.load();
     } else {
@@ -293,9 +325,14 @@ export default function VideoPlayer({
   }
 
   async function preparePlayback(startTime = 0) {
+    const generation = ++playbackGenerationRef.current;
     abortRef.current?.abort();
     hlsRef.current?.destroy();
     hlsRef.current = null;
+    const video = videoRef.current;
+    video?.pause();
+    video?.removeAttribute("src");
+    video?.load();
     setPlaybackError("");
     setPlaybackHint("");
     setPlaybackState("preparing");
@@ -308,19 +345,107 @@ export default function VideoPlayer({
         signal: abortRef.current.signal,
       });
       const payload = await responseJson(response);
+      if (generation !== playbackGenerationRef.current) return;
       if (!response.ok) {
         throw new Error(payload?.error || `Playback preparation failed with HTTP ${response.status}.`);
       }
       if (!payload?.manifestUrl) throw new Error("The server did not return an HLS playlist.");
       preparedRef.current = true;
       setPlaybackDetails(payload);
-      attachHls(payload.manifestUrl);
+      attachHls(payload.manifestUrl, generation);
     } catch (error) {
-      if (error.name !== "AbortError") failPlayback(error.message);
+      if (generation === playbackGenerationRef.current && error.name !== "AbortError") failPlayback(error.message);
     }
   }
 
+  const switchCastForCurrentSource = useEffectEvent(() => {
+    void remotePlayback.switchCastSource(() => prepareRemoteSource(initialPosition))
+      .finally(() => { castTransitionRef.current = false; });
+  });
+
+  useEffect(() => {
+    if (sourceIdentityRef.current === null) {
+      sourceIdentityRef.current = sourceIdentity;
+      return;
+    }
+    if (sourceIdentityRef.current === sourceIdentity) return;
+    sourceIdentityRef.current = sourceIdentity;
+    castTransitionRef.current = remotePlayback.castState.active;
+    playbackGenerationRef.current += 1;
+    abortRef.current?.abort();
+    stopPolling();
+    hlsRef.current?.destroy();
+    hlsRef.current = null;
+    clearTimeout(seekTimerRef.current);
+    clearTimeout(tapTimerRef.current);
+    clearTimeout(feedbackTimerRef.current);
+    seekTargetRef.current = null;
+    const video = videoRef.current;
+    video?.pause();
+    if (file.playbackMode === "transcode") {
+      video?.removeAttribute("src");
+      video?.load();
+    }
+    preparedRef.current = false;
+    initialSeekAppliedRef.current = false;
+    resetSentRef.current = false;
+    endedRef.current = false;
+    nearEndNotifiedRef.current = false;
+    earlyEndRecoveryRef.current = false;
+    recoveryRef.current = { media: false, network: false };
+    timelineRef.current = { position: 0, duration: 0 };
+    setCurrentTime(0);
+    setDuration(0);
+    setBufferedRanges([]);
+    setSeekPreview(null);
+    setSkipFeedback(null);
+    setPlaybackDetails(null);
+    setPlaybackError("");
+    setPlaybackHint("");
+    setProgressError("");
+    setPlaying(false);
+    setBuffering(false);
+    setPlaybackState(file.playbackMode === "native" ? "native" : autoStart ? "preparing" : "idle");
+    setSubtitleDiscovery((current) => ({ ...current, state: "loading", tracks: [] }));
+    setSubtitleCues({});
+    setActiveSubtitleId(null);
+    setSubtitleError("");
+    setMenu(null);
+    if (remotePlayback.castState.active) switchCastForCurrentSource();
+  }, [sourceIdentity, file.playbackMode, autoStart, remotePlayback.castState.active]);
+
+  useEffect(() => {
+    if (!suspended) return;
+    playbackGenerationRef.current += 1;
+    abortRef.current?.abort();
+    stopPolling();
+    hlsRef.current?.destroy();
+    hlsRef.current = null;
+    videoRef.current?.pause();
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setBuffering(false);
+      setPlaying(false);
+      setPlaybackHint("Choose a source to continue watching.");
+    });
+    return () => { cancelled = true; };
+  }, [suspended]);
+
+  useEffect(() => {
+    if (suspended && isFullscreen) {
+      (sourcePickerRef.current?.querySelector(".playerSourcePickerContent button:not(:disabled)")
+        || sourcePickerRef.current?.querySelector("button:not(:disabled)"))?.focus({ preventScroll: true });
+    }
+  }, [suspended, isFullscreen]);
+
   const startAutomatically = useEffectEvent(() => {
+    if (remotePlayback.castState.active) {
+      if (castTransitionRef.current) return;
+      void remotePlayback.switchCastSource(() => prepareRemoteSource(initialPosition))
+        .finally(() => { castTransitionRef.current = false; });
+      return;
+    }
     if (file.playbackMode === "transcode") {
       initialSeekAppliedRef.current = true;
       void preparePlayback(initialPosition);
@@ -342,7 +467,7 @@ export default function VideoPlayer({
     let cancelled = false;
     queueMicrotask(() => { if (!cancelled) startAutomatically(); });
     return () => { cancelled = true; };
-  }, [autoStart, file.id, file.playbackMode, sessionId]);
+  }, [autoStart, sourceIdentity]);
 
   async function getRemoteOrigin() {
     if (remoteOriginRef.current) return remoteOriginRef.current;
@@ -450,6 +575,7 @@ export default function VideoPlayer({
   useEffect(() => {
     const cast = remotePlayback.castState;
     const video = videoRef.current;
+    if (castTransitionRef.current) return;
     if (cast.active) {
       if (!castWasActiveRef.current) {
         video?.pause();
@@ -548,6 +674,16 @@ export default function VideoPlayer({
           );
           activeSubtitleRef.current = nextSubtitleId;
           setActiveSubtitleId(nextSubtitleId);
+        } else if (subtitleChoiceRef.current) {
+          const choice = subtitleChoiceRef.current;
+          const matching = payload.tracks.find((track) => track.language === choice.language
+            && track.source === choice.source)
+            || payload.tracks.find((track) => track.language === choice.language);
+          activeSubtitleRef.current = matching?.id || null;
+          setActiveSubtitleId(matching?.id || null);
+          if (!matching && payload.state !== "loading") {
+            setPlaybackHint(`${choice.language.toUpperCase()} subtitles are unavailable for this episode.`);
+          }
         }
         if (payload.state === "loading") timer = setTimeout(() => void update("GET"), 1_000);
       } catch (error) {
@@ -591,6 +727,8 @@ export default function VideoPlayer({
     hlsRef.current?.destroy();
     clearTimeout(hideTimerRef.current);
     clearTimeout(seekTimerRef.current);
+    clearTimeout(tapTimerRef.current);
+    clearTimeout(feedbackTimerRef.current);
     if (preparedRef.current && !isRemotePlaybackSessionActive(sessionId)) {
       void fetch(playbackUrl, { method: "DELETE", keepalive: true });
     }
@@ -608,17 +746,27 @@ export default function VideoPlayer({
   function updateTimeline(video) {
     const origin = file.playbackMode === "transcode" ? (playbackDetails?.originSeconds || 0) : 0;
     const nextPosition = origin + (video.currentTime || 0);
-    setCurrentTime(nextPosition);
+    const pendingSeek = seekTargetRef.current;
+    const seekConfirmed = pendingSeek && seekHasArrived(
+      nextPosition, pendingSeek.target, playbackState === "preparing",
+    );
+    if (seekConfirmed) {
+      seekTargetRef.current = null;
+      setSeekPreview(null);
+    }
+    const visiblePosition = pendingSeek && !seekConfirmed ? pendingSeek.target : nextPosition;
+    setCurrentTime(visiblePosition);
     const reportedDuration = Number(playbackDetails?.duration || playbackDetails?.media?.duration);
     const nextDuration = Number.isFinite(reportedDuration) && reportedDuration > 0
       ? reportedDuration
       : Number.isFinite(video.duration) ? video.duration : 0;
     setDuration(nextDuration);
     timelineRef.current = {
-      position: nextPosition,
+      position: visiblePosition,
       duration: nextDuration,
     };
-    if (!nearEndNotifiedRef.current && shouldOfferNextEpisode(nextPosition, nextDuration)) {
+    if (!pendingSeek && playbackState !== "preparing" && !suspended
+      && !nearEndNotifiedRef.current && shouldOfferNextEpisode(nextPosition, nextDuration)) {
       nearEndNotifiedRef.current = true;
       onNearEnd?.({ position: nextPosition, duration: nextDuration });
     }
@@ -635,6 +783,7 @@ export default function VideoPlayer({
   }
 
   function handlePlaybackEnded(video) {
+    if (suspended || playbackState === "preparing" || seekTargetRef.current) return;
     const timeline = updateTimeline(video);
     setPlaying(false);
     if (!isPlaybackAtEnd(timeline.position, timeline.duration)) {
@@ -657,6 +806,7 @@ export default function VideoPlayer({
   }
 
   async function togglePlayback() {
+    if (suspended) return;
     if (remotePlayback.castState.active) {
       remotePlayback.toggleCastPlayback();
       return;
@@ -686,6 +836,9 @@ export default function VideoPlayer({
     const returnFocus = menu === "captions";
     if (manual) {
       subtitleSelectionModeRef.current = "user";
+      const selected = subtitles.find((subtitle) => subtitle.id === id);
+      subtitleChoiceRef.current = selected
+        ? { language: selected.language, source: selected.source } : null;
     }
     activeSubtitleRef.current = id;
     setActiveSubtitleId(id);
@@ -742,22 +895,28 @@ export default function VideoPlayer({
   }
 
   function requestSeek(target, immediate = false) {
-    if (!effectiveDuration) return;
-    const next = Math.max(0, Math.min(effectiveDuration, Number(target)));
+    if (!effectiveDuration || suspended) return;
+    const next = clampSeekTarget(target, effectiveDuration);
+    if (next === null) return;
+    seekTargetRef.current = { target: next };
     setSeekPreview(next);
+    timelineRef.current.position = next;
+    if (next === 0) void saveProgress({ position: 0, duration: effectiveDuration, reset: true });
     clearTimeout(seekTimerRef.current);
     if (remotePlayback.castState.active) {
       const commitRemoteSeek = async () => {
         setBuffering(true);
         await remotePlayback.seekCast(next, prepareRemoteSource);
-        setSeekPreview(null);
+        if (seekTargetRef.current?.target === next) {
+          seekTargetRef.current = null;
+          setSeekPreview(null);
+        }
         setBuffering(false);
       };
       seekTimerRef.current = setTimeout(() => void commitRemoteSeek(), immediate ? 0 : 300);
       return;
     }
     const commit = async () => {
-      setSeekPreview(null);
       setBuffering(true);
       if (file.playbackMode === "native") {
         if (videoRef.current) videoRef.current.currentTime = next;
@@ -768,13 +927,47 @@ export default function VideoPlayer({
     seekTimerRef.current = setTimeout(() => void commit(), immediate ? 0 : 300);
   }
 
+  function skipBy(seconds) {
+    if (suspended || !effectiveDuration) return;
+    const target = skipTarget(effectiveCurrentTime, seekTargetRef.current?.target, seconds, effectiveDuration);
+    if (target === null) return;
+    requestSeek(target, true);
+    setSkipFeedback({ seconds, target });
+    clearTimeout(feedbackTimerRef.current);
+    feedbackTimerRef.current = setTimeout(() => setSkipFeedback(null), 1_100);
+  }
+
+  function handleVideoPointerUp(event) {
+    if (event.pointerType !== "touch") return;
+    event.preventDefault();
+    suppressTouchClickRef.current = true;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const side = event.clientX < bounds.left + bounds.width / 2 ? "left" : "right";
+    const now = Date.now();
+    const previous = touchTapRef.current;
+    if (previous?.side === side && now - previous.time < 330) {
+      clearTimeout(tapTimerRef.current);
+      touchTapRef.current = null;
+      skipBy(side === "left" ? -10 : 10);
+      return;
+    }
+    touchTapRef.current = { side, time: now };
+    clearTimeout(tapTimerRef.current);
+    tapTimerRef.current = setTimeout(() => {
+      touchTapRef.current = null;
+      if (controlsVisible) setControlsVisible(false);
+      else revealControls(false);
+    }, 330);
+  }
+
   async function toggleFullscreen() {
     try {
-      await toggleBrowserFullscreen(document, playerRef.current, {
+      const result = await toggleBrowserFullscreen(document, playerRef.current, {
         viewportActive: viewportFullscreen,
         enterViewport: () => setViewportFullscreen(true),
         exitViewport: () => setViewportFullscreen(false),
       });
+      if (result === "enter") playerRef.current?.focus({ preventScroll: true });
     } catch (error) {
       setPlaybackError(`Fullscreen is unavailable: ${error.message}`);
     }
@@ -798,12 +991,12 @@ export default function VideoPlayer({
     if (key === " " || key === "k") {
       event.preventDefault();
       void togglePlayback();
-    } else if (key === "arrowleft" && effectiveDuration) {
+    } else if ((key === "arrowleft" || key === "mediarewind") && effectiveDuration) {
       event.preventDefault();
-      requestSeek(effectiveCurrentTime - 10, true);
-    } else if (key === "arrowright" && effectiveDuration) {
+      skipBy(-10);
+    } else if ((key === "arrowright" || key === "mediafastforward") && effectiveDuration) {
       event.preventDefault();
-      requestSeek(effectiveCurrentTime + 10, true);
+      skipBy(10);
     } else if (key === "arrowup" || key === "arrowdown") {
       event.preventDefault();
       const currentVolume = remotePlayback.castState.active
@@ -879,8 +1072,8 @@ export default function VideoPlayer({
         role="group"
         aria-label={`${title} video player`}
         onKeyDown={handleKeyboard}
-        onPointerMove={() => revealControls()}
-        onPointerDown={() => revealControls()}
+        onPointerMove={(event) => { if (event.pointerType !== "touch") revealControls(); }}
+        onPointerDown={(event) => { if (event.pointerType !== "touch") revealControls(); }}
         onFocusCapture={() => revealControls()}
       >
         <video
@@ -889,10 +1082,20 @@ export default function VideoPlayer({
           x-webkit-airplay="allow"
           preload={file.playbackMode === "native" ? "auto" : "none"}
           src={nativeUrl}
-          onClick={() => void togglePlayback()}
+          onPointerUp={handleVideoPointerUp}
+          onClick={(event) => {
+            if (event.nativeEvent.pointerType === "touch" || suppressTouchClickRef.current) {
+              suppressTouchClickRef.current = false;
+              return;
+            }
+            void togglePlayback();
+          }}
           onLoadStart={() => setPlaybackError("")}
           onLoadedMetadata={(event) => {
             const video = event.currentTarget;
+            video.volume = volume;
+            video.muted = muted;
+            video.playbackRate = playbackRate;
             updateTimeline(video);
             if (
               file.playbackMode === "native"
@@ -929,6 +1132,7 @@ export default function VideoPlayer({
             setMuted(event.currentTarget.muted);
           }}
           onError={() => {
+            if (playbackState === "preparing" || suspended) return;
             if (file.playbackMode === "transcode") {
               const mediaError = videoRef.current?.error;
               const hls = hlsRef.current;
@@ -954,6 +1158,23 @@ export default function VideoPlayer({
           ))}
           Your browser does not support HTML5 video.
         </video>
+
+        {skipFeedback ? <div className={`playerSkipFeedback ${skipFeedback.seconds < 0 ? "backward" : "forward"}`}
+          role="status" aria-live="polite">
+          <strong>{skipFeedback.seconds > 0 ? "+" : "−"}10s</strong>
+          <span>{formatTime(skipFeedback.target)}</span>
+        </div> : null}
+
+        {suspended && isFullscreen && sourcePicker ? <div className="playerSourcePicker"
+          ref={sourcePickerRef} role="dialog" aria-label="Choose a source for the episode">
+          <button className="playerSourcePickerExit" type="button"
+            onClick={() => void toggleFullscreen()}>Exit fullscreen</button>
+          {sourcePicker}
+        </div> : null}
+        {!suspended && isFullscreen && nextEpisodePrompt ? <div className="playerEpisodePrompt" role="status">
+          <span>{nextEpisodePrompt.text}</span>
+          <button type="button" onClick={nextEpisodePrompt.onAction}>{nextEpisodePrompt.action}</button>
+        </div> : null}
 
         {visibleSubtitleCues.length > 0 ? (
           <div
@@ -981,7 +1202,7 @@ export default function VideoPlayer({
           {playbackState === "preparing" || effectiveBuffering ? (
             <div className="playerSpinner" role="status" aria-label="Buffering" />
           ) : null}
-          {playbackState !== "preparing" && !effectiveBuffering && !effectivePlaying ? (
+          {!suspended && playbackState !== "preparing" && !effectiveBuffering && !effectivePlaying ? (
             <button className="centerPlayButton" type="button" onClick={() => void togglePlayback()}>
               <Icon name="play" />
               <span className="srOnly">
@@ -1240,7 +1461,7 @@ export default function VideoPlayer({
               max={effectiveDuration || 1}
               step="0.1"
               value={Math.min(timelineTime, effectiveDuration || 1)}
-              disabled={!canSeek}
+              disabled={!canSeek || suspended}
               aria-label="Seek"
               onChange={(event) => requestSeek(event.target.value)}
             />
@@ -1248,9 +1469,15 @@ export default function VideoPlayer({
 
           <div className="playerControls">
             <div className="controlGroup">
+              {onPreviousEpisode ? <button type="button" aria-label="Previous episode"
+                title="Previous episode" disabled={!hasPreviousEpisode || suspended}
+                onClick={onPreviousEpisode}><Icon name="previous" /></button> : null}
               <button type="button" aria-label={effectivePlaying ? "Pause" : "Play"} onClick={() => void togglePlayback()}>
                 <Icon name={effectivePlaying ? "pause" : "play"} />
               </button>
+              {onNextEpisode ? <button type="button" aria-label="Next episode"
+                title="Next episode" disabled={!hasNextEpisode || suspended}
+                onClick={onNextEpisode}><Icon name="next" /></button> : null}
               <button
                 type="button"
                 aria-label={effectiveMuted ? "Unmute" : "Mute"}

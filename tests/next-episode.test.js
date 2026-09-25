@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   commitNextEpisodeContext,
   findNextEpisode,
+  findPreviousEpisode,
   resolveNextEpisodePlayback,
 } from "../lib/playback/next-episode.js";
 
@@ -65,6 +66,32 @@ test("metadata returns no next episode at the end of a series", async () => {
     "/3/tv/102/season/2": { season_number: 2, name: "Season 2", episodes: [episode(6)] },
     "/3/tv/102": { id: 102, name: "Show", seasons: [{ season_number: 2, name: "Season 2", episode_count: 6 }], genres: [] },
   }, async () => assert.equal(await findNextEpisode(102, 2, 6), null));
+});
+
+test("metadata resolves previous episodes across a season boundary", async () => {
+  await withMetadata({
+    "/3/tv/103/season/2": { season_number: 2, name: "Season 2", episodes: [episode(1), episode(2)] },
+    "/3/tv/103": { id: 103, name: "Show", seasons: [
+      { season_number: 1, name: "Season 1", episode_count: 2 },
+      { season_number: 2, name: "Season 2", episode_count: 2 },
+    ], genres: [] },
+    "/3/tv/103/season/1": { season_number: 1, name: "Season 1", episodes: [episode(1), episode(2)] },
+  }, async () => {
+    assert.deepEqual({ season: (await findPreviousEpisode(103, 2, 2)).season,
+      number: (await findPreviousEpisode(103, 2, 2)).number }, { season: 2, number: 1 });
+    const previous = await findPreviousEpisode(103, 2, 1);
+    assert.deepEqual({ season: previous.season, number: previous.number }, { season: 1, number: 2 });
+  });
+});
+
+test("previous episode skips specials and stops at the first regular episode", async () => {
+  await withMetadata({
+    "/3/tv/104/season/1": { season_number: 1, name: "Season 1", episodes: [episode(1)] },
+    "/3/tv/104": { id: 104, name: "Show", seasons: [
+      { season_number: 0, name: "Specials", episode_count: 1 },
+      { season_number: 1, name: "Season 1", episode_count: 1 },
+    ], genres: [] },
+  }, async () => assert.equal(await findPreviousEpisode(104, 1, 1), null));
 });
 
 function dependencies(overrides = {}) {
@@ -136,4 +163,32 @@ test("missing current-torrent episode explains why manual selection is needed", 
 test("no metadata-confirmed next episode stops cleanly", async () => {
   const result = await resolveNextEpisodePlayback("session-1", dependencies({ nextEpisode: async () => null }));
   assert.deepEqual(result, { status: "end-of-series", nextEpisode: null });
+});
+
+test("previous and selected episode resolution reuse only a matching file", async () => {
+  const previous = await resolveNextEpisodePlayback("session-1", dependencies({
+    previousEpisode: async () => ({ season: 1, number: 3, title: "Previous" }),
+    findSessionEpisode: (_id, season, number) => ({ session: { id: "session-1" },
+      file: { id: `${season}-${number}` } }),
+  }), "previous");
+  assert.equal(previous.fileId, "1-3");
+  const selected = await resolveNextEpisodePlayback("session-1", dependencies({
+    selectedEpisode: async (_showId, target) => ({ season: target.season,
+      number: target.episode, title: "Selected" }),
+    findSessionEpisode: () => null,
+  }), "selected", { season: 4, episode: 2 });
+  assert.equal(selected.status, "manual-required");
+  assert.deepEqual([selected.nextEpisode.season, selected.nextEpisode.number], [4, 2]);
+});
+
+test("selected episode must be confirmed by metadata and direction is validated", async () => {
+  await withMetadata({
+    "/3/tv/200/season/1": { season_number: 1, name: "Season 1", episodes: [episode(1)] },
+  }, async () => {
+    const absent = await resolveNextEpisodePlayback("session-1", dependencies(),
+      "selected", { season: 1, episode: 9 });
+    assert.deepEqual(absent, { status: "end-of-series", nextEpisode: null });
+  });
+  await assert.rejects(resolveNextEpisodePlayback("session-1", dependencies(), "skip"),
+    (error) => error.status === 400);
 });

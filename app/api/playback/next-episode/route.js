@@ -14,7 +14,7 @@ export async function POST(request) {
     }
     const result = body.action === "advance"
       ? { mediaContext: commitNextEpisodeContext(body.sessionId, body) }
-      : await resolveNextEpisodePlayback(body.sessionId);
+      : await resolveNextEpisodePlayback(body.sessionId, {}, body.direction || "next", body.target);
     return Response.json(result, {
       headers: { "Cache-Control": "no-store" },
     });
