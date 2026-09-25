@@ -2215,6 +2215,103 @@ button.episodeFileChoice {
   cursor: none;
 }
 
+.videoPlayer video {
+  touch-action: manipulation;
+}
+
+.playerSkipFeedback {
+  position: absolute;
+  top: 50%;
+  z-index: 3;
+  display: grid;
+  gap: 2px;
+  min-width: 82px;
+  padding: 12px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  background: rgba(15, 17, 20, 0.8);
+  color: white;
+  text-align: center;
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.playerSkipFeedback.backward { left: 14%; }
+.playerSkipFeedback.forward { right: 14%; }
+.playerSkipFeedback span { font-size: 0.75rem; opacity: 0.8; }
+
+.playerSourcePicker {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  overflow: auto;
+  background: rgba(5, 7, 10, 0.94);
+}
+
+.playerSourcePickerContent {
+  display: grid;
+  gap: 12px;
+  width: min(100%, 680px);
+  max-height: 100%;
+  overflow: auto;
+}
+
+.playerSourcePickerExit {
+  position: absolute;
+  top: max(16px, env(safe-area-inset-top));
+  right: max(16px, env(safe-area-inset-right));
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+}
+
+.playerSourcePickerContent > strong { font-size: 1.25rem; }
+.playerSourcePickerContent p { margin: 0; color: var(--muted); }
+.playerSourcePickerContent button {
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.playerSourcePickerContent button:hover,
+.playerSourcePickerContent button:focus-visible { border-color: var(--accent); }
+.playerSourcePickerContent button:disabled { opacity: 0.5; cursor: not-allowed; }
+.playerSourcePickerOptions { display: grid; gap: 10px; }
+
+.playerEpisodePrompt {
+  position: absolute;
+  top: max(66px, calc(env(safe-area-inset-top) + 56px));
+  right: max(18px, env(safe-area-inset-right));
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(90%, 520px);
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(20, 24, 29, 0.94);
+  color: var(--text);
+}
+
+.playerEpisodePrompt button {
+  flex: none;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: white;
+  font-weight: 700;
+}
+
 .playerShade {
   position: absolute;
   inset: 0;
@@ -2989,6 +3086,10 @@ footer {
     height: 34px;
     padding: 7px;
   }
+
+  .playerControls { flex-wrap: wrap; gap: 2px; }
+  .playerControls .controlGroup:first-child { width: 100%; }
+  .playerControls .controlGroup:last-child { margin-left: auto; }
 
   .playerTime {
     margin-left: 2px;

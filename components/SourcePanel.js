@@ -22,10 +22,13 @@ export default function SourcePanel({
   episodeChoices = [],
   playback = {},
   onSourceReset = null,
+  transitionPending = false,
+  pendingEpisodeTitle = null,
 }) {
   const [downloadFileIds, setDownloadFileIds] = useState(null);
   const [requestedDownloadFileId, setRequestedDownloadFileId] = useState(null);
   const [expandedFileId, setExpandedFileId] = useState(null);
+  const [lastPlayback, setLastPlayback] = useState(null);
   const choiceRef = useRef(null);
   useEffect(() => {
     if (lookup.debridChoice?.resultId) choiceRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -45,6 +48,19 @@ export default function SourcePanel({
   const selectedFile = lookup.session?.files?.find(
     (file) => file.id === (lookup.selectedFileId ?? suggestedFile?.id ?? defaultMovieFile?.id),
   );
+  useEffect(() => {
+    if (transitionPending || !selectedFile || !lookup.session) return undefined;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) setLastPlayback({ session: lookup.session, file: selectedFile, title: playerTitle, playback });
+    });
+    return () => { cancelled = true; };
+  }, [lookup.session, playback, playerTitle, selectedFile, transitionPending]);
+  const playerSource = transitionPending ? lastPlayback : selectedFile && lookup.session
+    ? { session: lookup.session, file: selectedFile, title: playerTitle, playback }
+    : null;
+  const displaySession = playerSource?.session;
+  const displayFile = playerSource?.file;
   const unmatchedPack = episode && lookup.session?.status === "ready"
     && lookup.session.files.length > 1 && !suggestedFile && !lookup.selectedFileId;
   const discovery = lookup.session?.discovery;
@@ -87,6 +103,10 @@ export default function SourcePanel({
           No torrent sources are configured. <Link href="/setup/sources">Choose sources →</Link>
         </div>
       ) : lookup.error ? <div className="notice error" role="alert">{lookup.error}</div> : null}
+      {transitionPending ? <div className="notice" role="status">
+        {pendingEpisodeTitle ? `Choose a source for ${pendingEpisodeTitle}.` : "Choose a source for this episode."}
+        {" "}The player will stay open while you choose.
+      </div> : null}
       {lookup.searching ? <div className="notice">Searching sources…</div> : null}
       {!lookup.session && lookup.readySources?.length > 0 ? (
         <div className="readySourceResults" aria-label="Ready Debrid sources">
@@ -318,38 +338,68 @@ export default function SourcePanel({
           : "No exact SxxExx filename matched. Choose the episode file manually."}</div>
       ) : null}
 
-      {lookup.session?.files?.length > 0 ? (
+      {displayFile || lookup.session?.files?.length > 0 ? (
         <div className="playbackWorkspace">
           <div className="videoFrame">
-            {selectedFile ? (
+            {displayFile ? (
               <div className="playerStack">
                 <VideoPlayer
-                  key={[
-                    lookup.session.id,
-                    selectedFile.id,
-                    playback.profileId || "guest",
-                    playback.media?.mediaType || "media",
-                    playback.media?.tmdbId || "unknown",
-                    playback.media?.seasonNumber ?? -1,
-                    playback.media?.episodeNumber ?? -1,
-                  ].join("-")}
-                  sessionId={lookup.session.id}
-                  file={selectedFile}
-                  title={playerTitle}
-                  {...playback}
+                  sessionId={displaySession.id}
+                  file={displayFile}
+                  title={playerSource.title}
+                  {...playerSource.playback}
+                  suspended={transitionPending}
+                  sourcePicker={transitionPending ? <div className="playerSourcePickerContent">
+                    <strong>{pendingEpisodeTitle || "Choose a source"}</strong>
+                    <p>Choose a ready source or torrent to continue in this player.</p>
+                    {lookup.searching || lookup.readyLoading ? <p>Searching sources…</p> : null}
+                    {lookup.readySources?.map((source) => <button type="button" key={`${source.provider}:${source.resourceId}`}
+                      disabled={lookup.startingId !== null}
+                      onClick={() => void lookup.startReadySource(source)}>
+                      Watch with {providerName(source.provider)} · {source.name || "Ready episode"}
+                    </button>)}
+                    {lookup.results?.map((result) => <button type="button" key={result.id}
+                      disabled={!result.canStart || lookup.startingId !== null}
+                      onClick={() => void lookup.selectResult(result.id)}>
+                      Choose torrent · {result.title}
+                    </button>)}
+                    {lookup.debridChoice ? <div className="playerSourcePickerOptions">
+                      <strong>{lookup.results.find((result) => result.id === lookup.debridChoice.resultId)?.title || "Selected torrent"}</strong>
+                      {lookup.debridChoice.localAllowed ? <button type="button"
+                        disabled={lookup.startingId !== null}
+                        onClick={() => void lookup.start(lookup.debridChoice.resultId, "local")}>Watch now with TorPlay</button> : null}
+                      {lookup.debridChoice.providers.map((provider) => {
+                        const ready = lookup.debridChoice.availability?.[provider] === "ready";
+                        return <button type="button" key={provider} disabled={lookup.startingId !== null}
+                          onClick={() => {
+                            if (!ready && provider === "torbox" && lookup.debridChoice.seasonPack
+                              && !window.confirm("TorBox may download this entire pack. Continue?")) return;
+                            void lookup.start(lookup.debridChoice.resultId,
+                              ready ? "ready" : "remote", provider,
+                              provider === "real-debrid" && lookup.debridChoice.seasonPack ? "all" : "episode",
+                              provider === "torbox" && lookup.debridChoice.seasonPack);
+                          }}>
+                          {ready ? "Watch with" : "Prepare with"} {providerName(provider)}
+                        </button>;
+                      })}
+                    </div> : null}
+                    {lookup.debridJob ? <p>{lookup.debridJob.provider === "torbox" ? "TorBox" : "Real-Debrid"}
+                      {" "}preparation: {lookup.debridJob.status}</p> : null}
+                    {lookup.error ? <p role="alert">{lookup.error}</p> : null}
+                  </div> : null}
                 />
-                {lookup.session.backend === "debrid" ? (
+                {displaySession.backend === "debrid" ? (
                   <div className="bufferStatus" aria-live="polite">
-                    Ready through {lookup.session.sourceType === "usenet" ? "TorBox Usenet"
-                      : lookup.session.provider === "torbox" ? "TorBox" : "Real-Debrid"}
+                    Ready through {displaySession.sourceType === "usenet" ? "TorBox Usenet"
+                      : displaySession.provider === "torbox" ? "TorBox" : "Real-Debrid"}
                   </div>
                 ) : <div className="bufferStatus" aria-live="polite">
                   <div>
-                    <span>Downloaded {formatFileSize(selectedFile.downloaded)} of {formatFileSize(selectedFile.size)}</span>
-                    <span>{formatSpeed(lookup.session.downloadSpeed)} · {lookup.session.peers ?? 0} peers</span>
+                    <span>Downloaded {formatFileSize(displayFile.downloaded)} of {formatFileSize(displayFile.size)}</span>
+                    <span>{formatSpeed(displaySession.downloadSpeed)} · {displaySession.peers ?? 0} peers</span>
                   </div>
-                  <progress value={selectedFile.progress} max={1}>
-                    {Math.round(selectedFile.progress * 100)}%
+                  <progress value={displayFile.progress} max={1}>
+                    {Math.round(displayFile.progress * 100)}%
                   </progress>
                 </div>}
               </div>
@@ -357,7 +407,7 @@ export default function SourcePanel({
               <div className="videoPlaceholder">Choose a video file to begin.</div>
             )}
           </div>
-          {episode && lookup.session.backend !== "debrid" && episodeFiles.length > 1 ? (
+          {!transitionPending && episode && lookup.session?.backend !== "debrid" && episodeFiles.length > 1 ? (
             <div className="episodeFileList" aria-label="Episodes in this source">
               {episodeFiles.map(({ file, display }) => {
                 const active = selectedFile?.id === file.id;
@@ -390,7 +440,7 @@ export default function SourcePanel({
                 );
               })}
             </div>
-          ) : !episode && lookup.session.files.length > 1 ? (
+          ) : !transitionPending && !episode && lookup.session?.files.length > 1 ? (
             <div className="fileList" aria-label="Video files">
               {lookup.session.files.map((file) => (
                 <button
