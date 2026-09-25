@@ -4,7 +4,7 @@ The first Linux distribution is a desktop-local AppImage. It includes the produc
 
 ## Download and run
 
-1. Open the repository's **Actions → Linux AppImage** workflow and download the artifact from a successful run on the intended branch or pull request. The workflow does not create a public GitHub Release.
+1. Open the repository's **Actions → Linux AppImage** workflow, start it manually on the intended branch, then download the artifact from the successful run. The workflow does not create a public GitHub Release.
 2. Extract `TorPlay-<version>-x86_64.AppImage` and its `.sha256` file into the same directory.
 3. Verify the download with `sha256sum --check TorPlay-<version>-x86_64.AppImage.sha256`.
 4. Run `chmod +x TorPlay-<version>-x86_64.AppImage` if needed, then launch it from the file manager or a terminal.
