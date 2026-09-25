@@ -186,6 +186,30 @@ export default function SettingsManager() {
     }
   }
 
+  async function savePlaybackSetting(key, checked) {
+    setSaving("playback");
+    setNotice("");
+    setError("");
+    try {
+      const values = {
+        autoSkipIntrosRecaps: snapshot.playback.autoSkipIntrosRecaps,
+        autoPlayNextEpisode: snapshot.playback.autoPlayNextEpisode,
+        [key]: checked,
+      };
+      const data = await readJson(await fetch("/api/settings/playback", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(values),
+      }));
+      setSnapshot((current) => ({ ...current, playback: { ...current.playback, ...data.preferences } }));
+      setNotice("Playback preferences saved.");
+    } catch (saveError) {
+      setError(saveError.message);
+    } finally {
+      setSaving("");
+    }
+  }
+
   async function removeCredential(provider, field) {
     if (!window.confirm(`Remove the configured ${provider.name} ${field.label}?`)) return;
     setSaving(provider.id);
@@ -437,6 +461,20 @@ export default function SettingsManager() {
 
         {selectedSection === "playback" ? <section className={styles.settingsSection} id="playback">
           <div className={styles.sectionHeading}><div><h2>Playback preferences</h2><p>Choose how TorPlay should start a video.</p></div></div>
+          <div className={styles.summaryCard}>
+            <h3>Episode playback</h3>
+            <label className={styles.checkboxLabel}><input type="checkbox"
+              checked={snapshot.playback.autoSkipIntrosRecaps}
+              disabled={!snapshot.canEdit || saving === "playback"}
+              onChange={(event) => void savePlaybackSetting("autoSkipIntrosRecaps", event.target.checked)} />
+              Automatically skip intros and recaps</label>
+            <label className={styles.checkboxLabel}><input type="checkbox"
+              checked={snapshot.playback.autoPlayNextEpisode}
+              disabled={!snapshot.canEdit || saving === "playback"}
+              onChange={(event) => void savePlaybackSetting("autoPlayNextEpisode", event.target.checked)} />
+              Automatically play next episode</label>
+            <p>Skip times are provided by <a href="https://skipdb.tv" target="_blank" rel="noreferrer">SkipDB</a> when reliable episode data is available.</p>
+          </div>
           <DebridSettings canEdit={snapshot.canEdit} section="playback" />
           <details className={styles.diagnostics}><summary>Supported formats and technical details</summary>
             <div className={styles.capabilityGrid}>

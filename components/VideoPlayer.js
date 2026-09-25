@@ -15,7 +15,8 @@ import {
   subscribeToSubtitleTrack,
 } from "../lib/subtitles/timeline.js";
 import { PROGRESS_SAVE_INTERVAL_MS } from "../lib/history/constants.js";
-import { isPlaybackAtEnd, shouldOfferNextEpisode } from "../lib/playback/autoplay.js";
+import { isPlaybackAtEnd, shouldOfferNextEpisode, shouldShowUpNext } from "../lib/playback/autoplay.js";
+import { activeSkipSegment } from "../lib/playback/segment-controls.js";
 import { isRemotePlaybackSessionActive } from "../lib/remote-playback/client-state.js";
 import { remotePlaybackSource } from "../lib/remote-playback/source.js";
 import {
@@ -117,12 +118,17 @@ export default function VideoPlayer({
   suspended = false,
   sourcePicker = null,
   nextEpisodePrompt = null,
+  playbackPreferences = { autoSkipIntrosRecaps: false, autoPlayNextEpisode: false },
+  onPlaybackPreferencesChange = null,
 }) {
   const playerRef = useRef(null);
   const videoRef = useRef(null);
   const captionMenuRef = useRef(null);
   const captionButtonRef = useRef(null);
   const sourcePickerRef = useRef(null);
+  const episodePromptRef = useRef(null);
+  const skipButtonRef = useRef(null);
+  const autoSkippedRef = useRef(new Set());
   const hlsRef = useRef(null);
   const abortRef = useRef(null);
   const pollRef = useRef(null);
@@ -164,6 +170,10 @@ export default function VideoPlayer({
   const [bufferedRanges, setBufferedRanges] = useState([]);
   const [seekPreview, setSeekPreview] = useState(null);
   const [skipFeedback, setSkipFeedback] = useState(null);
+  const [segments, setSegments] = useState({ intro: null, recap: null, outro: null, preview: null });
+  const [countdownRemaining, setCountdownRemaining] = useState(null);
+  const [settingsError, setSettingsError] = useState("");
+  const [savingSetting, setSavingSetting] = useState(false);
   const [volume, setVolume] = useState(1);
   const [muted, setMuted] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
@@ -194,6 +204,29 @@ export default function VideoPlayer({
   const subtitleUrl = `${baseUrl}/subtitles`;
   const subtitleStyleClass = subtitleAppearanceClassName(subtitleAppearance);
   const isFullscreen = browserFullscreen || viewportFullscreen;
+  const segmentDuration = file.playbackMode === "transcode"
+    ? Number(playbackDetails?.duration || playbackDetails?.media?.duration) : duration;
+  const segmentDurationRounded = Math.round(segmentDuration);
+
+  useEffect(() => {
+    if (media?.mediaType !== "tv" || !media.tmdbId || !media.episodeNumber
+      || !Number.isFinite(segmentDurationRounded) || segmentDurationRounded <= 0) return undefined;
+    const controller = new AbortController();
+    const params = new URLSearchParams({
+      tmdbId: String(media.tmdbId), season: String(media.seasonNumber),
+      episode: String(media.episodeNumber), duration: String(segmentDurationRounded),
+    });
+    void fetch(`/api/playback/segments?${params}`, { cache: "no-store", signal: controller.signal })
+      .then(async (response) => response.ok ? responseJson(response) : null)
+      .then((data) => {
+        if (!controller.signal.aborted) setSegments(data?.segments || {
+          intro: null, recap: null, outro: null, preview: null,
+        });
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [media?.mediaType, media?.tmdbId, media?.seasonNumber, media?.episodeNumber,
+    segmentDurationRounded, sourceIdentity]);
 
   const saveProgress = useCallback(async ({
     position = timelineRef.current.position,
@@ -399,6 +432,9 @@ export default function VideoPlayer({
     setBufferedRanges([]);
     setSeekPreview(null);
     setSkipFeedback(null);
+    setSegments({ intro: null, recap: null, outro: null, preview: null });
+    setCountdownRemaining(null);
+    autoSkippedRef.current = new Set();
     setPlaybackDetails(null);
     setPlaybackError("");
     setPlaybackHint("");
@@ -433,11 +469,11 @@ export default function VideoPlayer({
   }, [suspended]);
 
   useEffect(() => {
-    if (suspended && isFullscreen) {
+    if (suspended) {
       (sourcePickerRef.current?.querySelector(".playerSourcePickerContent button:not(:disabled)")
         || sourcePickerRef.current?.querySelector("button:not(:disabled)"))?.focus({ preventScroll: true });
     }
-  }, [suspended, isFullscreen]);
+  }, [suspended]);
 
   const startAutomatically = useEffectEvent(() => {
     if (remotePlayback.castState.active) {
@@ -585,11 +621,11 @@ export default function VideoPlayer({
       }
       const nextDuration = cast.duration || timelineRef.current.duration;
       timelineRef.current = { position: cast.position, duration: nextDuration };
-      if (!nearEndNotifiedRef.current && shouldOfferNextEpisode(cast.position, nextDuration)) {
+      if (!nearEndNotifiedRef.current && shouldOfferNextEpisode(cast.position, nextDuration, segments.outro)) {
         nearEndNotifiedRef.current = true;
         onNearEnd?.({ position: cast.position, duration: nextDuration });
       }
-      if (!endedRef.current && isPlaybackAtEnd(cast.position, nextDuration)) {
+      if (!endedRef.current && nextDuration > 0 && cast.position >= nextDuration && !cast.playing) {
         endedRef.current = true;
         void saveProgress({ position: nextDuration, duration: nextDuration }).finally(() => onEnded?.());
       }
@@ -610,6 +646,7 @@ export default function VideoPlayer({
     onNearEnd,
     remotePlayback.castState,
     saveProgress,
+    segments.outro,
   ]);
 
   useEffect(() => {
@@ -766,7 +803,7 @@ export default function VideoPlayer({
       duration: nextDuration,
     };
     if (!pendingSeek && playbackState !== "preparing" && !suspended
-      && !nearEndNotifiedRef.current && shouldOfferNextEpisode(nextPosition, nextDuration)) {
+      && !nearEndNotifiedRef.current && shouldOfferNextEpisode(nextPosition, nextDuration, segments.outro)) {
       nearEndNotifiedRef.current = true;
       onNearEnd?.({ position: nextPosition, duration: nextDuration });
     }
@@ -1040,6 +1077,92 @@ export default function VideoPlayer({
   const canSeek = effectiveDuration > 0;
   const timelineTime = seekPreview ?? effectiveCurrentTime;
   const playedRatio = effectiveDuration > 0 ? timelineTime / effectiveDuration : 0;
+  const skipSegment = activeSkipSegment(timelineTime, segments);
+  const showSkipButton = !suspended && !playbackPreferences.autoSkipIntrosRecaps && Boolean(skipSegment);
+  const showEpisodePrompt = !suspended && Boolean(nextEpisodePrompt)
+    && (nextEpisodePrompt.immediate
+      || shouldShowUpNext(timelineTime, effectiveDuration, segments.outro));
+  const activateEpisodePrompt = useEffectEvent(() => nextEpisodePrompt?.onAction?.());
+  const autoSkipSegment = useEffectEvent((segment) => {
+    if (autoSkippedRef.current.has(segment.type)) return;
+    autoSkippedRef.current.add(segment.type);
+    requestSeek(segment.end, true);
+  });
+
+  useEffect(() => {
+    if (suspended || !playbackPreferences.autoSkipIntrosRecaps || !skipSegment) return;
+    autoSkipSegment(skipSegment);
+  }, [suspended, playbackPreferences.autoSkipIntrosRecaps, skipSegment, sourceIdentity]);
+
+  useEffect(() => {
+    if (!showSkipButton) return undefined;
+    const button = skipButtonRef.current;
+    const player = playerRef.current;
+    button?.focus({ preventScroll: true });
+    return () => {
+      if (document.activeElement === button) player?.focus({ preventScroll: true });
+    };
+  }, [showSkipButton, skipSegment?.type, sourceIdentity]);
+
+  useEffect(() => {
+    if (!showEpisodePrompt || (!nextEpisodePrompt?.action && !nextEpisodePrompt?.secondaryAction)) return undefined;
+    const prompt = episodePromptRef.current;
+    const player = playerRef.current;
+    prompt?.querySelector("button")?.focus({ preventScroll: true });
+    return () => {
+      if (prompt?.contains(document.activeElement)) player?.focus({ preventScroll: true });
+    };
+  }, [showEpisodePrompt, nextEpisodePrompt?.kind, nextEpisodePrompt?.action,
+    nextEpisodePrompt?.secondaryAction, sourceIdentity]);
+
+  useEffect(() => {
+    if (!showEpisodePrompt || nextEpisodePrompt?.kind !== "ready"
+      || !playbackPreferences.autoPlayNextEpisode || !segments.outro || !effectivePlaying) {
+      queueMicrotask(() => setCountdownRemaining(null));
+      return undefined;
+    }
+    let remaining = 10;
+    queueMicrotask(() => setCountdownRemaining(remaining));
+    const timer = setInterval(() => {
+      remaining -= 1;
+      setCountdownRemaining(remaining);
+      if (remaining <= 0) {
+        clearInterval(timer);
+        activateEpisodePrompt();
+      }
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [showEpisodePrompt, nextEpisodePrompt?.kind, playbackPreferences.autoPlayNextEpisode,
+    segments.outro, effectivePlaying, sourceIdentity]);
+
+  async function updatePlaybackSetting(key) {
+    if (!onPlaybackPreferencesChange || savingSetting) return;
+    setSavingSetting(true);
+    setSettingsError("");
+    try {
+      await onPlaybackPreferencesChange({ ...playbackPreferences, [key]: !playbackPreferences[key] });
+    } catch (error) {
+      setSettingsError(error.message || "Playback settings could not be saved.");
+    } finally {
+      setSavingSetting(false);
+    }
+  }
+
+  function handleEpisodePromptKeyDown(event) {
+    const buttons = Array.from(episodePromptRef.current?.querySelectorAll("button:not(:disabled)") || []);
+    if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key) && buttons.length > 1) {
+      event.preventDefault();
+      event.stopPropagation();
+      const direction = ["ArrowRight", "ArrowDown"].includes(event.key) ? 1 : -1;
+      const index = buttons.indexOf(document.activeElement);
+      buttons[(index + direction + buttons.length) % buttons.length].focus({ preventScroll: true });
+    } else if (["OK", "Select"].includes(event.key) && event.target instanceof HTMLButtonElement) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.target.click();
+    }
+  }
+
   const visibleSubtitleCues = remotePlayback.castState.active || playbackState === "preparing" || activeSubtitleId === null
     ? []
     : activeSubtitleCues(subtitleCues[activeSubtitleId], effectiveCurrentTime, subtitleDelay);
@@ -1165,20 +1288,32 @@ export default function VideoPlayer({
           <span>{formatTime(skipFeedback.target)}</span>
         </div> : null}
 
-        {suspended && isFullscreen && sourcePicker ? <div className="playerSourcePicker"
+        {suspended && sourcePicker ? <div className="playerSourcePicker"
           ref={sourcePickerRef} role="dialog" aria-label="Choose a source for the episode">
-          <button className="playerSourcePickerExit" type="button"
-            onClick={() => void toggleFullscreen()}>Exit fullscreen</button>
+          {isFullscreen ? <button className="playerSourcePickerExit" type="button"
+            onClick={() => void toggleFullscreen()}>Exit fullscreen</button> : null}
           {sourcePicker}
         </div> : null}
-        {!suspended && nextEpisodePrompt ? <div className="playerEpisodePrompt" role="dialog" aria-label="Next episode">
+        {showSkipButton ? <button className="playerSegmentSkip" ref={skipButtonRef} type="button"
+          onClick={() => requestSeek(skipSegment.end, true)}>
+          Skip {skipSegment.type === "recap" ? "Recap" : "Intro"}
+        </button> : null}
+        {showEpisodePrompt ? <div className="playerEpisodePrompt" ref={episodePromptRef}
+          role={nextEpisodePrompt.action || nextEpisodePrompt.secondaryAction ? "dialog" : "status"}
+          aria-label="Next episode"
+          onKeyDown={handleEpisodePromptKeyDown}>
           {nextEpisodePrompt.title ? <strong>{nextEpisodePrompt.title}</strong> : null}
           <span>{nextEpisodePrompt.text}</span>
-          <div className="playerEpisodePromptActions">
-            <button type="button" onClick={nextEpisodePrompt.onAction}>{nextEpisodePrompt.action}</button>
+          {countdownRemaining !== null && nextEpisodePrompt.kind === "ready" && segments.outro
+            ? <small>Playing in {countdownRemaining} seconds</small> : null}
+          {nextEpisodePrompt.kind === "ready" && playbackPreferences.autoPlayNextEpisode && !segments.outro
+            ? <small>Will play when this episode ends</small> : null}
+          {nextEpisodePrompt.action || nextEpisodePrompt.secondaryAction ? <div className="playerEpisodePromptActions">
+            {nextEpisodePrompt.action ? <button type="button" onClick={nextEpisodePrompt.onAction}>
+              {nextEpisodePrompt.action}</button> : null}
             {nextEpisodePrompt.secondaryAction ? <button className="playerEpisodePromptSecondary" type="button"
               onClick={nextEpisodePrompt.onSecondaryAction}>{nextEpisodePrompt.secondaryAction}</button> : null}
-          </div>
+          </div> : null}
         </div> : null}
 
         {visibleSubtitleCues.length > 0 ? (
@@ -1400,6 +1535,22 @@ export default function VideoPlayer({
                   {rate === 1 ? "Normal" : `${rate}×`}
                 </button>
               ))}
+              {media?.mediaType === "tv" ? <div className="playerPlaybackPreferences">
+                <span>Episode playback</span>
+                <button type="button" role="menuitemcheckbox"
+                  aria-checked={playbackPreferences.autoSkipIntrosRecaps}
+                  disabled={savingSetting || !onPlaybackPreferencesChange}
+                  onClick={() => void updatePlaybackSetting("autoSkipIntrosRecaps")}>
+                  Automatically skip intros and recaps · {playbackPreferences.autoSkipIntrosRecaps ? "On" : "Off"}
+                </button>
+                <button type="button" role="menuitemcheckbox"
+                  aria-checked={playbackPreferences.autoPlayNextEpisode}
+                  disabled={savingSetting || !onPlaybackPreferencesChange}
+                  onClick={() => void updatePlaybackSetting("autoPlayNextEpisode")}>
+                  Automatically play next episode · {playbackPreferences.autoPlayNextEpisode ? "On" : "Off"}
+                </button>
+                {settingsError ? <small role="alert">{settingsError}</small> : null}
+              </div> : null}
             </div>
           ) : null}
           {menu === "remote" ? (

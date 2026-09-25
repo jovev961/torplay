@@ -1,5 +1,5 @@
 import packageJson from "../../package.json" with { type: "json" };
-import { configurationWritable, settingsState } from "../../lib/settings/config.js";
+import { configurationWritable, playbackPreferences, settingsState } from "../../lib/settings/config.js";
 import { setupStatusFromProviders } from "../../lib/settings/readiness.js";
 import { publicCustomProviders } from "../../lib/settings/torrent-providers.js";
 import { publicNativeSources } from "../../lib/settings/native-sources.js";
@@ -38,6 +38,7 @@ export async function getSettingsSnapshot({
     customProviders: publicCustomProviders(environment, canEdit),
     providers: state.providers,
     playback: {
+      ...playbackPreferences(environment),
       nativeFormats: ["MP4", "M4V", "WebM"],
       hlsAvailable: true,
       bundledMediaTools: true,

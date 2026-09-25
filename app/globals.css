@@ -2286,6 +2286,24 @@ button.episodeFileChoice {
 .playerSourcePickerContent button:disabled { opacity: 0.5; cursor: not-allowed; }
 .playerSourcePickerOptions { display: grid; gap: 10px; }
 
+.playerSegmentSkip {
+  position: absolute;
+  top: max(66px, calc(env(safe-area-inset-top) + 56px));
+  right: max(18px, env(safe-area-inset-right));
+  z-index: 4;
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-radius: 9px;
+  background: rgba(19, 23, 28, 0.94);
+  color: white;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.playerSegmentSkip:hover,
+.playerSegmentSkip:focus-visible { border-color: white; background: var(--accent); }
+
 .playerEpisodePrompt {
   position: absolute;
   top: max(66px, calc(env(safe-area-inset-top) + 56px));
@@ -2305,6 +2323,7 @@ button.episodeFileChoice {
 }
 
 .playerEpisodePrompt > span { color: var(--muted); }
+.playerEpisodePrompt > small { color: #e1e4e9; }
 
 .playerEpisodePromptActions {
   display: flex;
@@ -2918,6 +2937,25 @@ button.episodeFileChoice {
 .speedMenu > span {
   grid-column: 1 / -1;
 }
+
+.playerPlaybackPreferences {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 3px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.playerPlaybackPreferences > span {
+  padding: 5px 10px;
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.playerPlaybackPreferences button { white-space: normal; }
+.playerPlaybackPreferences small { padding: 5px 10px; color: var(--danger); }
 
 .subtitleOverlay {
   position: absolute;
