@@ -37,6 +37,13 @@ test("Linux paths use XDG storage and force a loopback runtime", () => temporary
   assert.equal(environment.TORPLAY_DISTRIBUTION, "linux-appimage");
 }));
 
+test("Linux AppImage packaging runs only when manually requested", () => {
+  const workflow = readFileSync(path.resolve(".github/workflows/linux-appimage.yml"), "utf8");
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.doesNotMatch(workflow, /\b(pull_request|push):/);
+  assert.match(workflow, /runs-on: ubuntu-24\.04/);
+});
+
 test("Linux stage rejects absent files, wrong native architecture, and secrets", () => temporaryDirectory((directory) => {
   const required = [
     "AppRun", "torplay.desktop", "torplay.png", ".DirIcon", "usr/bin/node",

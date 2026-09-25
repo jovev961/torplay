@@ -2172,6 +2172,35 @@ button.episodeFileChoice {
   border-radius: 0;
 }
 
+.playerHomeScreenHint {
+  position: absolute;
+  top: max(74px, calc(env(safe-area-inset-top) + 60px));
+  left: 50%;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: min(560px, calc(100% - 36px));
+  padding: 12px 14px;
+  border: 1px solid #546171;
+  border-radius: 12px;
+  background: rgba(19, 25, 32, 0.96);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+  transform: translateX(-50%);
+  font-size: 0.85rem;
+  line-height: 1.35;
+}
+
+.playerHomeScreenHint button {
+  flex: none;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid #6d7a89;
+  border-radius: 8px;
+  color: var(--text);
+  background: #26303a;
+}
+
 .videoPlayer:fullscreen video,
 .videoPlayer:-webkit-full-screen video,
 .videoPlayer.viewportFullscreen video {

@@ -22,6 +22,7 @@ import { remotePlaybackSource } from "../lib/remote-playback/source.js";
 import {
   isFullscreenActive,
   lockFullscreenViewport,
+  needsHomeScreenForImmersivePlayback,
   supportsFullscreen,
   toggleBrowserFullscreen,
 } from "../lib/video/fullscreen.js";
@@ -191,6 +192,7 @@ export default function VideoPlayer({
   const [playbackRate, setPlaybackRate] = useState(1);
   const [browserFullscreen, setBrowserFullscreen] = useState(false);
   const [viewportFullscreen, setViewportFullscreen] = useState(false);
+  const [homeScreenHintVisible, setHomeScreenHintVisible] = useState(false);
   const [fullscreenSupported, setFullscreenSupported] = useState(false);
   const [pipSupported, setPipSupported] = useState(false);
   const [progressError, setProgressError] = useState("");
@@ -1001,8 +1003,16 @@ export default function VideoPlayer({
     try {
       const result = await toggleBrowserFullscreen(document, playerRef.current, {
         viewportActive: viewportFullscreen,
-        enterViewport: () => setViewportFullscreen(true),
-        exitViewport: () => setViewportFullscreen(false),
+        enterViewport: () => {
+          setViewportFullscreen(true);
+          setHomeScreenHintVisible(needsHomeScreenForImmersivePlayback(
+            navigator, window.matchMedia?.("(display-mode: standalone), (display-mode: fullscreen)")?.matches,
+          ));
+        },
+        exitViewport: () => {
+          setViewportFullscreen(false);
+          setHomeScreenHintVisible(false);
+        },
       });
       if (result === "enter") playerRef.current?.focus({ preventScroll: true });
     } catch (error) {
@@ -1293,6 +1303,10 @@ export default function VideoPlayer({
           {isFullscreen ? <button className="playerSourcePickerExit" type="button"
             onClick={() => void toggleFullscreen()}>Exit fullscreen</button> : null}
           {sourcePicker}
+        </div> : null}
+        {viewportFullscreen && homeScreenHintVisible && !suspended ? <div className="playerHomeScreenHint" role="status">
+          <span>To hide Safari bars, tap Share → Add to Home Screen, then open TorPlay from its icon.</span>
+          <button type="button" onClick={() => setHomeScreenHintVisible(false)} aria-label="Dismiss fullscreen tip">Got it</button>
         </div> : null}
         {showSkipButton ? <button className="playerSegmentSkip" ref={skipButtonRef} type="button"
           onClick={() => requestSeek(skipSegment.end, true)}>

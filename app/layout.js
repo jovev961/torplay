@@ -4,6 +4,8 @@ import { ProfileProvider } from "../components/ProfileProvider.js";
 export const metadata = {
   title: "TorPlay · Movies and Shows",
   description: "Browse movie and show metadata and stream authorized video sources.",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: { capable: true, title: "TorPlay", statusBarStyle: "black-translucent" },
   icons: {
     icon: [{
       url: "/torplay-favicon-v2.ico",
