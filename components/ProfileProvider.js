@@ -6,6 +6,8 @@ import { createContext, useContext, useEffect, useState } from "react";
 import AvatarPicker from "./AvatarPicker.js";
 import ProfileAvatar from "./ProfileAvatar.js";
 import { DEFAULT_PROFILE_AVATAR_ID } from "../lib/profiles/avatars.js";
+import { useI18n } from "./I18nProvider.js";
+import LanguageSwitcher from "./LanguageSwitcher.js";
 
 const STORAGE_KEY = "torplay:selected-profile:v1";
 const ProfileContext = createContext(null);
@@ -17,6 +19,7 @@ async function readJson(response) {
 }
 
 function ProfileGate({ profiles, create, select }) {
+  const { t } = useI18n();
   const [adding, setAdding] = useState(profiles.length === 0);
   const [name, setName] = useState("");
   const [avatarId, setAvatarId] = useState(DEFAULT_PROFILE_AVATAR_ID);
@@ -40,14 +43,15 @@ function ProfileGate({ profiles, create, select }) {
   return (
     <div className="profileGate">
       <div className="profileGateCard">
+        <LanguageSwitcher className="entryLanguageSwitcher" />
         <span className="brand">TorPlay</span>
         <div>
-          <h1>Who&apos;s watching?</h1>
-          <p>Choose a profile to continue.</p>
+          <h1>{t("Who's watching?")}</h1>
+          <p>{t("Choose a profile to continue.")}</p>
         </div>
         {!adding ? (
           <>
-            <div className="profileChoices" aria-label="Choose a profile">
+            <div className="profileChoices" aria-label={t("Choose a profile")}>
               {profiles.map((profile) => (
                 <button type="button" key={profile.id} onClick={() => select(profile.id)}>
                   <ProfileAvatar avatarId={profile.avatarId} size="large" />
@@ -56,16 +60,16 @@ function ProfileGate({ profiles, create, select }) {
               ))}
               <button className="addProfileChoice" type="button" onClick={() => setAdding(true)}>
                 <span className="addProfileAvatar" aria-hidden="true">+</span>
-                <span>Add Profile</span>
+                <span>{t("Add Profile")}</span>
               </button>
             </div>
-            <Link className="secondaryButton profileManageLink" href="/profiles">Manage Profiles</Link>
+            <Link className="secondaryButton profileManageLink" href="/profiles">{t("Manage Profiles")}</Link>
           </>
         ) : (
           <form className="profileCreateForm" onSubmit={submit}>
             <AvatarPicker value={avatarId} onChange={setAvatarId} />
             <label>
-              <span>Profile name</span>
+              <span>{t("Profile name")}</span>
               <input
                 autoFocus
                 maxLength="50"
@@ -76,11 +80,11 @@ function ProfileGate({ profiles, create, select }) {
             </label>
             <div className="profileFormActions">
               <button className="primaryButton compact" type="submit" disabled={submitting}>
-                {submitting ? "Creating…" : "Create Profile"}
+                {t(submitting ? "Creating…" : "Create Profile")}
               </button>
               {profiles.length ? (
                 <button className="secondaryButton" type="button" onClick={() => setAdding(false)}>
-                  Cancel
+                  {t("Cancel")}
                 </button>
               ) : null}
             </div>
@@ -170,6 +174,20 @@ export function ProfileProvider({ children }) {
     return data.profile;
   }
 
+  async function updateAudioPreferences(id, preferences) {
+    const data = await readJson(await fetch(
+      `/api/profiles/${encodeURIComponent(id)}/audio-preferences`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(preferences),
+      },
+    ));
+    setProfiles((items) => items.map((item) => item.id === id ? data.profile : item));
+    setActiveProfile((profile) => profile?.id === id ? data.profile : profile);
+    return data.profile;
+  }
+
   async function remove(id) {
     const response = await fetch(`/api/profiles/${encodeURIComponent(id)}`, { method: "DELETE" });
     if (!response.ok) throw new Error("Could not delete the profile.");
@@ -190,6 +208,7 @@ export function ProfileProvider({ children }) {
     select,
     status,
     update,
+    updateAudioPreferences,
     updateSubtitlePreferences,
   };
   const profilePage = pathname.startsWith("/profiles");
@@ -210,4 +229,8 @@ export function useProfile() {
   const context = useContext(ProfileContext);
   if (!context) throw new Error("useProfile must be used inside ProfileProvider.");
   return context;
+}
+
+export function useOptionalProfile() {
+  return useContext(ProfileContext);
 }

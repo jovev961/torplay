@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -8,8 +8,9 @@ import { createDatabase } from "../lib/database/sqlite.js";
 import {
   defaultProfileAvatarId,
   isProfileAvatarId,
-  PROFILE_AVATARS,
-} from "../lib/profiles/avatars.js";
+  listProfileAvatars,
+} from "../lib/profiles/avatar-files.js";
+import { normalizeProfileAvatarId } from "../lib/profiles/avatars.js";
 import {
   beginPlaybackSession,
   calculateCompleted,
@@ -27,6 +28,7 @@ import {
   listProfiles,
   renameProfile,
   updateProfile,
+  updateAudioPreferences,
   updateSubtitlePreferences,
 } from "../lib/profiles/service.js";
 
@@ -55,25 +57,47 @@ function save(database, profileId, media, position, duration, sequence = 1) {
   }, database);
 }
 
-test("built-in profile avatars have stable unique identifiers", () => {
-  assert.ok(PROFILE_AVATARS.length >= 6);
-  assert.equal(new Set(PROFILE_AVATARS.map((avatar) => avatar.id)).size, PROFILE_AVATARS.length);
-  assert.equal(PROFILE_AVATARS.every((avatar) => avatar.label && avatar.symbol), true);
+test("profile avatars are discovered from public profile pictures", () => {
+  const avatars = listProfileAvatars();
+  assert.ok(avatars.length >= 1);
+  assert.equal(new Set(avatars.map((avatar) => avatar.id)).size, avatars.length);
+  assert.equal(avatars.every((avatar) => avatar.label && avatar.src.startsWith("/profilePictures/")), true);
   assert.equal(isProfileAvatarId(defaultProfileAvatarId("existing-profile")), true);
+  assert.equal(normalizeProfileAvatarId("ocean"), "friendly-robot.png");
+});
+
+test("profile avatar discovery reflects files added to and removed from the folder", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "torplay-profile-pictures-"));
+  try {
+    await writeFile(path.join(directory, "fox.png"), "test");
+    await writeFile(path.join(directory, "notes.txt"), "ignored");
+    assert.deepEqual(listProfileAvatars(directory).map((avatar) => avatar.id), ["fox.png"]);
+
+    await writeFile(path.join(directory, "owl.webp"), "test");
+    assert.deepEqual(listProfileAvatars(directory).map((avatar) => avatar.id), ["fox.png", "owl.webp"]);
+
+    await rm(path.join(directory, "fox.png"));
+    assert.deepEqual(listProfileAvatars(directory).map((avatar) => avatar.id), ["owl.webp"]);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test("profiles keep stable IDs through rename and delete their history", () => {
   const database = createDatabase(":memory:");
   try {
-    const profile = createProfile({ name: " Vasil ", avatarId: "ocean" }, database);
-    assert.equal(profile.avatarId, "ocean");
+    const avatars = listProfileAvatars();
+    const firstAvatar = avatars[0].id;
+    const secondAvatar = avatars[1]?.id || firstAvatar;
+    const profile = createProfile({ name: " Vasil ", avatarId: firstAvatar }, database);
+    assert.equal(profile.avatarId, firstAvatar);
     const renamed = renameProfile(profile.id, { name: "Viewer" }, database);
     assert.equal(renamed.id, profile.id);
     assert.equal(renamed.name, "Viewer");
-    assert.equal(renamed.avatarId, "ocean");
-    const customized = updateProfile(profile.id, { avatarId: "violet" }, database);
+    assert.equal(renamed.avatarId, firstAvatar);
+    const customized = updateProfile(profile.id, { avatarId: secondAvatar }, database);
     assert.equal(customized.name, "Viewer");
-    assert.equal(customized.avatarId, "violet");
+    assert.equal(customized.avatarId, secondAvatar);
     assert.throws(() => updateProfile(profile.id, { avatarId: "custom-upload" }, database), /valid profile avatar/);
     assert.deepEqual(listProfiles(database).map((item) => item.id), [profile.id]);
 
@@ -122,6 +146,24 @@ test("subtitle preferences are validated, persisted, and isolated by profile", (
       defaultLanguage: "en",
       enabledLanguages: [],
     }, database), /at least one/);
+  } finally {
+    database.close();
+  }
+});
+
+test("audio preferences default to original and remain isolated by profile", () => {
+  const database = createDatabase(":memory:");
+  try {
+    const first = createProfile({ name: "First" }, database);
+    const second = createProfile({ name: "Second" }, database);
+    assert.deepEqual(first.audioPreferences, { preferredLanguage: "original" });
+    const updated = updateAudioPreferences(first.id, { preferredLanguage: "eng" }, database);
+    assert.deepEqual(updated.audioPreferences, { preferredLanguage: "en" });
+    assert.deepEqual(getProfile(second.id, database).audioPreferences, { preferredLanguage: "original" });
+    assert.throws(
+      () => updateAudioPreferences(first.id, { preferredLanguage: "not-a-language" }, database),
+      /valid preferred audio language/,
+    );
   } finally {
     database.close();
   }
@@ -200,7 +242,7 @@ test("database migration restores started media that only has a progress writer"
     assert.equal(restored.position, 0);
     assert.equal(restored.duration, 0);
     assert.equal(restored.episodeTitle, "Chapter Three: Body Double");
-    assert.equal(database.pragma("user_version", { simple: true }), 12);
+    assert.equal(database.pragma("user_version", { simple: true }), 13);
   } finally {
     database?.close();
     await rm(directory, { recursive: true, force: true });
@@ -237,7 +279,7 @@ test("database migration assigns built-in avatars without replacing profile data
     assert.equal(profiles[0].avatarId, defaultProfileAvatarId("legacy-one", 0));
     assert.equal(profiles[1].avatarId, defaultProfileAvatarId("legacy-two", 1));
     assert.equal(profiles.every((profile) => isProfileAvatarId(profile.avatarId)), true);
-    assert.equal(database.pragma("user_version", { simple: true }), 12);
+    assert.equal(database.pragma("user_version", { simple: true }), 13);
   } finally {
     database?.close();
     await rm(directory, { recursive: true, force: true });

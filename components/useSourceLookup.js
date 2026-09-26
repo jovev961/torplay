@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { isRemotePlaybackSessionActive } from "../lib/remote-playback/client-state.js";
+import { readNdjson } from "./readNdjson.js";
 
 async function readJson(response) {
   const contentType = response.headers.get("content-type") || "";
@@ -61,7 +62,10 @@ export function useSourceLookup() {
   const [usenetPollFailures, setUsenetPollFailures] = useState(0);
   const [mediaContext, setMediaContext] = useState(null);
   const [searching, setSearching] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+  const [cacheInfo, setCacheInfo] = useState(null);
+  const [refreshError, setRefreshError] = useState("");
   const [startingId, setStartingId] = useState(null);
   const [session, setSession] = useState(null);
   const [debridChoice, setDebridChoice] = useState(null);
@@ -77,14 +81,19 @@ export function useSourceLookup() {
   const [errorCode, setErrorCode] = useState("");
   const pendingRequests = useRef(new Set());
   const searchGeneration = useRef(0);
+  const searchController = useRef(null);
   const releasedSessionIds = useRef(new Set());
 
   const request = useCallback(async (url, options = {}) => {
     const controller = new AbortController();
+    const abort = () => controller.abort(options.signal?.reason);
+    if (options.signal?.aborted) abort();
+    else options.signal?.addEventListener("abort", abort, { once: true });
     pendingRequests.current.add(controller);
     try {
       return await fetch(url, { ...options, signal: controller.signal });
     } finally {
+      options.signal?.removeEventListener("abort", abort);
       pendingRequests.current.delete(controller);
     }
   }, []);
@@ -101,6 +110,7 @@ export function useSourceLookup() {
   }, []);
 
   useEffect(() => () => {
+    searchController.current?.abort();
     for (const controller of pendingRequests.current) controller.abort();
     pendingRequests.current.clear();
   }, []);
@@ -258,31 +268,46 @@ export function useSourceLookup() {
     if (!results.length && mediaContext) await search(mediaContext);
   }
 
-  async function search(criteria) {
+  async function search(criteria, options = {}) {
+    const cacheOnly = options.cacheOnly === true;
+    const refresh = options.refresh === true;
     const generation = ++searchGeneration.current;
-    if (session?.id) await stop();
-    setSearching(true);
-    setHasSearched(true);
+    searchController.current?.abort();
+    const controller = new AbortController();
+    searchController.current = controller;
+    const previousResults = results;
+    const previousCacheInfo = cacheInfo;
+    if (session?.id && !cacheOnly && !refresh) await stop();
+    if (searchGeneration.current !== generation) return false;
+    setSearching(!cacheOnly && !refresh);
+    setRefreshing(refresh);
+    if (!cacheOnly) setHasSearched(true);
     setError("");
     setErrorCode("");
-    setResults([]);
-    setUsenetResults([]);
+    setRefreshError("");
+    if (!cacheOnly && !refresh) {
+      setResults([]);
+      setUsenetResults([]);
+      setCacheInfo(null);
+    }
     setMediaContext(criteria);
-    setSelectedFileId(null);
-    setDebridChoice(null);
-    setDebridJob(null);
-    setReadySources([]);
-    setReadyLoading(Boolean(["movie", "show"].includes(criteria.type) && criteria.tmdbId));
-    setReadyUnavailable(false);
-    setTorrentAvailability({});
-    setAvailabilityChecking(false);
+    if (!cacheOnly) {
+      setSelectedFileId(null);
+      setDebridChoice(null);
+      setDebridJob(null);
+      if (!refresh) setReadySources([]);
+      setReadyLoading(Boolean(["movie", "show"].includes(criteria.type) && criteria.tmdbId));
+      setReadyUnavailable(false);
+      if (!refresh) setTorrentAvailability({});
+      setAvailabilityChecking(false);
+    }
     if (["movie", "show"].includes(criteria.type) && criteria.tmdbId) {
       const params = new URLSearchParams({ type: criteria.type, tmdbId: String(criteria.tmdbId) });
       if (criteria.type === "show") {
         params.set("season", String(criteria.season));
         params.set("episode", String(criteria.episode));
       }
-      void request(`/api/playback/debrid?${params}`, { cache: "no-store" })
+      void request(`/api/playback/debrid?${params}`, { cache: "no-store", signal: controller.signal })
         .then(readJson).then((data) => {
           if (searchGeneration.current === generation) {
             setReadySources(data.sources || []);
@@ -304,18 +329,33 @@ export function useSourceLookup() {
     if (criteria.tmdbId !== undefined) params.set("tmdbId", String(criteria.tmdbId));
     if (criteria.imdbId) params.set("imdbId", criteria.imdbId);
     if (criteria.year) params.set("year", String(criteria.year));
+    if (cacheOnly) params.set("cacheOnly", "1");
+    if (refresh) params.set("refresh", "1");
 
     try {
-      const response = await request(`/api/search?${params}`, { cache: "no-store" });
-      const data = await readJson(response);
-      if (searchGeneration.current !== generation) return;
-      setResults(data.results);
-      setUsenetResults(data.usenetResults || []);
-      if (data.results.length) {
+      const response = await fetch(`/api/search?${params}`, {
+        cache: "no-store", headers: { Accept: "application/x-ndjson" }, signal: controller.signal,
+      });
+      let results = [];
+      let streamError = null;
+      await readNdjson(response, (event) => {
+        if (searchGeneration.current !== generation) return;
+        if (event.type === "results") {
+          results = event.results || [];
+          setResults(results);
+          setCacheInfo(event.cache || null);
+          if (cacheOnly && results.length) setHasSearched(true);
+        }
+        if (event.type === "usenet" && !cacheOnly) setUsenetResults(event.results || []);
+        if (event.type === "error") streamError = Object.assign(new Error(event.error || "Search failed."), { code: event.code });
+      });
+      if (streamError) throw streamError;
+      if (searchGeneration.current !== generation) return false;
+      if (results.length) {
         setAvailabilityChecking(true);
         void request("/api/torrents/availability", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ resultIds: data.results.map((result) => result.id) }),
+          body: JSON.stringify({ resultIds: results.map((result) => result.id) }), signal: controller.signal,
         }).then(readJson).then((availability) => {
           if (searchGeneration.current === generation) {
             setTorrentAvailability((current) => ({ ...(availability.results || {}), ...current }));
@@ -324,14 +364,34 @@ export function useSourceLookup() {
           if (searchGeneration.current === generation) setAvailabilityChecking(false);
         });
       }
+      return results.length > 0;
     } catch (searchError) {
       if (searchError.name !== "AbortError" && searchGeneration.current === generation) {
-        setError(searchError.message);
-        setErrorCode(searchError.code || "");
+        if (refresh) {
+          setResults(previousResults);
+          setCacheInfo(previousCacheInfo);
+          setRefreshError(searchError.message);
+        } else if (!cacheOnly) {
+          setError(searchError.message);
+          setErrorCode(searchError.code || "");
+        }
       }
+      return false;
     } finally {
-      if (searchGeneration.current === generation) setSearching(false);
+      if (searchGeneration.current === generation) {
+        setSearching(false);
+        setRefreshing(false);
+      }
     }
+  }
+
+  function restore(criteria) {
+    return search(criteria, { cacheOnly: true });
+  }
+
+  function refreshSearch() {
+    if (!mediaContext || refreshing) return Promise.resolve(false);
+    return search(mediaContext, { refresh: true });
   }
 
   async function selectResult(resultId) {
@@ -510,7 +570,9 @@ export function useSourceLookup() {
   return {
     error,
     errorCode,
+    refreshError,
     hasSearched,
+    cacheInfo,
     results,
     usenetResults,
     usenetJobs,
@@ -524,10 +586,13 @@ export function useSourceLookup() {
     debridJob,
     usenetEnabled,
     searching,
+    refreshing,
     selectedFileId,
     session,
     startingId,
     search,
+    restore,
+    refreshSearch,
     selectResult,
     startReadySource,
     changeSource,

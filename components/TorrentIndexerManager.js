@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import AddSourceDialog from "./AddSourceDialog.js";
 import { sourceRequest as request } from "./source-request.js";
+import { readNdjson } from "./readNdjson.js";
+import { useI18n } from "./I18nProvider.js";
 import styles from "./SettingsManager.module.css";
 
 const statusLabels = {
@@ -41,12 +43,22 @@ function IndexerStatus({ status, message }) {
   );
 }
 
+async function requestHealth(refresh, signal, onEvent) {
+  const response = await fetch("/api/settings/torrent-providers", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/x-ndjson" },
+    body: JSON.stringify({ action: "health", refresh }), signal,
+  });
+  await readNdjson(response, onEvent);
+}
+
 export default function TorrentIndexerManager({
   nativeSources = [],
   initialCustomProviders,
   canEdit,
   onCustomChanged,
 }) {
+  const { t } = useI18n();
   const [customProviders, setCustomProviders] = useState(initialCustomProviders);
   const [health, setHealth] = useState({});
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -54,26 +66,39 @@ export default function TorrentIndexerManager({
   const [importDraft, setImportDraft] = useState(null);
   const [jackettDraft, setJackettDraft] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [testingId, setTestingId] = useState(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [pendingRemoval, setPendingRemoval] = useState(null);
+  const healthController = useRef(null);
+  const handleHealthEvent = (event) => {
+    if (event.type === "status") setHealth((current) => ({ ...current,
+      [event.result.provider]: { ...event.result, stale: event.stale === true } }));
+    if (event.type === "error") setError(event.error);
+  };
 
   async function refreshCustom(force = false) {
+    healthController.current?.abort();
+    const controller = new AbortController();
+    healthController.current = controller;
     try {
-      const data = await request("health", undefined, force);
-      setHealth(Object.fromEntries(data.results.map((item) => [item.provider, item])));
+      await requestHealth(force, controller.signal, handleHealthEvent);
     } catch (refreshError) {
-      setError(refreshError.message);
+      if (refreshError.name !== "AbortError") setError(refreshError.message);
     }
   }
 
   useEffect(() => {
-    let cancelled = false;
-    request("health").then((data) => {
-      if (!cancelled) setHealth(Object.fromEntries(data.results.map((item) => [item.provider, item])));
+    const controller = new AbortController();
+    healthController.current = controller;
+    void requestHealth(false, controller.signal, (event) => {
+      if (event.type === "status") setHealth((current) => ({ ...current,
+        [event.result.provider]: { ...event.result, stale: event.stale === true } }));
+      if (event.type === "error") setError(event.error);
     }).catch((loadError) => {
-      if (!cancelled) setError(loadError.message);
+      if (loadError.name !== "AbortError") setError(loadError.message);
     });
-    return () => { cancelled = true; };
+    return () => controller.abort();
   }, []);
 
   function closeDialog() {
@@ -88,6 +113,7 @@ export default function TorrentIndexerManager({
 
   async function act(action, provider) {
     setBusy(true);
+    if (action === "test-cardigann") setTestingId(provider.id);
     setError("");
     setMessage("");
     try {
@@ -119,6 +145,7 @@ export default function TorrentIndexerManager({
       setError(actionError.message);
     } finally {
       setBusy(false);
+      setTestingId(null);
     }
   }
 
@@ -150,7 +177,8 @@ export default function TorrentIndexerManager({
               ? "Source is disabled."
               : !provider.active
                 ? "Source is excluded by the provider override."
-                : currentHealth?.message || "Checking source availability.";
+                : currentHealth?.stale ? `${currentHealth.message} Refreshing…`
+                  : currentHealth?.message || "Checking source availability.";
             return (
               <article className={styles.sourceCard} key={provider.id}>
                 <div className={styles.sourceCardHeading}>
@@ -162,7 +190,7 @@ export default function TorrentIndexerManager({
                 <IndexerStatus status={status} message={statusMessage} />
                 {canEdit ? <div className={styles.sourceCardActions}>
                   <button className={styles.testButton} type="button" disabled={busy} onClick={() => void act("update-native", { id: provider.id, enabled: !provider.enabled })}>{provider.enabled ? "Disable" : "Enable"}</button>
-                  <button className={styles.removeButton} type="button" disabled={busy} onClick={() => { if (window.confirm(`Remove ${provider.name}?`)) void act("remove-native", { id: provider.id }); }}>Remove</button>
+                  <button className={styles.removeButton} type="button" disabled={busy} onClick={() => setPendingRemoval({ action: "remove-native", provider })}>Remove</button>
                 </div> : null}
               </article>
             );
@@ -176,7 +204,9 @@ export default function TorrentIndexerManager({
               ? "Source is disabled."
               : !provider.active
                 ? "Source is excluded by the provider override."
-                : currentHealth?.message || provider.verification?.message || "Checking source availability.";
+                : currentHealth?.stale ? `${currentHealth.message} Refreshing…`
+                  : currentHealth?.message || (provider.verification?.message
+                    ? `Last verification: ${provider.verification.message}` : "Checking source availability.");
             return (
               <article className={styles.sourceCard} key={provider.id}>
                 <div className={styles.sourceCardHeading}>
@@ -194,9 +224,9 @@ export default function TorrentIndexerManager({
                         else setDraft({ ...provider, apiKey: "" });
                         setDialogOpen(true); setMessage(""); setError("");
                       }}>Edit</button>
-                      {provider.kind === "cardigann" ? <button className={styles.testButton} type="button" disabled={busy} onClick={() => void act("test-cardigann", { id: provider.id })}>Test</button> : null}
+                      {provider.kind === "cardigann" ? <button className={styles.testButton} type="button" disabled={busy} onClick={() => void act("test-cardigann", { id: provider.id })}>{testingId === provider.id ? "Testing…" : "Test"}</button> : null}
                       <button className={styles.testButton} type="button" disabled={busy} onClick={() => void act(provider.kind === "cardigann" ? "update-cardigann" : provider.kind === "jackett" ? "update-jackett" : "update", { id: provider.id, enabled: !provider.enabled, mediaTypes: provider.mediaTypes })}>{provider.enabled ? "Disable" : "Enable"}</button>
-                      <button className={styles.removeButton} type="button" disabled={busy} onClick={() => { if (window.confirm(`Remove ${provider.name}?`)) void act(provider.kind === "cardigann" ? "remove-cardigann" : "remove", { id: provider.id }); }}>Remove</button>
+                      <button className={styles.removeButton} type="button" disabled={busy} onClick={() => setPendingRemoval({ action: provider.kind === "cardigann" ? "remove-cardigann" : "remove", provider })}>Remove</button>
                 </div> : null}
               </article>
             );
@@ -234,6 +264,28 @@ export default function TorrentIndexerManager({
           if (Array.isArray(snapshot?.customProviders)) setCustomProviders(snapshot.customProviders);
         }}
       /> : null}
+
+      {pendingRemoval ? (
+        <div className={styles.dialogBackdrop} onMouseDown={(event) => {
+          if (!busy && event.target === event.currentTarget) setPendingRemoval(null);
+        }}>
+          <div className={styles.indexerDialog} role="dialog" aria-modal="true" aria-labelledby="remove-source-title">
+            <div className={styles.dialogHeading}>
+              <h2 id="remove-source-title">{t("Remove source")}</h2>
+              <button className={styles.dialogClose} type="button" aria-label={t("Cancel")} disabled={busy} onClick={() => setPendingRemoval(null)}>×</button>
+            </div>
+            <p className={styles.dialogIntro}>{t("Remove {name}?", { name: pendingRemoval.provider.name })}</p>
+            <div className={styles.sourceActions}>
+              <button className={styles.testButton} type="button" disabled={busy} onClick={() => setPendingRemoval(null)}>{t("Cancel")}</button>
+              <button className={styles.removeButton} type="button" disabled={busy} onClick={() => {
+                const removal = pendingRemoval;
+                setPendingRemoval(null);
+                void act(removal.action, { id: removal.provider.id });
+              }}>{t("Remove")}</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

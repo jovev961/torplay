@@ -181,9 +181,9 @@ a {
   position: relative;
   z-index: 20;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: 28px;
+  gap: 14px;
   min-height: 58px;
   padding: 7px 10px 7px 14px;
   border: 1px solid rgba(255, 255, 255, 0.06);
@@ -220,36 +220,132 @@ a {
   display: flex;
   align-items: center;
   justify-self: center;
-  gap: 6px;
+  gap: 5px;
 }
 
-.mainNav a {
-  padding: 9px 12px;
+.mainNav > a,
+.navCategoryTrigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 42px;
+  padding: 9px 11px;
+  border: 1px solid transparent;
   border-radius: 9px;
   color: var(--muted);
+  background: transparent;
+  font-family: inherit;
   font-size: 0.9rem;
   font-weight: 650;
+  white-space: nowrap;
   transition: color 150ms ease, background 150ms ease, box-shadow 150ms ease;
 }
 
-.mainNav a:hover,
-.mainNav a:focus-visible,
-.mainNav a.active {
+.mainNav > a:hover,
+.mainNav > a:focus-visible,
+.mainNav > a.active,
+.navCategoryTrigger:hover,
+.navCategoryTrigger:focus-visible,
+.navCategory.open .navCategoryTrigger,
+.navCategory.active .navCategoryTrigger {
   color: var(--text);
   outline: none;
   background: rgba(255, 255, 255, 0.06);
 }
 
 .mainNav a:focus-visible,
+.navCategoryTrigger:focus-visible,
 .profileTrigger:focus-visible,
 .navToggle:focus-visible {
   box-shadow: 0 0 0 3px rgba(229, 9, 20, 0.28);
 }
 
-.mainNav a.active {
+.mainNav > a.active,
+.navCategory.active .navCategoryTrigger {
   color: white;
   background: rgba(229, 9, 20, 0.14);
   box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.navIcon {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.navCategory {
+  position: relative;
+}
+
+.navCategoryChevron {
+  margin-left: 1px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  transform: translateY(-2px);
+  transition: transform 150ms ease;
+}
+
+.navCategory.open .navCategoryChevron {
+  transform: rotate(180deg) translateY(2px);
+}
+
+.navCategoryMenu {
+  position: absolute;
+  top: calc(100% + 9px);
+  left: 50%;
+  display: none;
+  min-width: 244px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(14, 17, 21, 0.98);
+  box-shadow: 0 20px 55px rgba(0, 0, 0, 0.52);
+  transform: translateX(-50%);
+  backdrop-filter: blur(18px);
+}
+
+.navCategory.open .navCategoryMenu {
+  display: grid;
+  gap: 3px;
+}
+
+.navCategoryHeading {
+  padding: 6px 10px 7px;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.navCategoryMenu a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 10px;
+  border-radius: 9px;
+  color: var(--muted);
+  font-size: 0.87rem;
+  font-weight: 700;
+}
+
+.navCategoryMenu a:hover,
+.navCategoryMenu a:focus-visible,
+.navCategoryMenu a.active {
+  color: var(--text);
+  outline: none;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.navCategoryMenu a.active {
+  color: white;
+  background: rgba(229, 9, 20, 0.15);
 }
 
 .detailNav .brand {
@@ -497,6 +593,91 @@ a {
 
 .catalogResults {
   margin-top: 34px;
+}
+
+.recommendationsHeading {
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.recommendationsHeading p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+@media (min-width: 721px) and (max-width: 1080px) {
+  .appHeader {
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    gap: 8px;
+  }
+
+  .mainNav {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    left: 0;
+    display: none;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: rgba(14, 17, 21, 0.98);
+    box-shadow: 0 18px 52px rgba(0, 0, 0, 0.5);
+  }
+
+  .mainNav.open {
+    display: grid;
+  }
+
+  .mainNav > a,
+  .navCategoryTrigger {
+    width: 100%;
+    min-height: 48px;
+    padding: 12px 14px;
+  }
+
+  .navCategory {
+    display: grid;
+    align-content: start;
+    gap: 5px;
+  }
+
+  .navCategoryChevron {
+    display: none;
+  }
+
+  .navCategoryMenu,
+  .navCategory.open .navCategoryMenu {
+    position: static;
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+    padding: 0 0 0 12px;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    transform: none;
+    backdrop-filter: none;
+  }
+
+  .navCategoryHeading {
+    display: none;
+  }
+
+  .navCategoryMenu a {
+    min-height: 44px;
+  }
+
+  .navToggle {
+    display: block;
+    grid-column: 3;
+  }
+
+  .profileControl {
+    grid-column: 4;
+  }
 }
 
 .mediaGrid {
@@ -1315,25 +1496,16 @@ a {
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: inherit;
   content: "";
+  pointer-events: none;
 }
 
-.profileAvatar > span {
-  position: relative;
-  z-index: 1;
-  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.35));
+.profileAvatar > img {
+  object-fit: cover;
 }
 
 .profileAvatar-small { width: 34px; height: 34px; font-size: 1rem; }
 .profileAvatar-medium { width: 72px; height: 72px; font-size: 1.9rem; }
 .profileAvatar-large { width: 126px; height: 126px; margin: auto; font-size: 3.2rem; }
-.profileAvatar-ember { background: linear-gradient(145deg, #ff4b55, #8f050d); }
-.profileAvatar-ocean { background: linear-gradient(145deg, #26b8ff, #074f98); }
-.profileAvatar-violet { background: linear-gradient(145deg, #bd72ff, #5520a2); }
-.profileAvatar-solar { background: linear-gradient(145deg, #ffc94a, #dd5d00); }
-.profileAvatar-mint { background: linear-gradient(145deg, #42e8b4, #087c68); }
-.profileAvatar-rose { background: linear-gradient(145deg, #ff72b6, #9d1d61); }
-.profileAvatar-sky { background: linear-gradient(145deg, #6ee7ff, #3167cb); }
-.profileAvatar-slate { background: linear-gradient(145deg, #aab5c2, #3b4655); }
 
 .addProfileAvatar {
   display: grid;
@@ -1802,11 +1974,29 @@ a {
 }
 .sourceResult.selected { padding-inline: 14px; border: 1px solid var(--accent); border-radius: 10px; background: #1d2025; }
 
+.sourceResultsHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.sourceResultsHeading h3 {
+  margin: 0;
+}
+
+.sourceCacheStatus {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
 .sourceHeadingActions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .readySourceResults { display: grid; gap: 10px; margin: 18px 0; padding: 18px; border: 1px solid #34664d; border-radius: 14px; background: #14231c; }
 .readySourceResults p { margin: 6px 0 0; color: var(--muted); }
 .readySource { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 14px; border: 1px solid #375b49; border-radius: 10px; background: #192b22; }
 .readySource div { display: grid; gap: 5px; min-width: 0; }
+.readySource .mediaCapabilityBadges { display: flex; }
 .readySource strong { overflow-wrap: anywhere; }
 .readySource button { flex: 0 0 auto; }
 @media (max-width: 600px) { .readySource { align-items: stretch; flex-direction: column; } .readySource button { width: 100%; } }
@@ -1920,6 +2110,27 @@ a {
   color: var(--accent);
 }
 
+.mediaCapabilityBadges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.55rem;
+}
+
+.mediaCapabilityBadges > span {
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--border));
+  border-radius: 999px;
+  color: var(--text);
+  font-size: 0.72rem;
+  font-weight: 750;
+  letter-spacing: 0.025em;
+  padding: 0.2rem 0.48rem;
+}
+
+.mediaCapabilityBadges.compact {
+  margin-top: 0.3rem;
+}
+
 .muted {
   color: var(--muted);
 }
@@ -1977,6 +2188,54 @@ a {
   gap: 8px;
   max-height: 270px;
   overflow: auto;
+}
+
+.torplayEpisodeBrowser {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(9, 12, 16, 0.58);
+}
+
+.torplayEpisodeHeading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.torplayEpisodeHeading h3 {
+  margin: 4px 0 0;
+  font-size: 1rem;
+}
+
+.torplayEpisodeHeading > span {
+  flex: none;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.torplayEpisodeList {
+  grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
+  gap: 10px;
+  max-height: 360px;
+  padding-right: 4px;
+}
+
+.torplayEpisodeList .episodeFileChoice {
+  min-height: 86px;
+  padding: 12px 13px;
+  border-radius: 10px;
+}
+
+.torplayEpisodeList .episodeFileHeading strong {
+  font-size: 0.92rem;
+}
+
+.torplayEpisodeList .episodeFilename {
+  font-size: 0.72rem;
 }
 
 .episodeFileChoice {
@@ -2428,6 +2687,42 @@ button.episodeFileChoice {
   font-size: clamp(0.9rem, 2vw, 1.15rem);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.playerMediaBadges {
+  position: absolute;
+  top: 66px;
+  left: 24px;
+  z-index: 2;
+  max-width: calc(100% - 48px);
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease;
+}
+
+.controlsVisible .playerMediaBadges {
+  opacity: 1;
+}
+
+.playerMediaBadges > span {
+  border-color: rgba(255, 255, 255, 0.28);
+  color: #fff;
+  background: rgba(20, 24, 29, 0.82);
+  backdrop-filter: blur(12px);
+}
+
+.playerMediaBadges > span.active {
+  border-color: rgba(91, 218, 139, 0.78);
+  color: #b8f5ce;
+  background: rgba(20, 77, 47, 0.88);
+  box-shadow: 0 0 0 1px rgba(91, 218, 139, 0.08), 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.playerMediaBadges > span.inactive {
+  border-color: rgba(255, 255, 255, 0.2);
+  color: rgba(235, 239, 243, 0.68);
+  background: rgba(30, 34, 39, 0.82);
 }
 
 .playbackModeBadge {
@@ -3208,7 +3503,10 @@ footer {
     right: 0;
     left: 0;
     display: none;
-    padding: 9px;
+    gap: 8px;
+    max-height: calc(100dvh - 86px);
+    padding: 12px;
+    overflow-y: auto;
     border: 1px solid var(--border);
     border-radius: 14px;
     background: rgba(14, 17, 21, 0.98);
@@ -3219,9 +3517,43 @@ footer {
     display: grid;
   }
 
-  .mainNav a {
-    min-height: 44px;
-    padding: 12px;
+  .mainNav > a,
+  .navCategoryTrigger {
+    width: 100%;
+    min-height: 48px;
+    padding: 12px 14px;
+  }
+
+  .navCategory {
+    display: grid;
+    gap: 3px;
+  }
+
+  .navCategoryChevron {
+    display: none;
+  }
+
+  .navCategoryMenu,
+  .navCategory.open .navCategoryMenu {
+    position: static;
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+    padding: 0 0 0 14px;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    transform: none;
+    backdrop-filter: none;
+  }
+
+  .navCategoryHeading {
+    display: none;
+  }
+
+  .navCategoryMenu a {
+    min-height: 46px;
+    padding: 11px 13px;
   }
 
   .navToggle {
@@ -3354,6 +3686,7 @@ footer {
   }
 
   .seasonToolbar,
+  .sourceResultsHeading,
   .sourceResult {
     flex-direction: column;
   }
@@ -3395,6 +3728,25 @@ footer {
 }
 
 @media (pointer: coarse) {
+  .mainNav > a,
+  .navCategoryTrigger,
+  .navCategoryMenu a,
+  .profileTrigger,
+  .navToggle,
+  .languageSwitcher button {
+    min-height: 48px;
+  }
+
+  .mainNav a:focus-visible,
+  .navCategoryTrigger:focus-visible,
+  .profileTrigger:focus-visible,
+  .navToggle:focus-visible,
+  .languageSwitcher button:focus-visible {
+    outline: 3px solid white;
+    outline-offset: 3px;
+    box-shadow: 0 0 0 6px rgba(229, 9, 20, 0.72);
+  }
+
   .videoPlayer:fullscreen .playerControls button,
   .videoPlayer:-webkit-full-screen .playerControls button,
   .videoPlayer.viewportFullscreen .playerControls button,
@@ -3409,6 +3761,40 @@ footer {
   .videoPlayer:-webkit-full-screen .volumeSlider,
   .videoPlayer.viewportFullscreen .volumeSlider {
     display: none;
+  }
+}
+
+@media (pointer: coarse) and (min-width: 1081px) {
+  .appHeader {
+    min-height: 74px;
+    gap: 18px;
+    padding: 10px 14px 10px 18px;
+  }
+
+  .mainNav {
+    gap: 9px;
+  }
+
+  .mainNav > a,
+  .navCategoryTrigger {
+    min-height: 52px;
+    padding: 12px 16px;
+    font-size: 1rem;
+  }
+
+  .navCategoryMenu {
+    min-width: 290px;
+    padding: 11px;
+  }
+
+  .navCategoryMenu a {
+    min-height: 54px;
+    font-size: 0.98rem;
+  }
+
+  .navIcon {
+    width: 21px;
+    height: 21px;
   }
 }
 
@@ -3474,6 +3860,7 @@ footer {
 .debridLibraryCard { display: flex; flex-direction: column; min-width: 0; padding: 20px; border: 1px solid var(--border); border-radius: 13px; background: var(--panel); }
 .debridLibraryCard h2 { margin: 10px 0; font-size: 1.05rem; line-height: 1.35; overflow-wrap: anywhere; }
 .debridLibraryCard p { margin: 0 0 14px; color: var(--muted); font-size: .84rem; }
+.debridLibraryCard .mediaCapabilityBadges { margin: 0 0 12px; }
 .debridLibraryCard progress { width: 100%; accent-color: var(--accent); }
 .debridLibraryActions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: auto; padding-top: 18px; }
 .debridLibraryOpen { border-color: #8c383b; background: #3d171b; }
@@ -3521,4 +3908,310 @@ footer {
   .debridLibraryFile { grid-template-columns: minmax(0, 1fr); }
   .debridLibraryFileActions { justify-content: flex-start; }
   .debridLibraryFileActions button { flex: 1; }
+}
+.languageSwitcher {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 0.3rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.languageSwitcher button {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  padding: 0.35rem 0.25rem;
+}
+
+.languageSwitcher button[aria-pressed="true"] {
+  color: var(--text);
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-underline-offset: 0.25rem;
+}
+
+.languageSwitcher button:focus-visible {
+  border-radius: 5px;
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.entryLanguageSwitcher {
+  align-self: flex-end;
+}
+
+@media (max-width: 760px) {
+  .headerLanguageSwitcher {
+    margin-left: auto;
+  }
+}
+
+.watchTogetherDock {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 1000;
+  width: min(340px, calc(100vw - 28px));
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+  color: #f7f8fa;
+  background: rgba(14, 17, 21, 0.96);
+  box-shadow: 0 20px 65px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(18px);
+}
+
+.watchTogetherDock.collapsed {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+}
+
+.watchTogetherDock.collapsed.active {
+  border-color: rgba(61, 220, 132, 0.5);
+}
+
+.watchTogetherLauncher {
+  position: relative;
+  display: grid;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  place-items: center;
+  color: #f7f8fa;
+  background: transparent;
+}
+
+.watchTogetherLauncher:hover,
+.watchTogetherLauncher:focus-visible {
+  color: #3ddc84;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.watchTogetherIcon {
+  width: 25px;
+  height: 25px;
+  fill: currentColor;
+}
+
+.watchTogetherLauncherStatus {
+  position: absolute;
+  right: 7px;
+  bottom: 7px;
+  width: 9px;
+  height: 9px;
+  border: 2px solid #15191e;
+  border-radius: 50%;
+  background: #3ddc84;
+}
+
+.watchTogetherDockHeader,
+.watchTogetherCodeRow,
+.watchTogetherParticipant {
+  display: flex;
+  align-items: center;
+}
+
+.watchTogetherDockHeader {
+  gap: 10px;
+  justify-content: space-between;
+  padding: 10px 12px;
+}
+
+.watchTogetherDockTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 800;
+}
+
+.watchTogetherDockTitle .watchTogetherIcon {
+  width: 20px;
+  height: 20px;
+}
+
+.watchTogetherDockHeader strong {
+  margin-left: auto;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+}
+
+.watchTogetherMinimize {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  place-items: center;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 1.15rem;
+}
+
+.watchTogetherMinimize:hover,
+.watchTogetherMinimize:focus-visible {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.watchTogetherStatus {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #8b949e;
+}
+
+.watchTogetherStatus.ready {
+  background: #3ddc84;
+  box-shadow: 0 0 0 4px rgba(61, 220, 132, 0.12);
+}
+
+.watchTogetherDockBody {
+  display: grid;
+  gap: 11px;
+  padding: 0 12px 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.watchTogetherSetup {
+  display: grid;
+  gap: 10px;
+  padding-top: 12px;
+}
+
+.watchTogetherSetup p,
+.watchTogetherSetup small {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.watchTogetherSetup form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.watchTogetherSetup form label {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.watchTogetherSetup input {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  background: #11151a;
+  font-size: 1rem;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.watchTogetherDivider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+}
+
+.watchTogetherDivider::before,
+.watchTogetherDivider::after {
+  height: 1px;
+  flex: 1;
+  background: rgba(255, 255, 255, 0.08);
+  content: "";
+}
+
+.watchTogetherCodeRow {
+  justify-content: space-between;
+  padding-top: 10px;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.watchTogetherCodeRow button,
+.watchTogetherLeave {
+  border: 0;
+  color: #dce2e8;
+  background: transparent;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.watchTogetherRoster,
+.watchTogetherPlayerRoster {
+  display: grid;
+  gap: 6px;
+}
+
+.watchTogetherParticipant {
+  gap: 9px;
+  padding: 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.watchTogetherParticipant > span:nth-child(2),
+.watchTogetherPlayerRoster > div {
+  display: grid;
+  min-width: 0;
+}
+
+.watchTogetherParticipant > small {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 0.67rem;
+}
+
+.watchTogetherParticipant span small,
+.watchTogetherHint,
+.watchTogetherPlayerRoster small {
+  color: var(--muted);
+  font-size: 0.66rem;
+}
+
+.watchTogetherError {
+  margin: 0;
+  color: #ffb3b8;
+  font-size: 0.75rem;
+}
+
+.watchTogetherPlayerMenu {
+  width: min(320px, calc(100vw - 36px));
+}
+
+.watchTogetherPlayerRoster > div {
+  gap: 2px;
+  padding: 8px 10px;
+}
+
+@media (max-width: 600px) {
+  .watchTogetherDock {
+    right: 8px;
+    bottom: 8px;
+    width: calc(100vw - 16px);
+  }
+
+  .watchTogetherDock.collapsed {
+    width: 56px;
+  }
 }

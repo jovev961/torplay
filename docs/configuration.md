@@ -43,7 +43,11 @@ OMDb is optional and used directly by TorPlay for IMDb ratings; it is not a Jack
 | `JACKETT_API_KEY` | Unset | Server-only Jackett API key. |
 | `FLARESOLVERR_URL` | Unset | URL of an external FlareSolverr service on this computer or a private LAN, such as `http://localhost:8191`. |
 | `OMDB_API_KEY` | Unset | Optional server-side OMDb key used for IMDb ratings on catalog cards and metadata lookups. Ratings are omitted when absent. |
+| `WATCH_TOGETHER_SIGNAL_URL` | Unset | Public HTTPS base URL of the separately deployed Watch Together signaling service. |
+| `WATCH_TOGETHER_STUN_URLS` | Cloudflare and Google public STUN | Optional comma-separated `stun:` or `stuns:` endpoint override. |
 | `TORPLAY_SEARCH_PROVIDERS` | Unset | Optional full-provider allowlist using stable source IDs. A legacy `jackett` entry still selects Jackett sources. |
+
+The standalone Watch Together signaling service has its own deployment variables, including its room-store and Redis settings. See [Watch Together signaling](watch-together.md) and `services/watch-together-signaling/.env.example`.
 
 Added TorPlay Tested Sources are stored in `native-sources.json`; custom Torznab, Jackett, and imported Cardigann sources are stored in `torrent-providers.json`. Both files sit beside `.env.local` or the installed `torplay.env`. Jackett sources reference the Services credentials rather than copying the key. For Cardigann sources, the private file includes the complete imported YAML and its integrity hash. These files can contain other API keys and settings; keep them out of source control and include them only in private backups. Settings writes them atomically with restrictive file permissions where supported. New custom endpoints and changed credentials must pass validation before saving. Cardigann import checks definition compatibility and attempts a live search; if only connection verification fails, the UI can explicitly save the source with **Add Anyway** and mark it unverified. Edits take effect immediately. Old `JACKETT_MOVIE_INDEXERS` and `JACKETT_SHOW_INDEXERS` values are read only to migrate older installations into individual source records; they are no longer used by search.
 
@@ -55,7 +59,7 @@ Every explicitly named Jackett indexer must already be enabled and configured in
 
 | Variable | Development default | Installed default | Description |
 | --- | --- | --- | --- |
-| `TORPLAY_DATABASE_PATH` | `persistent-data/torplay.db` | `%LOCALAPPDATA%\TorPlay\data\torplay.db` | SQLite profiles, history, progress, and writer state. |
+| `TORPLAY_DATABASE_PATH` | `persistent-data/torplay.db` | `%LOCALAPPDATA%\TorPlay\data\torplay.db` | SQLite profiles, history, progress, writer state, and safe external/search caches. |
 | `TORRENT_DOWNLOAD_PATH` | `.data/torrents` | `%LOCALAPPDATA%\TorPlay\cache\torrents` | App-owned temporary torrent data. |
 | `SUBTITLE_CACHE_PATH` | `.data/subtitles` | `%LOCALAPPDATA%\TorPlay\cache\subtitles` | Re-creatable subtitle cache. |
 

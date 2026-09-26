@@ -5,6 +5,7 @@ import AvatarPicker from "./AvatarPicker.js";
 import ProfileAvatar from "./ProfileAvatar.js";
 import { useProfile } from "./ProfileProvider.js";
 import { DEFAULT_PROFILE_AVATAR_ID } from "../lib/profiles/avatars.js";
+import { useI18n } from "./I18nProvider.js";
 
 async function readJson(response) {
   const data = await response.json().catch(() => ({}));
@@ -21,6 +22,7 @@ function fallbackLabel(code) {
 }
 
 export default function ProfileManager({ startAdding = false }) {
+  const { displayLanguage, t } = useI18n();
   const {
     activeProfile,
     create,
@@ -28,6 +30,7 @@ export default function ProfileManager({ startAdding = false }) {
     remove,
     select,
     update,
+    updateAudioPreferences,
     updateSubtitlePreferences,
   } = useProfile();
   const [mode, setMode] = useState(startAdding ? "add" : "manage");
@@ -41,6 +44,7 @@ export default function ProfileManager({ startAdding = false }) {
   const [settingsError, setSettingsError] = useState("");
   const [savingIdentity, setSavingIdentity] = useState(false);
   const [savingPreferences, setSavingPreferences] = useState(false);
+  const [savingAudioPreferences, setSavingAudioPreferences] = useState(false);
   const [saved, setSaved] = useState("");
 
   const languageOptions = useMemo(() => {
@@ -48,9 +52,17 @@ export default function ProfileManager({ startAdding = false }) {
     for (const code of editor?.enabledLanguages || []) {
       if (!byCode.has(code)) byCode.set(code, { code, label: fallbackLabel(code) });
     }
-    return [...byCode.values()].sort((left, right) =>
-      left.label.localeCompare(right.label) || left.code.localeCompare(right.code));
-  }, [catalog, editor?.enabledLanguages]);
+    if (editor?.preferredAudioLanguage && editor.preferredAudioLanguage !== "original"
+      && !byCode.has(editor.preferredAudioLanguage)) {
+      byCode.set(editor.preferredAudioLanguage, {
+        code: editor.preferredAudioLanguage,
+        label: fallbackLabel(editor.preferredAudioLanguage),
+      });
+    }
+    return [...byCode.values()].map((language) => ({
+      ...language, label: displayLanguage(language.code) || language.label,
+    })).sort((left, right) => left.label.localeCompare(right.label) || left.code.localeCompare(right.code));
+  }, [catalog, displayLanguage, editor]);
   const query = languageSearch.trim().toLowerCase();
   const filteredLanguages = query
     ? languageOptions.filter(({ code, label }) => (
@@ -92,6 +104,7 @@ export default function ProfileManager({ startAdding = false }) {
       name: profile.name,
       avatarId: profile.avatarId,
       ...profile.subtitlePreferences,
+      preferredAudioLanguage: profile.audioPreferences?.preferredLanguage || "original",
     });
     setLanguageSearch("");
     setError("");
@@ -112,7 +125,7 @@ export default function ProfileManager({ startAdding = false }) {
         avatarId: editor.avatarId,
       });
       setEditor((current) => ({ ...current, name: profile.name, avatarId: profile.avatarId }));
-      setSaved("Profile saved.");
+      setSaved(t("Profile saved."));
     } catch (requestError) {
       setError(requestError.message);
     } finally {
@@ -121,7 +134,7 @@ export default function ProfileManager({ startAdding = false }) {
   }
 
   async function destroy(profile) {
-    if (!window.confirm(`Delete ${profile.name} and all watch history?`)) return;
+    if (!window.confirm(t("Delete {name} and all watch history?", { name: profile.name }))) return;
     try {
       await remove(profile.id);
       setEditor(null);
@@ -136,7 +149,7 @@ export default function ProfileManager({ startAdding = false }) {
     setSettingsError("");
     const selected = editor?.enabledLanguages.includes(code);
     if (selected && editor.enabledLanguages.length === 1) {
-      setSettingsError("Choose at least one subtitle language.");
+      setSettingsError(t("Choose at least one subtitle language."));
       return;
     }
     setEditor((current) => {
@@ -166,11 +179,33 @@ export default function ProfileManager({ startAdding = false }) {
         enabledLanguages: editor.enabledLanguages,
       });
       setEditor((current) => ({ ...current, ...profile.subtitlePreferences }));
-      setSaved("Subtitle preferences saved.");
+      setSaved(t("Subtitle preferences saved."));
     } catch (requestError) {
       setSettingsError(requestError.message);
     } finally {
       setSavingPreferences(false);
+    }
+  }
+
+  async function saveAudioSettings(event) {
+    event.preventDefault();
+    if (!editor) return;
+    setSavingAudioPreferences(true);
+    setSaved("");
+    setSettingsError("");
+    try {
+      const profile = await updateAudioPreferences(editor.profileId, {
+        preferredLanguage: editor.preferredAudioLanguage,
+      });
+      setEditor((current) => ({
+        ...current,
+        preferredAudioLanguage: profile.audioPreferences.preferredLanguage,
+      }));
+      setSaved(t("Audio preference saved."));
+    } catch (requestError) {
+      setSettingsError(requestError.message);
+    } finally {
+      setSavingAudioPreferences(false);
     }
   }
 
@@ -179,23 +214,23 @@ export default function ProfileManager({ startAdding = false }) {
   return (
     <section className="profileManager">
       <div className="profileManagerHeading">
-        <div><span className="eyebrow">Local profiles</span><h1>Manage Profiles</h1></div>
-        <p>Choose who is watching and personalize their profile.</p>
+        <div><span className="eyebrow">{t("Local profiles")}</span><h1>{t("Manage Profiles")}</h1></div>
+        <p>{t("Choose who is watching and personalize their profile.")}</p>
       </div>
       {error ? <div className="notice error" role="alert">{error}</div> : null}
 
       {mode === "add" ? (
         <form className="profileEditorPanel profileCreatePanel" onSubmit={add}>
           <div className="profileEditorHeading">
-            <div><span className="eyebrow">New viewer</span><h2>Add Profile</h2></div>
-            {profiles.length ? <button className="textButton" type="button" onClick={() => setMode("manage")}>Cancel</button> : null}
+            <div><span className="eyebrow">{t("New viewer")}</span><h2>{t("Add Profile")}</h2></div>
+            {profiles.length ? <button className="textButton" type="button" onClick={() => setMode("manage")}>{t("Cancel")}</button> : null}
           </div>
           <AvatarPicker
             value={newProfile.avatarId}
             onChange={(avatarId) => setNewProfile((profile) => ({ ...profile, avatarId }))}
           />
           <label className="profileNameField">
-            <span>Profile name</span>
+            <span>{t("Profile name")}</span>
             <input
               autoFocus
               maxLength="50"
@@ -205,13 +240,13 @@ export default function ProfileManager({ startAdding = false }) {
             />
           </label>
           <div className="profileFormActions">
-            <button className="primaryButton compact" type="submit">Create Profile</button>
-            {profiles.length ? <button className="secondaryButton" type="button" onClick={() => setMode("manage")}>Cancel</button> : null}
+            <button className="primaryButton compact" type="submit">{t("Create Profile")}</button>
+            {profiles.length ? <button className="secondaryButton" type="button" onClick={() => setMode("manage")}>{t("Cancel")}</button> : null}
           </div>
         </form>
       ) : (
         <>
-          <div className="profileCardGrid" aria-label="Profiles">
+          <div className="profileCardGrid" aria-label={t("Profiles")}>
             {profiles.map((profile) => (
               <button
                 type="button"
@@ -221,7 +256,7 @@ export default function ProfileManager({ startAdding = false }) {
               >
                 <ProfileAvatar avatarId={profile.avatarId} size="large" />
                 <strong>{profile.name}</strong>
-                <span>{profile.id === activeProfile?.id ? "Currently watching" : "Edit profile"}</span>
+                <span>{t(profile.id === activeProfile?.id ? "Currently watching" : "Edit profile")}</span>
               </button>
             ))}
             <button
@@ -234,8 +269,8 @@ export default function ProfileManager({ startAdding = false }) {
               }}
             >
               <span className="addProfileAvatar" aria-hidden="true">+</span>
-              <strong>Add Profile</strong>
-              <span>Create another local viewer</span>
+              <strong>{t("Add Profile")}</strong>
+              <span>{t("Create another local viewer")}</span>
             </button>
           </div>
 
@@ -243,10 +278,10 @@ export default function ProfileManager({ startAdding = false }) {
             <div className="profileEditorPanel">
               <div className="profileEditorHeading">
                 <div>
-                  <span className="eyebrow">{editingProfile.id === activeProfile?.id ? "Currently watching" : "Profile settings"}</span>
+                  <span className="eyebrow">{t(editingProfile.id === activeProfile?.id ? "Currently watching" : "Profile settings")}</span>
                   <h2>{editingProfile.name}</h2>
                 </div>
-                <button className="textButton" type="button" onClick={() => setEditor(null)}>Close</button>
+                <button className="textButton" type="button" onClick={() => setEditor(null)}>{t("Close")}</button>
               </div>
 
               <form className="profileIdentityForm" onSubmit={saveIdentity}>
@@ -256,10 +291,10 @@ export default function ProfileManager({ startAdding = false }) {
                     setSaved("");
                     setEditor((current) => ({ ...current, avatarId }));
                   }}
-                  legend="Profile avatar"
+                  legend={t("Profile avatar")}
                 />
                 <label className="profileNameField">
-                  <span>Profile name</span>
+                  <span>{t("Profile name")}</span>
                   <input
                     maxLength="50"
                     value={editor.name}
@@ -271,35 +306,67 @@ export default function ProfileManager({ startAdding = false }) {
                 </label>
                 <div className="profileFormActions">
                   <button className="primaryButton compact" type="submit" disabled={savingIdentity}>
-                    {savingIdentity ? "Saving…" : "Save profile"}
+                    {t(savingIdentity ? "Saving…" : "Save profile")}
                   </button>
                   {editingProfile.id !== activeProfile?.id ? (
                     <button className="secondaryButton" type="button" onClick={() => select(editingProfile.id)}>
-                      Switch to profile
+                      {t("Switch to profile")}
                     </button>
                   ) : null}
+                </div>
+              </form>
+
+              <form className="subtitlePreferences" onSubmit={saveAudioSettings}>
+                <div className="sectionHeading">
+                  <div>
+                    <span className="eyebrow">{t("Playback preferences")}</span>
+                    <h2>{t("Preferred audio language")}</h2>
+                    <p>{t("TorPlay uses this language when a normal audio track is available.")}</p>
+                  </div>
+                </div>
+                <label className="primaryLanguage">
+                  <span>{t("Audio language")}</span>
+                  <select
+                    value={editor.preferredAudioLanguage}
+                    disabled={catalogLoading}
+                    onChange={(event) => {
+                      setSaved("");
+                      setEditor((current) => ({ ...current, preferredAudioLanguage: event.target.value }));
+                    }}
+                  >
+                    <option value="original">{t("Original/default")}</option>
+                    {languageOptions.map(({ code, label }) => (
+                      <option key={code} value={code}>{label}</option>
+                    ))}
+                  </select>
+                </label>
+                <div className="subtitlePreferenceActions">
+                  <button className="primaryButton compact" type="submit"
+                    disabled={savingAudioPreferences || catalogLoading}>
+                    {t(savingAudioPreferences ? "Saving…" : "Save audio preference")}
+                  </button>
                 </div>
               </form>
 
               <form className="subtitlePreferences" onSubmit={saveSubtitleSettings}>
                 <div className="sectionHeading">
                   <div>
-                    <span className="eyebrow">Playback preferences</span>
-                    <h2>Subtitle languages</h2>
-                    <p>TorPlay searches every selected language and prefers the primary language automatically.</p>
+                    <span className="eyebrow">{t("Playback preferences")}</span>
+                    <h2>{t("Subtitle languages")}</h2>
+                    <p>{t("TorPlay searches every selected language and prefers the primary language automatically.")}</p>
                   </div>
                 </div>
 
-                <div className="selectedLanguages" aria-label="Selected subtitle languages">
+                <div className="selectedLanguages" aria-label={t("Selected subtitle languages")}>
                   {editor.enabledLanguages.map((code) => (
                     <span key={code} className={code === editor.defaultLanguage ? "primary" : ""}>
-                      {labels.get(code) || fallbackLabel(code)}{code === editor.defaultLanguage ? " · Primary" : ""}
+                      {labels.get(code) || displayLanguage(code)}{code === editor.defaultLanguage ? ` · ${t("Primary")}` : ""}
                     </span>
                   ))}
                 </div>
 
                 <label className="primaryLanguage">
-                  <span>Primary language</span>
+                  <span>{t("Primary language")}</span>
                   <select
                     value={editor.defaultLanguage}
                     onChange={(event) => {
@@ -308,22 +375,22 @@ export default function ProfileManager({ startAdding = false }) {
                     }}
                   >
                     {editor.enabledLanguages.map((code) => (
-                      <option key={code} value={code}>{labels.get(code) || fallbackLabel(code)}</option>
+                      <option key={code} value={code}>{labels.get(code) || displayLanguage(code)}</option>
                     ))}
                   </select>
                 </label>
 
                 <label className="languageSearch">
-                  <span>Find a language</span>
+                  <span>{t("Find a language")}</span>
                   <input
                     type="search"
                     value={languageSearch}
                     onChange={(event) => setLanguageSearch(event.target.value)}
-                    placeholder="English, Macedonian, German…"
+                    placeholder={t("English, Macedonian, German…")}
                   />
                 </label>
 
-                {catalogLoading ? <div className="notice">Loading available languages…</div> : null}
+                {catalogLoading ? <div className="notice">{t("Loading available languages…")}</div> : null}
                 {!catalogLoading ? (
                   <div className="languageChecklist">
                     {filteredLanguages.map(({ code, label }) => (
@@ -337,23 +404,23 @@ export default function ProfileManager({ startAdding = false }) {
                         <small>{code}</small>
                       </label>
                     ))}
-                    {filteredLanguages.length === 0 ? <p>No matching languages.</p> : null}
+                    {filteredLanguages.length === 0 ? <p>{t("No matching languages.")}</p> : null}
                   </div>
                 ) : null}
 
-                {catalogSource ? <small className="languageSource">Language list: {catalogSource === "bundled" ? "TorPlay fallback" : catalogSource}.</small> : null}
+                {catalogSource ? <small className="languageSource">{t("Language list:")} {catalogSource === "bundled" ? t("TorPlay fallback") : catalogSource}.</small> : null}
                 {settingsError ? <div className="notice error" role="alert">{settingsError}</div> : null}
                 <div className="subtitlePreferenceActions">
                   <button className="primaryButton compact" type="submit" disabled={savingPreferences || catalogLoading}>
-                    {savingPreferences ? "Saving…" : "Save preferences"}
+                    {t(savingPreferences ? "Saving…" : "Save preferences")}
                   </button>
                 </div>
               </form>
 
               {saved ? <div className="notice success" role="status">{saved}</div> : null}
               <div className="profileDangerZone">
-                <div><strong>Delete profile</strong><span>This also removes the profile&apos;s watch history.</span></div>
-                <button type="button" onClick={() => void destroy(editingProfile)}>Delete {editingProfile.name}</button>
+                <div><strong>{t("Delete profile")}</strong><span>{t("This also removes the profile's watch history.")}</span></div>
+                <button type="button" onClick={() => void destroy(editingProfile)}>{t("Delete {name}", { name: editingProfile.name })}</button>
               </div>
             </div>
           ) : null}

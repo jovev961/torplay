@@ -107,7 +107,7 @@ test("does not cache a provider result by downgrading its direct torrent source"
   }
 });
 
-test("persists short-lived magnet-only provider results", async () => {
+test("persists magnet-only provider results for 24 hours and supports refresh", async () => {
   const database = createDatabase(":memory:");
   let calls = 0;
   const cachedProvider = provider("cached", async () => {
@@ -126,11 +126,22 @@ test("persists short-lived magnet-only provider results", async () => {
     const second = await searchConfiguredProvider(context, { ...options, now: 2_000 });
     assert.equal(calls, 1);
     assert.equal(second[0].source.magnet, first[0].source.magnet);
-    await searchConfiguredProvider(context, {
-      ...options,
-      now: 1_000 + PROVIDER_RESULT_CACHE_TTL_MS + 1,
+    await searchConfiguredProvider(context, { ...options, now: 3_000, refresh: true });
+    assert.equal(calls, 2);
+    const cachedOnly = await searchConfiguredProvider(context, {
+      ...options, now: 4_000, cacheOnly: true,
     });
     assert.equal(calls, 2);
+    assert.equal(cachedOnly[0].cacheCreatedAt, 3_000);
+    assert.deepEqual(await searchConfiguredProvider({ ...context, title: "Missing" }, {
+      ...options, now: 4_000, cacheOnly: true,
+    }), []);
+    assert.equal(calls, 2);
+    await searchConfiguredProvider(context, {
+      ...options,
+      now: 3_000 + PROVIDER_RESULT_CACHE_TTL_MS + 1,
+    });
+    assert.equal(calls, 3);
   } finally {
     database.close();
   }

@@ -21,6 +21,8 @@ test("persistent cache survives database reopen and expires entries", async () =
     assert.deepEqual(readPersistentCache("metadata", "movie:1", { database, now: 5_999 }), {
       hit: true,
       value: { title: "Sintel" },
+      createdAt: 1_000,
+      expiresAt: 6_000,
     });
     assert.deepEqual(readPersistentCache("metadata", "movie:1", { database, now: 6_000 }), {
       hit: false,

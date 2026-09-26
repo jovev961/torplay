@@ -16,7 +16,7 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const HLS_ASSET_PATTERN = /^(?:index\.m3u8|segment-\d{5}\.ts)$/;
+const HLS_ASSET_PATTERN = /^(?:index\.m3u8|init\.mp4|segment-\d{5}\.(?:ts|m4s))$/;
 
 async function respond(request, context, includeBody) {
   const { id, fileId, asset } = await context.params;
@@ -53,14 +53,14 @@ async function respond(request, context, includeBody) {
     "Cache-Control": "no-store",
     "Content-Type": asset.endsWith(".m3u8")
       ? "application/vnd.apple.mpegurl"
-      : "video/mp2t",
+      : asset.endsWith(".ts") ? "video/mp2t" : "video/mp4",
   });
   if (asset.endsWith(".m3u8")) {
     const source = await readFile(assetPath, "utf8");
-    const manifest = Buffer.from(source.replace(
-      /^(segment-\d{5}\.ts)$/gm,
-      `$1?job=${encodeURIComponent(job.id)}`,
-    ));
+    const query = `?job=${encodeURIComponent(job.id)}`;
+    const manifest = Buffer.from(source
+      .replace(/^(segment-\d{5}\.(?:ts|m4s))$/gm, `$1${query}`)
+      .replace(/URI="init\.mp4"/g, `URI="init.mp4${query}"`));
     headers.set("Content-Length", String(manifest.length));
     return new Response(includeBody ? manifest : null, { headers });
   }

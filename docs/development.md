@@ -72,7 +72,7 @@ The **Linux AppImage** workflow runs only when started manually from GitHub Acti
 
 | Path | Purpose | Persistence |
 | --- | --- | --- |
-| `persistent-data/torplay.db` | Profiles, history, progress, writer state | Persistent, gitignored |
+| `persistent-data/torplay.db` | Profiles, history, progress, writer state, and safe external/search caches | Persistent, gitignored |
 | `native-sources.json` and `torrent-providers.json` beside the runtime configuration file | Added Tested Sources and custom/Jackett/Cardigann sources | Persistent, private, gitignored |
 | `.data/torrents` | Managed torrent session files | Temporary, gitignored |
 | `.data/subtitles` | Subtitle cache | Re-creatable, gitignored, automatically expires after the configured retention period |

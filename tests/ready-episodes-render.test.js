@@ -16,6 +16,7 @@ new Function("require", "module", "exports", built.outputFiles[0].text)(
   createRequire(import.meta.url), loadedModule, loadedModule.exports,
 );
 const ReadyEpisodes = loadedModule.exports.default;
+const { shouldShowReadyEpisodes } = loadedModule.exports;
 
 const episodes = [10, 2, 1, 11, 3, 5, 4, 6].map((episode) => ({
   season: 1, episode, provider: "real-debrid",
@@ -45,4 +46,13 @@ test("ready cards filter another season and show an empty state", () => {
   const empty = render({ seasonNumber: 3 });
   assert.match(empty, /No ready episodes for this season/);
   assert.doesNotMatch(empty, /S01E|S02E/);
+});
+
+test("ready episodes only accompany connected-provider playback", () => {
+  const base = { hasPlayerFile: true, launchedEpisodeKey: "1:1", selectedEpisodeKey: "1:1" };
+  assert.equal(shouldShowReadyEpisodes({ ...base, session: { backend: "debrid" } }), true);
+  assert.equal(shouldShowReadyEpisodes({ ...base, session: { backend: "torrent" } }), false);
+  assert.equal(shouldShowReadyEpisodes({ ...base, session: { backend: "usenet" } }), false);
+  assert.equal(shouldShowReadyEpisodes({ ...base, session: { backend: "debrid" }, hasPlayerFile: false }), false);
+  assert.equal(shouldShowReadyEpisodes({ ...base, session: { backend: "debrid" }, selectedEpisodeKey: "1:2" }), false);
 });

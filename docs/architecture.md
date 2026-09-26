@@ -124,6 +124,14 @@ Subtitles may come from torrent sidecars, embedded streams, OpenSubtitles, or Su
 
 Remote playback is transport-neutral at the media boundary. The player builds a receiver-safe source descriptor containing only absolute TorPlay media and subtitle URLs, then a browser adapter loads it on Google Cast or invokes the native AirPlay picker. Receivers fetch media directly from the LAN server; they never receive magnets, provider credentials, or a torrent client. Active receiver sessions keep the associated torrent and conversion resources available until playback stops or normal server expiry applies.
 
+## Watch Together signaling and room state
+
+The standalone Watch Together signaling process owns live WebSocket connections and relays WebRTC offers, answers, and ICE candidates directly between connected participants. Once WebRTC DataChannels are established, host playback commands and participant readiness travel peer-to-peer and no longer pass through the signaling service.
+
+The service supports `memory` and `redis` room-store modes. Memory mode is entirely process-local. Production deployments use Redis mode, which retains active rooms in process memory and uses Redis only as a sparse room-lifecycle store. One expiring record contains the room code, host-selected media identity, participant membership, reconnect tokens, and creation/expiry timestamps. Creates, joins, confirmed leaves, host media changes, reconnect-grace expiry, and room closure mutate that record. Playback position, play/pause/seek events, buffering, readiness, frequent heartbeats, WebRTC negotiation payloads, source data, and media traffic are never stored in Redis. The service does not poll Redis; active rooms are loaded from Redis only when a reconnect or join needs recovery after a restart.
+
+Redis is deliberately not a cross-instance signaling bus. Live participants in one room must be routed to the same active signaling process so high-frequency negotiation and playback traffic never consume Redis capacity.
+
 ## Persistence
 
 SQLite stores local profiles, progress, history, and stale-writer protection. Media identity is based on profile plus TMDB title/episode identity rather than torrent identity. Writer tokens and monotonically increasing sequences prevent older players or delayed requests from overwriting current progress.

@@ -56,6 +56,8 @@ TMDB must confirm that a real next episode exists. TorPlay first checks the acti
 
 The player exposes the next-episode action during the final two minutes. **Play Now** advances immediately; automatic advancement otherwise occurs only when playback genuinely ends. Cancelling disables automatic advancement for that episode.
 
+For a local season pack, TorPlay also prepares a bounded startup buffer for the confirmed next episode during this window. The current episode remains the foreground download, preparation failures stay silent, and completion never advances playback by itself.
+
 - `POST /api/playback/next-episode`
 
 ## Torrent sessions and files
@@ -67,9 +69,10 @@ Torrent APIs use opaque, validated session and file identifiers:
 - `POST /api/torrents/{id}/release` provides idempotent page-exit cleanup.
 - `/api/torrents/{id}/files/{fileId}/stream` serves native video with Range support.
 - `/api/torrents/{id}/files/{fileId}/playback` prepares, reads, or stops converted playback.
+- `POST|GET|DELETE /api/torrents/{id}/files/{fileId}/prefetch` starts, reads, or cancels a local next-episode startup buffer.
 - `/api/torrents/{id}/files/{fileId}/hls/{asset}` serves prepared manifests and media assets.
 
-The browser never receives a torrent client or direct swarm connection.
+Torrent resources begin with every file deselected. TorPlay selects only the current playback ranges plus, when applicable, the bounded next-episode startup range. The browser never receives a torrent client or direct swarm connection.
 
 ## Video player
 
@@ -81,6 +84,16 @@ The remote-playback menu supports Google Cast receivers (including Cast-enabled 
 
 - `GET /api/playback/remote` returns the receiver-safe TorPlay origin.
 - Stream, HLS, and subtitle routes support receiver CORS, preflight, `HEAD`, and Range requests where applicable.
+
+## Watch Together
+
+Watch Together creates an ephemeral six-character room for up to eight people using separate TorPlay installations. The host selects the shared TMDB movie or episode identity; every participant prepares a private local source and confirms readiness before playback unlocks. Host play, pause, seek, current-position, and episode changes are synchronized over encrypted WebRTC DataChannels.
+
+The separately deployed signaling service supports an ephemeral `memory` store and a production `redis` store. Redis mode combines in-memory active signaling state with Redis persistence only for lightweight room lifecycle, membership, host media identity, reconnect data, and expiry. Live WebSocket offer/answer/ICE relay stays in memory, and playback synchronization moves entirely to peer-to-peer DataChannels after connection. Playback position, commands, buffering, heartbeats, sources, credentials, filenames, subtitles, and video bytes are never written to Redis. See [Watch Together signaling](watch-together.md) for deployment and STUN-only connectivity limits.
+
+- `GET /api/watch-together/config` returns the secret-free signaling and STUN configuration used by the browser.
+- The persistent bottom-right Watch Together tool creates or joins rooms and routes the local installation to the required TMDB media.
+- Host departure closes the room. Media changes retain the code and reset readiness for the new local sources.
 
 ## Subtitles
 

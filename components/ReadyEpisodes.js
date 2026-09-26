@@ -4,6 +4,12 @@ function episodeCode(season, episode) {
   return `S${String(season).padStart(2, "0")}E${String(episode).padStart(2, "0")}`;
 }
 
+export function shouldShowReadyEpisodes({ session, hasPlayerFile, launchedEpisodeKey,
+  selectedEpisodeKey }) {
+  return session?.backend === "debrid" && hasPlayerFile
+    && launchedEpisodeKey === selectedEpisodeKey;
+}
+
 export default function ReadyEpisodes({ seasonNumber, seasonName, seasonEpisodes = [], episodes = [],
   playing = null, loading = false, unavailable = false, disabled = false, onPlay = () => {} }) {
   const ready = readyEpisodesForSeason(episodes, seasonNumber);

@@ -15,6 +15,8 @@ import {
   mediaDescriptor,
 } from "../../../../../../../lib/video/media-info.js";
 import { subtitleConfig } from "../../../../../../../lib/subtitles/config.js";
+import { audioTrackByIndex, selectAudioTrack } from "../../../../../../../lib/video/audio-tracks.js";
+import { choosePlaybackStrategy, playbackPlanKey } from "../../../../../../../lib/video/playback-strategy.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,16 +33,20 @@ function errorResponse(error) {
   );
 }
 
-function playbackDetails(id, fileId, job, file, playbackMode) {
+function playbackDetails(id, fileId, job, file, match) {
   return {
     jobId: job.id,
     state: job.state,
     strategy: job.strategy,
-    media: mediaDescriptor(file, playbackMode, job.media),
+    delivery: "hls",
+    playbackPlan: job.plan,
+    media: mediaDescriptor(file, match.playbackMode, job.media, job.audioStreamIndex, match.sourceMimeType),
     inputBytesRead: job.inputBytesRead,
     inputBytesTotal: job.inputBytesTotal,
     originSeconds: job.originSeconds,
+    startOffsetSeconds: job.startOffsetSeconds || 0,
     duration: job.media?.duration || null,
+    selectedAudioStreamIndex: job.audioStreamIndex,
     manifestUrl: job.outputDirectory
       ? `/api/torrents/${encodeURIComponent(id)}/files/${encodeURIComponent(fileId)}/hls/index.m3u8?job=${encodeURIComponent(job.id)}`
       : null,
@@ -58,13 +64,6 @@ export async function POST(request, context) {
   if (!match) {
     return Response.json({ code: "NOT_FOUND", error: "Playable video file not found." }, { status: 404 });
   }
-  if (match.playbackMode !== "transcode") {
-    return Response.json(
-      { code: "NATIVE_PLAYBACK", error: "This file uses native HTTP Range playback." },
-      { status: 409 },
-    );
-  }
-
   const body = await request.json().catch(() => ({}));
   const requestedStart = body?.startTime === undefined ? 0 : Number(body.startTime);
   if (!Number.isFinite(requestedStart) || requestedStart < 0) {
@@ -77,6 +76,29 @@ export async function POST(request, context) {
   } catch (error) {
     return errorResponse(error);
   }
+  const hasRequestedAudio = body?.audioStreamIndex !== undefined && body?.audioStreamIndex !== null;
+  const selectedAudio = hasRequestedAudio
+    ? audioTrackByIndex(media.audioStreams, body.audioStreamIndex)
+    : selectAudioTrack(media.audioStreams);
+  if (hasRequestedAudio && !selectedAudio) {
+    return Response.json(
+      { code: "INVALID_AUDIO_TRACK", error: "Choose a valid audio track." },
+      { status: 400 },
+    );
+  }
+  const audioStreamIndex = selectedAudio?.index ?? null;
+  const failedStrategies = Array.isArray(body?.failedStrategies)
+    ? body.failedStrategies.filter((value) => ["direct", "remux", "selective-transcode"].includes(value))
+    : [];
+  const failedAudioCodecs = Array.isArray(body?.failedAudioCodecs)
+    ? body.failedAudioCodecs.filter((value) => ["eac3", "ac3"].includes(value))
+    : [];
+  const plan = choosePlaybackStrategy(media, body?.capabilities, {
+    audioStreamIndex,
+    failedStrategies,
+    failedAudioCodecs,
+    allowUnknown: true,
+  });
   const startTime = media.duration
     ? Math.min(requestedStart, Math.max(0, media.duration - 0.1))
     : requestedStart;
@@ -89,12 +111,36 @@ export async function POST(request, context) {
     start: startByte,
     end: Math.min(match.file.length - 1, Math.ceil(startByte + aheadBytes)),
   });
+  if (plan.delivery === "direct") {
+    stopActiveConversionForFile(match.session, match.file);
+    return Response.json({
+      state: "ready",
+      strategy: plan.name,
+      delivery: "direct",
+      playbackPlan: plan,
+      media: mediaDescriptor(match.file, match.playbackMode, media, audioStreamIndex, match.sourceMimeType),
+      originSeconds: 0,
+      duration: media.duration,
+      selectedAudioStreamIndex: audioStreamIndex,
+      sourceUrl: `/api/torrents/${encodeURIComponent(id)}/files/${encodeURIComponent(fileId)}/stream?direct=1`,
+      manifestUrl: null,
+      error: null,
+    }, { headers: { "Cache-Control": "no-store" } });
+  }
   let job = getActiveConversion(match.session, match.file);
   if (job?.state === "failed" || job?.state === "stopped") {
     stopActiveConversionForFile(match.session, match.file);
     job = null;
   }
-  if (job && Math.abs(job.originSeconds - startTime) > 0.25) {
+  if (job && Math.abs(job.requestedStartSeconds - startTime) > 0.25) {
+    stopActiveConversionForFile(match.session, match.file);
+    job = null;
+  }
+  if (job && job.audioStreamIndex !== audioStreamIndex) {
+    stopActiveConversionForFile(match.session, match.file);
+    job = null;
+  }
+  if (job && job.planKey !== playbackPlanKey(plan)) {
     stopActiveConversionForFile(match.session, match.file);
     job = null;
   }
@@ -106,17 +152,26 @@ export async function POST(request, context) {
         : getInternalFileUrl(match.session, match.file),
       media,
       startTime,
+      audioStreamIndex,
+      plan,
     });
     registerActiveConversion(match.session, match.file, job);
   }
 
   try {
     await job.ready;
-    return Response.json(playbackDetails(id, fileId, job, match.file, match.playbackMode), {
+    return Response.json(playbackDetails(id, fileId, job, match.file, match), {
       headers: { "Cache-Control": "no-store" },
     });
   } catch (error) {
-    return errorResponse(error);
+    const playbackError = error instanceof PlaybackError
+      ? error : new PlaybackError("FFMPEG_FAILED", error.message || "Playback preparation failed.", { status: 502 });
+    return Response.json({
+      code: playbackError.code,
+      error: playbackError.message,
+      strategy: plan.name,
+      playbackPlan: plan,
+    }, { status: playbackError.status });
   }
 }
 
@@ -131,7 +186,13 @@ export async function GET(_request, context) {
       const media = await getMediaInfo(match.session, match.file);
       return Response.json({
         state: "unprepared",
-        media: mediaDescriptor(match.file, match.playbackMode, media),
+        media: mediaDescriptor(
+          match.file,
+          match.playbackMode,
+          media,
+          selectAudioTrack(media.audioStreams)?.index ?? null,
+          match.sourceMimeType,
+        ),
         duration: media.duration,
         originSeconds: 0,
         manifestUrl: null,
@@ -141,7 +202,7 @@ export async function GET(_request, context) {
       return errorResponse(error);
     }
   }
-  return Response.json(playbackDetails(id, fileId, job, match.file, match.playbackMode), {
+  return Response.json(playbackDetails(id, fileId, job, match.file, match), {
     headers: { "Cache-Control": "no-store" },
   });
 }

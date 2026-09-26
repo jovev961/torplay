@@ -57,3 +57,16 @@ test("movie file has no episode mapping controls", () => {
   assert.doesNotMatch(html, /Mapped|Not mapped|Map episode|Change mapping/);
   assert.match(html, />Play<\/button>/);
 });
+
+test("file rows show inferred HDR and Dolby formats", () => {
+  const html = render({
+    file: { providerId: "2", name: "Movie.2160p.DV.HDR10.HEVC.TrueHD.Atmos.mkv",
+      size: 1024, selected: true },
+    isShow: false,
+  });
+  assert.match(html, /Dolby Vision/);
+  assert.match(html, /HDR10/);
+  assert.match(html, /HEVC \/ H\.265/);
+  assert.match(html, /TrueHD/);
+  assert.match(html, /Atmos/);
+});

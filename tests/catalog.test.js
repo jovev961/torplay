@@ -10,6 +10,11 @@ test("builds canonical Search and Discover URLs with preserved state", () => {
   );
   assert.equal(catalogHref("/discover", { type: "all", genre: "", page: 1 }), "/discover");
   assert.equal(catalogHref("/search", { query: "alien", type: "all", page: 1 }), "/search?q=alien");
+  assert.equal(
+    catalogHref("/recommendations", { mode: "all", type: "tv", genre: "drama" }),
+    "/recommendations?mode=all&type=tv&genre=drama",
+  );
+  assert.equal(catalogHref("/recommendations", { mode: "recent" }), "/recommendations");
 });
 
 test("routes normalized movie and TV results to existing detail pages", () => {

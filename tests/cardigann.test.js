@@ -285,6 +285,58 @@ test("Cardigann adapter searches HTML and keeps magnets server-side", async () =
   assert.match(results[0].source.magnet, /^magnet:/);
 });
 
+test("Cardigann verification stops after the first path with rows while ordinary searches remain exhaustive", async () => {
+  const multiPath = {
+    ...definition,
+    requestDelay: 1,
+    search: { ...definition.search, path: undefined, paths: [{ path: "/first" }, { path: "/second" }] },
+  };
+  const provider = {
+    id: "cardigann-multi-path", name: multiPath.name, definition: multiPath, settings: {},
+    capabilities: parseDefinition(stringify(multiPath)).capabilities,
+  };
+  const row = '<article class="result"><span class="title">Sintel</span></article>';
+  const requests = [];
+  const request = async (url) => {
+    requests.push(new URL(url).pathname);
+    return response(url, row);
+  };
+
+  assert.deepEqual(await testCardigannProvider(provider, { request }), provider.capabilities);
+  assert.deepEqual(requests, ["/first"]);
+
+  await cardigannAdapter(provider, { request }).search({ title: "Sintel", type: "movie" });
+  assert.deepEqual(requests, ["/first", "/first", "/second"]);
+});
+
+test("Cardigann verification tries later paths after empty results and retains the no-rows diagnostic", async () => {
+  const multiPath = {
+    ...definition,
+    search: { ...definition.search, path: undefined, paths: [{ path: "/empty" }, { path: "/working" }] },
+  };
+  const provider = {
+    id: "cardigann-fallback-path", name: multiPath.name, definition: multiPath, settings: {},
+    capabilities: parseDefinition(stringify(multiPath)).capabilities,
+  };
+  const requests = [];
+  const request = async (url) => {
+    const pathname = new URL(url).pathname;
+    requests.push(pathname);
+    return response(url, pathname === "/working" ? '<article class="result"><span class="title">Sintel</span></article>' : "<html></html>");
+  };
+  assert.deepEqual(await testCardigannProvider(provider, { request }), provider.capabilities);
+  assert.deepEqual(requests, ["/empty", "/working"]);
+
+  requests.length = 0;
+  await assert.rejects(testCardigannProvider(provider, {
+    request: async (url) => {
+      requests.push(new URL(url).pathname);
+      return response(url, "<html></html>");
+    },
+  }), (error) => error.code === "CARDIGANN_NO_SEARCH_ROWS");
+  assert.deepEqual(requests, ["/empty", "/working"]);
+});
+
 test("only marked Cardigann definitions use configured FlareSolverr", async () => {
   const marked = { ...definition, settings: [{ name: "flare", type: "info_flaresolverr" }] };
   const provider = { id: "cardigann-flare", name: marked.name, definition: marked, settings: {},
