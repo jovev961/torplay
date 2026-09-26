@@ -1,8 +1,8 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
-  chmodSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync,
-  rmSync, writeFileSync,
+  chmodSync, cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync,
+  realpathSync, rmSync, writeFileSync,
 } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -72,6 +72,37 @@ export function isLinuxX64Elf(file) {
     && bytes[4] === 2 && bytes[5] === 1 && bytes.readUInt16LE(18) === 62;
 }
 
+export function copyStandaloneBuild(source, destination) {
+  cpSync(source, destination, { recursive: true, verbatimSymlinks: true });
+}
+
+function validateBetterSqliteExternal(app) {
+  const packageDirectory = path.join(app, "node_modules/better-sqlite3");
+  const nativeBinary = path.join(packageDirectory, "build/Release/better_sqlite3.node");
+  if (!existsSync(path.join(packageDirectory, "package.json"))) {
+    throw new Error("Standalone build lacks the better-sqlite3 package.");
+  }
+  if (!existsSync(nativeBinary) || !isLinuxX64Elf(nativeBinary)) {
+    throw new Error("Standalone build lacks a Linux x86_64 better_sqlite3.node.");
+  }
+  for (const dependency of ["bindings/bindings.js", "file-uri-to-path/index.js"]) {
+    if (!existsSync(path.join(app, "node_modules", dependency))) {
+      throw new Error(`Standalone better-sqlite3 dependency is missing ${dependency}.`);
+    }
+  }
+  const externalDirectory = path.join(app, ".next/node_modules");
+  const aliases = existsSync(externalDirectory)
+    ? readdirSync(externalDirectory).filter((name) => name.startsWith("better-sqlite3-")) : [];
+  if (!aliases.length) throw new Error("Standalone build lacks the hashed better-sqlite3 external.");
+  const packageTarget = realpathSync(packageDirectory);
+  for (const alias of aliases) {
+    const filename = path.join(externalDirectory, alias);
+    if (!lstatSync(filename).isSymbolicLink() || realpathSync(filename) !== packageTarget) {
+      throw new Error("Standalone better-sqlite3 external must resolve inside the packaged app.");
+    }
+  }
+}
+
 export function validateLinuxStage(directory = stage) {
   for (const required of [
     "AppRun", "torplay.desktop", "torplay.png", ".DirIcon",
@@ -84,7 +115,8 @@ export function validateLinuxStage(directory = stage) {
   const node = path.join(directory, "usr/bin/node");
   if (!isLinuxX64Elf(node)) throw new Error("Bundled Node is not a Linux x86_64 ELF binary.");
   const app = path.join(directory, "usr/lib/torplay/app");
-  for (const basename of ["better_sqlite3.node", "ffmpeg", "ffprobe"]) {
+  validateBetterSqliteExternal(app);
+  for (const basename of ["ffmpeg", "ffprobe"]) {
     const matches = findFiles(app, basename);
     if (!matches.length || !matches.some(isLinuxX64Elf)) {
       throw new Error(`Standalone build lacks a Linux x86_64 ${basename}.`);
@@ -100,7 +132,7 @@ async function stageAppDir() {
   mkdirSync(runtime, { recursive: true });
   const standalone = path.join(root, ".next/standalone");
   if (!existsSync(path.join(standalone, "server.js"))) throw new Error("Standalone Next.js build is missing.");
-  cpSync(standalone, app, { recursive: true });
+  copyStandaloneBuild(standalone, app);
   cpSync(path.join(root, ".next/static"), path.join(app, ".next/static"), { recursive: true });
   cpSync(path.join(root, "public"), path.join(app, "public"), { recursive: true });
   bundle("linux-launcher.js", path.join(runtime, "linux-launcher.mjs"));

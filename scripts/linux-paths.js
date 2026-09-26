@@ -23,6 +23,7 @@ export function linuxPaths(environment = process.env) {
     databasePath: path.join(data, "torplay.db"),
     torrentPath: path.join(data, "torrents"),
     subtitlePath: path.join(cache, "subtitles"),
+    nextRuntimePath: path.join(cache, "next-runtime"),
     logPath: path.join(state, "torplay.log"),
     statusPath: path.join(state, "status.json"),
     lockPath: path.join(runtime, "runtime.lock"),

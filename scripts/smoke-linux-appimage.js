@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { chmod, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -29,6 +29,12 @@ async function waitForExit(child, timeoutMs = 20_000) {
   });
 }
 
+async function jsonResponse(url, options, expectedStatus) {
+  const response = await fetch(url, options);
+  assert.equal(response.status, expectedStatus, `${options?.method || "GET"} ${url}`);
+  return response.json();
+}
+
 export async function smokeLinuxAppImage(image) {
   if (process.platform !== "linux" || process.arch !== "x64") throw new Error("Linux x86_64 required.");
   const root = await mkdtemp(path.join(os.tmpdir(), "torplay-appimage-smoke-"));
@@ -46,6 +52,7 @@ export async function smokeLinuxAppImage(image) {
     XDG_STATE_HOME: state,
     XDG_RUNTIME_DIR: path.join(root, "run"),
     TORPLAY_SMOKE_BROWSER_LOG: path.join(root, "browser.log"),
+    TMDB_API_TOKEN: "",
     PATH: `${bin}:${process.env.PATH}`,
   };
   const child = spawn(image, ["--appimage-extract-and-run"], { env: environment, stdio: "inherit" });
@@ -62,6 +69,28 @@ export async function smokeLinuxAppImage(image) {
     });
     assert.match(status.url, /^http:\/\/127\.0\.0\.1:\d+$/);
     assert.equal((await fetch(`${status.url}/api/health`)).status, 200);
+    assert.equal((await fetch(`${status.url}/`)).status, 200);
+    const settings = await jsonResponse(`${status.url}/api/settings`, undefined, 200);
+    assert.equal(typeof settings, "object");
+    const initialProfiles = await jsonResponse(`${status.url}/api/profiles`, undefined, 200);
+    assert.equal(Array.isArray(initialProfiles.profiles), true);
+    const created = await jsonResponse(`${status.url}/api/profiles`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "AppImage Smoke", avatarId: "cinema-dog.png" }),
+    }, 201);
+    assert.equal(created.profile.name, "AppImage Smoke");
+    const savedProfiles = await jsonResponse(`${status.url}/api/profiles`, undefined, 200);
+    assert.equal(savedProfiles.profiles.some((profile) => profile.id === created.profile.id), true);
+    const tmdb = await jsonResponse(`${status.url}/api/metadata/genres?type=movie`, undefined, 500);
+    assert.match(tmdb.error, /TMDB is not configured/);
+
+    const nextRuntimeRoot = path.join(root, "cache/torplay/next-runtime");
+    const runtimeBuilds = await readdir(nextRuntimeRoot);
+    assert.equal(runtimeBuilds.length, 1);
+    const writableNextCache = path.join(nextRuntimeRoot, runtimeBuilds[0], ".next/cache");
+    assert.equal((await stat(writableNextCache)).isDirectory(), true);
+    assert.equal((await stat(path.join(root, "data/torplay/torplay.db"))).isFile(), true);
     const access = await (await fetch(`${status.url}/api/network-access`)).json();
     assert.equal(access.scope, "desktop");
     assert.equal(access.lanUrl, null);
@@ -80,7 +109,7 @@ export async function smokeLinuxAppImage(image) {
     });
     assert.equal(quit.status, 202);
     assert.equal(await waitForExit(child), 0);
-    console.log("AppImage startup, loopback access, browser open, Quit, and cleanup passed.");
+    console.log("AppImage pages, settings, profiles, TMDB route, browser open, Quit, and cleanup passed.");
   } finally {
     if (child.exitCode === null) child.kill("SIGTERM");
     await rm(root, { recursive: true, force: true });
