@@ -6,8 +6,11 @@ import {
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { pathToFileURL } from "node:url";
 import { linuxPaths, linuxRuntimeEnvironment } from "../scripts/linux-paths.js";
-import { copyStandaloneBuild, isLinuxX64Elf, validateLinuxStage } from "../scripts/release-linux.js";
+import {
+  bundleLinuxRuntime, copyStandaloneBuild, isLinuxX64Elf, validateLinuxStage,
+} from "../scripts/release-linux.js";
 import { networkAccessDetails } from "../lib/network/access.js";
 import {
   availableLoopbackPort, linuxLanConfig, policyKitInstallCommand, prepareLinuxNextRuntime,
@@ -115,6 +118,17 @@ test("Linux AppImage packaging runs only when manually requested", () => {
   assert.doesNotMatch(workflow, /\b(pull_request|push):/);
   assert.match(workflow, /runs-on: ubuntu-24\.04/);
   assert.match(workflow, /sudo sysctl -w net\.ipv4\.ip_unprivileged_port_start=80/);
+});
+
+test("Linux launcher ESM bundle supports CommonJS dependencies with dynamic requires", async () => {
+  const directory = mkdtempSync(path.join(os.tmpdir(), "torplay-linux-bundle-"));
+  const bundle = path.join(directory, "linux-launcher.mjs");
+  try {
+    bundleLinuxRuntime("linux-launcher.js", bundle);
+    await import(`${pathToFileURL(bundle).href}?test=${Date.now()}`);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 test("Linux stage rejects absent files, wrong native architecture, and secrets", () => temporaryDirectory((directory) => {
