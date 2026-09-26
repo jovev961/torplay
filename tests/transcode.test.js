@@ -14,6 +14,8 @@ import {
   createContinuousTorrentStream,
   createHlsPlaybackJob,
   getFfmpegPlaybackError,
+  hlsPlaylistDuration,
+  findSeekKeyframeOrigin,
   parseProbeOutput,
   PlaybackError,
   probeVideoFile,
@@ -22,6 +24,11 @@ import {
   resolveFfprobePath,
   waitForTorrentBuffer,
 } from "../lib/video/transcode.js";
+
+test("parses the playable duration represented by completed HLS segments", () => {
+  assert.equal(hlsPlaylistDuration("#EXTM3U\n#EXTINF:4.004,\na.ts\n#EXTINF:3.5,\nb.ts\n"), 7.504);
+  assert.equal(hlsPlaylistDuration("#EXTM3U\n#EXT-X-TARGETDURATION:4\n"), 0);
+});
 
 test("chooses remux and transcode strategies from probed codecs", () => {
   assert.deepEqual(chooseHlsStrategy({ videoCodec: "h264", audioCodec: "aac" }), {
@@ -128,6 +135,7 @@ test("parses probe output and rejects media without video", () => {
     ],
   })), {
     container: "matroska,webm",
+    startTime: 0,
     videoCodec: "h264",
     video: {
       codec: "h264", codecTag: null, profile: null, level: null, width: null, height: null,
@@ -300,6 +308,31 @@ test("treats incomplete input and premature-file warnings as playback failures",
 test("resolves bundled FFmpeg and FFprobe executables", () => {
   assert.match(resolveFfmpegPath(), /ffmpeg/i);
   assert.match(resolveFfprobePath(), /ffprobe/i);
+});
+
+test("normalizes long-GOP keyframes by a positive container start time", async (context) => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "torplay-keyframe-origin-"));
+  const fixture = path.join(directory, "positive-start.mkv");
+  context.after(() => rm(directory, { recursive: true, force: true }));
+  const generated = spawnSync(resolveFfmpegPath(), [
+    "-y", "-hide_banner", "-loglevel", "error",
+    "-f", "lavfi", "-i", "testsrc2=size=160x90:rate=24",
+    "-t", "25", "-vf", "setpts=PTS+10/TB",
+    "-c:v", "libx264", "-preset", "ultrafast", "-g", "120", "-keyint_min", "120",
+    "-sc_threshold", "0", "-an", fixture,
+  ], { encoding: "utf8" });
+  assert.equal(generated.status, 0, generated.stderr);
+
+  const media = await probeVideoFile({
+    name: "positive-start.mkv",
+    length: (await stat(fixture)).size,
+    createReadStream: (options) => createReadStream(fixture, options),
+  });
+  assert.equal(media.startTime, 10);
+  const requested = 12.3;
+  const origin = await findSeekKeyframeOrigin(fixture, requested, { startTime: media.startTime });
+  assert.ok(Math.abs(origin - 10) < 0.01);
+  assert.ok(Math.abs(origin + (requested - origin) - requested) < 0.000001);
 });
 
 test("uses bundled FFmpeg when configured FFmpeg lacks HDR tone-mapping filters", () => {

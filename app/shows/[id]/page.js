@@ -39,14 +39,18 @@ export default async function ShowPage({ params, searchParams }) {
             {show.posterUrl ? <Image src={show.posterUrl} alt={t("{title} poster", { title: show.title })} fill loading="eager" sizes="240px" /> : null}
           </div>
           <div className="detailCopy">
-            <span className="eyebrow">{t("Series")}</span>
+            <span className="detailType">{t("Series")}</span>
             <h1>{show.title}</h1>
             <div className="detailMeta">
               {show.year ? <span>{show.year}</span> : null}
               {show.status ? <span>{show.status}</span> : null}
-              {show.genres.length ? <span>{show.genres.join(" · ")}</span> : null}
             </div>
-            <p>{show.overview || t("No description is available.")}</p>
+            {show.genres.length ? (
+              <div className="detailGenres" aria-label={show.genres.join(", ")}>
+                {show.genres.map((genre) => <span key={genre}>{genre}</span>)}
+              </div>
+            ) : null}
+            <p className="detailOverview">{show.overview || t("No description is available.")}</p>
           </div>
         </div>
       </section>

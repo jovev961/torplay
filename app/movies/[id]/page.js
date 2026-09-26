@@ -35,14 +35,18 @@ export default async function MoviePage({ params, searchParams }) {
             {movie.posterUrl ? <Image src={movie.posterUrl} alt={t("{title} poster", { title: movie.title })} fill loading="eager" sizes="240px" /> : null}
           </div>
           <div className="detailCopy">
-            <span className="eyebrow">{t("Movie")}</span>
+            <span className="detailType">{t("Movie")}</span>
             <h1>{movie.title}</h1>
             <div className="detailMeta">
               {movie.year ? <span>{movie.year}</span> : null}
               {movie.runtime ? <span>{movie.runtime} {t("min")}</span> : null}
-              {movie.genres.length ? <span>{movie.genres.join(" · ")}</span> : null}
             </div>
-            <p>{movie.overview || t("No description is available.")}</p>
+            {movie.genres.length ? (
+              <div className="detailGenres" aria-label={movie.genres.join(", ")}>
+                {movie.genres.map((genre) => <span key={genre}>{genre}</span>)}
+              </div>
+            ) : null}
+            <p className="detailOverview">{movie.overview || t("No description is available.")}</p>
           </div>
         </div>
       </section>

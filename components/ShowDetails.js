@@ -477,12 +477,19 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
   }
 
   async function savePlaybackPreferences(next) {
-    const result = await readJson(await fetch("/api/settings/playback", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(next),
-    }));
-    setPlaybackPreferences(result.preferences);
+    const previous = playbackPreferences;
+    setPlaybackPreferences(next);
+    try {
+      const result = await readJson(await fetch("/api/settings/playback", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(next),
+      }));
+      setPlaybackPreferences(result.preferences);
+    } catch (error) {
+      setPlaybackPreferences(previous);
+      throw error;
+    }
   }
 
   async function playPreviousEpisode() {
@@ -688,6 +695,9 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
                     ) : (
                       <div className="imageFallback" aria-hidden="true">{code}</div>
                     )}
+                    <span className="episodePlayIcon" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" focusable="false"><path d="m9 7 8 5-8 5V7Z" /></svg>
+                    </span>
                   </div>
                   <div className="episodeCopy">
                     <div className="episodeTitle">

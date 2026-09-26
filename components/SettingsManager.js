@@ -494,7 +494,7 @@ export default function SettingsManager() {
                 <span className={styles.playbackSwitch} aria-hidden="true" />
               </label>
             </div>
-            <p className={styles.playbackSourceNote}>Skip times come from <a href="https://skipdb.tv" target="_blank" rel="noreferrer">SkipDB</a> and <a href="https://introdb.app" target="_blank" rel="noreferrer">IntroDB</a>. IntroDB offers manual skips; automatic skips use duration-matched SkipDB ranges.</p>
+            <p className={styles.playbackSourceNote}>Skip times come from <a href="https://skipdb.tv" target="_blank" rel="noreferrer">SkipDB</a> and <a href="https://introdb.app" target="_blank" rel="noreferrer">IntroDB</a>. Validated ranges from either source can be used for automatic skipping.</p>
           </div>
           <DebridSettings canEdit={snapshot.canEdit} section="playback" />
           <details className={styles.diagnostics}><summary>Supported formats and technical details</summary>

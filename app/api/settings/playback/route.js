@@ -1,4 +1,5 @@
-import { SettingsError, updatePlaybackPreferences } from "../../../../lib/settings/config.js";
+import { SettingsError } from "../../../../lib/settings/config.js";
+import { updatePlaybackPreferences } from "../../../../lib/settings/playback-preferences.js";
 import { assertSettingsMutationRequest } from "../../../../lib/settings/security.js";
 
 export const runtime = "nodejs";

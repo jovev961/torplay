@@ -16,7 +16,13 @@ import {
 } from "../lib/subtitles/timeline.js";
 import { PROGRESS_SAVE_INTERVAL_MS } from "../lib/history/constants.js";
 import { isPlaybackAtEnd, shouldOfferNextEpisode, shouldShowUpNext } from "../lib/playback/autoplay.js";
-import { activeSkipSegment, automaticSegment, segmentPlaybackRange, showManualSkip } from "../lib/playback/segment-controls.js";
+import {
+  activeSkipSegment,
+  AUTOMATIC_SEGMENT_DELAY_SECONDS,
+  automaticSegment,
+  segmentPlaybackRange,
+  showManualSkip,
+} from "../lib/playback/segment-controls.js";
 import { isRemotePlaybackSessionActive } from "../lib/remote-playback/client-state.js";
 import { remotePlaybackSource } from "../lib/remote-playback/source.js";
 import {
@@ -27,8 +33,8 @@ import {
   toggleBrowserFullscreen,
 } from "../lib/video/fullscreen.js";
 import { closesPlayerMenu, nextMenuIndex } from "../lib/video/menu-navigation.js";
-import { clampSeekTarget, seekHasArrived, skipTarget } from "../lib/video/seek-target.js";
-import { waitForSynchronizedPosition } from "../lib/video/media-readiness.js";
+import { clampSeekTarget, localSeekPosition, seekHasArrived, skipTarget } from "../lib/video/seek-target.js";
+import { seekToSynchronizedPosition, waitForSynchronizedPosition } from "../lib/video/media-readiness.js";
 import { detectClientCapabilities } from "../lib/video/client-capabilities.js";
 import { codecLabel, playbackMediaBadges } from "../lib/video/media-capabilities.js";
 import { nextPlaybackFallback } from "../lib/video/playback-recovery.js";
@@ -293,6 +299,7 @@ export default function VideoPlayer({
   const [segments, setSegments] = useState({ intro: null, recap: null, outro: null, preview: null });
   const [segmentSourceIdentity, setSegmentSourceIdentity] = useState(null);
   const [countdownRemaining, setCountdownRemaining] = useState(null);
+  const [segmentCountdown, setSegmentCountdown] = useState(null);
   const [settingsError, setSettingsError] = useState("");
   const [savingSetting, setSavingSetting] = useState(false);
   const [volume, setVolume] = useState(1);
@@ -576,13 +583,23 @@ export default function VideoPlayer({
       });
       hls.attachMedia(video);
     } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-      video.addEventListener("canplay", () => {
-        if (generation === playbackGenerationRef.current) {
-          const offset = Math.max(0, Number(details?.startOffsetSeconds) || 0);
-          if (offset > 0 && offset < video.duration) video.currentTime = offset;
-          startPreparedVideo(video);
+      const startNativePlayback = async () => {
+        if (generation !== playbackGenerationRef.current) return;
+        const offset = Math.max(0, Number(details?.startOffsetSeconds) || 0);
+        try {
+          if (offset > 0) {
+            await seekToSynchronizedPosition(video, offset, { signal: playbackReadyAbortRef.current?.signal });
+          } else {
+            await waitForCanPlay(video, { signal: playbackReadyAbortRef.current?.signal });
+          }
+          if (generation === playbackGenerationRef.current) startPreparedVideo(video);
+        } catch (error) {
+          if (generation !== playbackGenerationRef.current || error.name === "AbortError") return;
+          const message = `Native HLS could not reach the requested position: ${error.message}`;
+          if (!retryWithCompatibilityFallback(details, message)) void reportPlayerFailure(message);
         }
-      }, { once: true });
+      };
+      video.addEventListener("loadedmetadata", () => void startNativePlayback(), { once: true });
       video.src = manifestUrl;
       video.load();
     } else {
@@ -671,7 +688,6 @@ export default function VideoPlayer({
       else attachHls(payload.manifestUrl, generation, payload, requestCapabilities);
       if (waitUntilReady) await waitForDecodedFrame(video, { signal: readyController.signal });
       if (generation !== playbackGenerationRef.current) return false;
-      if (playbackReadyAbortRef.current === readyController) playbackReadyAbortRef.current = null;
       return true;
     } catch (error) {
       if (generation === playbackGenerationRef.current && error.name !== "AbortError") {
@@ -735,6 +751,7 @@ export default function VideoPlayer({
     setSegments({ intro: null, recap: null, outro: null, preview: null });
     setSegmentSourceIdentity(null);
     setCountdownRemaining(null);
+    setSegmentCountdown(null);
     autoSkippedRef.current = new Set();
     setPlaybackDetails(null);
     setPlaybackError("");
@@ -866,7 +883,7 @@ export default function VideoPlayer({
       mediaPath = payload.manifestUrl;
       contentType = "application/vnd.apple.mpegurl";
       originSeconds = payload.originSeconds || 0;
-      receiverStartTime = 0;
+      receiverStartTime = Math.max(0, Number(payload.startOffsetSeconds) || 0);
       sourceDuration = payload.duration || payload.media?.duration || sourceDuration;
       mode = "hls";
     }
@@ -1353,6 +1370,12 @@ export default function VideoPlayer({
         if (videoRef.current) videoRef.current.currentTime = next;
         return;
       }
+      const video = videoRef.current;
+      const localPosition = localSeekPosition(next, playbackDetails?.originSeconds || 0, video?.seekable);
+      if (video && localPosition !== null) {
+        video.currentTime = localPosition;
+        return;
+      }
       await preparePlayback(next);
     };
     seekTimerRef.current = setTimeout(() => void commit(), immediate ? 0 : 300);
@@ -1481,6 +1504,12 @@ export default function VideoPlayer({
   const playedRatio = effectiveDuration > 0 ? timelineTime / effectiveDuration : 0;
   const skipSegment = activeSkipSegment(timelineTime, currentSegments);
   const showSkipButton = !suspended && showManualSkip(skipSegment, playbackPreferences.autoSkipIntrosRecaps);
+  const skipSegmentType = skipSegment?.type;
+  const skipSegmentStartMs = skipSegment?.startMs;
+  const skipSegmentEndMs = skipSegment?.endMs;
+  const skipSegmentSource = skipSegment?.source;
+  const automaticSkipKey = automaticSegment(skipSegment)
+    ? `${skipSegmentType}:${skipSegmentStartMs}:${skipSegmentEndMs}:${skipSegmentSource}` : null;
   const showEpisodePrompt = !suspended && !watchTogether?.isGuest && Boolean(nextEpisodePrompt)
     && (nextEpisodePrompt.immediate
       || shouldShowUpNext(timelineTime, effectiveDuration, segmentPlaybackRange(currentSegments.outro)));
@@ -1521,8 +1550,15 @@ export default function VideoPlayer({
       timelineRef.current.position = next;
       setSeekPreview(next);
       if (requiresPreparedPlayback) {
-        const prepared = await preparePlayback(next, selectedAudioStreamIndex, false, true);
-        if (!prepared) throw new Error("The local source could not seek to the host position.");
+        const localPosition = localSeekPosition(
+          next, playbackDetails?.originSeconds || 0, video.seekable,
+        );
+        if (localPosition !== null) {
+          await seekToSynchronizedPosition(video, localPosition);
+        } else {
+          const prepared = await preparePlayback(next, selectedAudioStreamIndex, false, true);
+          if (!prepared) throw new Error("The local source could not seek to the host position.");
+        }
       } else {
         video.currentTime = next;
         await waitForSynchronizedPosition(video, next);
@@ -1562,9 +1598,44 @@ export default function VideoPlayer({
   }, [audioInspection, playbackState, requiresPreparedPlayback, sourceIdentity, watchTogetherActive]);
 
   useEffect(() => {
-    if (suspended || !playbackPreferences.autoSkipIntrosRecaps || !automaticSegment(skipSegment)) return;
-    autoSkipSegment(skipSegment);
-  }, [suspended, playbackPreferences.autoSkipIntrosRecaps, skipSegment, sourceIdentity]);
+    let cancelled = false;
+    if (suspended || !effectivePlaying || !playbackPreferences.autoSkipIntrosRecaps
+      || !automaticSkipKey || autoSkippedRef.current.has(skipSegmentType)) {
+      queueMicrotask(() => {
+        if (!cancelled) setSegmentCountdown(null);
+      });
+      return () => { cancelled = true; };
+    }
+    const segment = {
+      type: skipSegmentType,
+      startMs: skipSegmentStartMs,
+      endMs: skipSegmentEndMs,
+      source: skipSegmentSource,
+    };
+    const startedAt = Date.now();
+    const updateCountdown = () => {
+      const remaining = Math.max(1, Math.ceil(
+        (AUTOMATIC_SEGMENT_DELAY_SECONDS * 1000 - (Date.now() - startedAt)) / 1000,
+      ));
+      setSegmentCountdown({ key: automaticSkipKey, type: segment.type, remaining });
+    };
+    queueMicrotask(() => { if (!cancelled) updateCountdown(); });
+    const interval = setInterval(updateCountdown, 250);
+    const timer = setTimeout(() => {
+      clearInterval(interval);
+      setSegmentCountdown(null);
+      autoSkipSegment(segment);
+    }, AUTOMATIC_SEGMENT_DELAY_SECONDS * 1000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      clearTimeout(timer);
+      queueMicrotask(() => setSegmentCountdown((current) => (
+        current?.key === automaticSkipKey ? null : current
+      )));
+    };
+  }, [suspended, effectivePlaying, playbackPreferences.autoSkipIntrosRecaps,
+    automaticSkipKey, skipSegmentType, skipSegmentStartMs, skipSegmentEndMs, skipSegmentSource, sourceIdentity]);
 
   useEffect(() => {
     if (!showSkipButton) return undefined;
@@ -1593,7 +1664,7 @@ export default function VideoPlayer({
       queueMicrotask(() => setCountdownRemaining(null));
       return undefined;
     }
-    let remaining = 10;
+    let remaining = AUTOMATIC_SEGMENT_DELAY_SECONDS;
     queueMicrotask(() => setCountdownRemaining(remaining));
     const timer = setInterval(() => {
       remaining -= 1;
@@ -1817,6 +1888,13 @@ export default function VideoPlayer({
           onClick={() => requestSeek(skipSegment.endMs / 1000, true)}>
           Skip {skipSegment.type === "recap" ? "Recap" : "Intro"}
         </button> : null}
+        {segmentCountdown ? <div className="playerSegmentCountdown" role="status" aria-live="polite">
+          <div>
+            <strong>Skipping {segmentCountdown.type === "recap" ? "Recap" : "Intro"}</strong>
+            <small>in {segmentCountdown.remaining} seconds</small>
+          </div>
+          <span className="playerAutomaticProgress" aria-hidden="true"><span /></span>
+        </div> : null}
         {showEpisodePrompt ? <div className="playerEpisodePrompt" ref={episodePromptRef}
           role={nextEpisodePrompt.action || nextEpisodePrompt.secondaryAction ? "dialog" : "status"}
           aria-label="Next episode"
@@ -1824,7 +1902,10 @@ export default function VideoPlayer({
           {nextEpisodePrompt.title ? <strong>{nextEpisodePrompt.title}</strong> : null}
           <span>{nextEpisodePrompt.text}</span>
           {countdownRemaining !== null && nextEpisodePrompt.kind === "ready" && automaticSegment(currentSegments.outro)
-            ? <small>Playing in {countdownRemaining} seconds</small> : null}
+            ? <>
+                <small>Playing in {countdownRemaining} seconds</small>
+                <span className="playerAutomaticProgress" aria-hidden="true"><span /></span>
+              </> : null}
           {nextEpisodePrompt.kind === "ready" && playbackPreferences.autoPlayNextEpisode
             && !automaticSegment(currentSegments.outro)
             ? <small>Will play when this episode ends</small> : null}
@@ -2100,20 +2181,33 @@ export default function VideoPlayer({
                 </button>
               ))}
               {media?.mediaType === "tv" ? <div className="playerPlaybackPreferences">
-                <span>Episode playback</span>
-                <button type="button" role="menuitemcheckbox"
+                <div className="playerPlaybackPreferencesHeader">
+                  <span>{t("Episode playback")}</span>
+                  <small>{savingSetting ? "Saving…" : t("Changes save automatically")}</small>
+                </div>
+                <button className="playerPreferenceOption" type="button" role="menuitemcheckbox"
                   aria-checked={playbackPreferences.autoSkipIntrosRecaps}
                   disabled={savingSetting || !onPlaybackPreferencesChange}
                   onClick={() => void updatePlaybackSetting("autoSkipIntrosRecaps")}>
-                  Automatically skip intros and recaps · {playbackPreferences.autoSkipIntrosRecaps ? "On" : "Off"}
+                  <span className="playerPreferenceText">
+                    <strong>{t("Skip intros and recaps")}</strong>
+                    <small>{t("Jump past matched intro and recap segments when they are available.")}</small>
+                  </span>
+                  <span className={`playerPreferenceSwitch ${playbackPreferences.autoSkipIntrosRecaps ? "active" : ""}`}
+                    aria-hidden="true"><span /></span>
                 </button>
-                <button type="button" role="menuitemcheckbox"
+                <button className="playerPreferenceOption" type="button" role="menuitemcheckbox"
                   aria-checked={playbackPreferences.autoPlayNextEpisode}
                   disabled={savingSetting || !onPlaybackPreferencesChange}
                   onClick={() => void updatePlaybackSetting("autoPlayNextEpisode")}>
-                  Automatically play next episode · {playbackPreferences.autoPlayNextEpisode ? "On" : "Off"}
+                  <span className="playerPreferenceText">
+                    <strong>{t("Play the next episode")}</strong>
+                    <small>{t("Start the next episode automatically when the current one ends.")}</small>
+                  </span>
+                  <span className={`playerPreferenceSwitch ${playbackPreferences.autoPlayNextEpisode ? "active" : ""}`}
+                    aria-hidden="true"><span /></span>
                 </button>
-                {settingsError ? <small role="alert">{settingsError}</small> : null}
+                {settingsError ? <small className="playerPreferenceError" role="alert">{settingsError}</small> : null}
               </div> : null}
             </div>
           ) : null}
