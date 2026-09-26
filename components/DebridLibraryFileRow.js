@@ -1,13 +1,18 @@
 import { formatFileSize } from "../lib/video/episode-display.js";
+import { inferMediaBadges } from "../lib/video/media-capabilities.js";
 
 export default function DebridLibraryFileRow({ file, mappings, isShow, ready, playing, editing,
   mapSeason, mapEpisode, mappingBusy, mappingError, onEdit, onCancel, onMap, onPlay,
   onSeasonChange, onEpisodeChange }) {
+  const badges = inferMediaBadges(file.name);
   return <div className={`debridLibraryFile${playing ? " isPlaying" : ""}`}>
     <div className="debridLibraryFileMain">
       <strong title={file.name}>{file.name}</strong>
       <span className="debridLibraryFileSize">{formatFileSize(file.size)}</span>
       {playing ? <span className="debridLibraryFilePlaying">Playing</span> : null}
+      {badges.length ? <div className="mediaCapabilityBadges compact" aria-label="Inferred media formats">
+        {badges.map((badge) => <span key={badge.id}>{badge.label}</span>)}
+      </div> : null}
       {isShow ? <div className="debridLibraryMappingStatus">
         {mappings.length ? mappings.map((entry) => <span className="debridLibraryMapped" key={`${entry.season}:${entry.episode}`}>
           Mapped to S{String(entry.season).padStart(2, "0")}E{String(entry.episode).padStart(2, "0")}

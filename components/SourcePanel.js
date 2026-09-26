@@ -4,7 +4,9 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { findEpisodeFile, findLargestFile } from "../lib/video/episode.js";
 import { episodeFileCardModel, episodeFilePresentation, formatFileSize } from "../lib/video/episode-display.js";
+import { inferMediaBadges } from "../lib/video/media-capabilities.js";
 import VideoPlayer from "./VideoPlayer.js";
+import { useOptionalI18n } from "./I18nProvider.js";
 
 function formatSpeed(value) {
   return Number.isFinite(value) && value > 0 ? `${formatFileSize(value)}/s` : "0 B/s";
@@ -12,6 +14,16 @@ function formatSpeed(value) {
 
 function providerName(id) {
   return id === "torbox" ? "TorBox" : "Real-Debrid";
+}
+
+function formatCacheAge(createdAt, t) {
+  const elapsed = Math.max(0, Date.now() - Number(createdAt || 0));
+  const minutes = Math.floor(elapsed / 60_000);
+  if (minutes < 1) return t("just now");
+  if (minutes < 60) return t("{count} min ago", { count: minutes });
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return t("{count} hr ago", { count: hours });
+  return t("{count} days ago", { count: Math.floor(hours / 24) });
 }
 
 export default function SourcePanel({
@@ -25,6 +37,9 @@ export default function SourcePanel({
   transitionPending = false,
   pendingEpisodeTitle = null,
 }) {
+  const i18n = useOptionalI18n();
+  const t = i18n?.t || ((message, values = {}) => message.replace(/\{(\w+)\}/g,
+    (match, name) => Object.hasOwn(values, name) ? String(values[name]) : match));
   const [downloadFileIds, setDownloadFileIds] = useState(null);
   const [requestedDownloadFileId, setRequestedDownloadFileId] = useState(null);
   const [expandedFileId, setExpandedFileId] = useState(null);
@@ -111,15 +126,21 @@ export default function SourcePanel({
       {!lookup.session && lookup.readySources?.length > 0 ? (
         <div className="readySourceResults" aria-label="Ready Debrid sources">
           <div><span className="eyebrow">Ready to watch</span><p>Choose a ready provider source, or pick a torrent below.</p></div>
-          {lookup.readySources.map((source) => (
-            <article className="readySource" key={`${source.provider}:${source.resourceId}`}>
-              <div><strong>{source.name || playerTitle}</strong><span>Ready on {providerName(source.provider)}</span></div>
+          {lookup.readySources.map((source) => {
+            const name = source.name || playerTitle;
+            const badges = inferMediaBadges(name);
+            return <article className="readySource" key={`${source.provider}:${source.resourceId}`}>
+              <div><strong>{name}</strong><span>Ready on {providerName(source.provider)}</span>
+                {badges.length ? <div className="mediaCapabilityBadges compact" aria-label="Inferred media formats">
+                  {badges.map((badge) => <span key={badge.id}>{badge.label}</span>)}
+                </div> : null}
+              </div>
               <button className="primaryButton compact" type="button" disabled={lookup.startingId !== null}
                 onClick={() => void lookup.startReadySource(source)}>
                 {lookup.startingId === `library:${source.provider}:${source.resourceId}` ? "Opening…" : `Watch with ${providerName(source.provider)}`}
               </button>
-            </article>
-          ))}
+            </article>;
+          })}
         </div>
       ) : null}
       {!lookup.session && lookup.readyUnavailable ? <div className="notice" role="status">
@@ -219,7 +240,25 @@ export default function SourcePanel({
 
       {lookup.results.length > 0 && !lookup.session ? (
         <div className="sourceResults" aria-live="polite">
-          <h3>Torrents</h3>
+          <div className="sourceResultsHeading">
+            <div>
+              <h3>{t("Torrents")}</h3>
+              {lookup.cacheInfo ? <p className="sourceCacheStatus">
+                {t(lookup.cacheInfo.status === "all"
+                  ? "Cached results · updated {age}" : "Includes cached results · oldest updated {age}", {
+                  age: formatCacheAge(lookup.cacheInfo.oldestCreatedAt, t),
+                })}
+              </p> : null}
+            </div>
+            <button className="secondaryButton compact" type="button"
+              disabled={lookup.refreshing || lookup.startingId !== null}
+              onClick={() => void lookup.refreshSearch()}>
+              {t(lookup.refreshing ? "Refreshing…" : "Refresh torrents")}
+            </button>
+          </div>
+          {lookup.refreshError ? <div className="notice error" role="alert">
+            {t("Could not refresh torrents. Showing the previous results.")} {lookup.refreshError}
+          </div> : null}
           {lookup.results.map((result) => (
             <article className={lookup.debridChoice?.resultId === result.id ? "sourceResult selected" : "sourceResult"} key={result.id}>
               <div>
@@ -229,12 +268,16 @@ export default function SourcePanel({
                   <span>{formatFileSize(result.size)}</span>
                   <span>{result.seeders.toLocaleString()} seeders</span>
                   <span className={result.verification === "verified" ? "available" : "muted"}>
-                    {result.verification === "verified" ? "Streamable" : "Magnet · verify on start"}
+                    {result.verification === "verified" ? "Streamable"
+                      : result.verification === "checking" ? "Checking torrent…" : "Magnet · verify on start"}
                   </span>
                   <span className={result.hasMagnet ? "available" : "muted"}>
                     Magnet: {result.hasMagnet ? "Yes" : "No"}
                   </span>
                 </div>
+                {result.mediaBadges?.length ? <div className="mediaCapabilityBadges" aria-label="Inferred media formats">
+                  {result.mediaBadges.map((badge) => <span key={badge.id}>{badge.label}</span>)}
+                </div> : null}
                 <div className="sourceAvailability">
                   {Object.entries(lookup.torrentAvailability?.[result.id]?.availability || {}).map(([provider, status]) => (
                     <span className={status === "ready" ? "sourceReady" : status === "not-ready" ? "sourceNotReady" : "sourceUnknown"}
@@ -247,7 +290,7 @@ export default function SourcePanel({
               <button
                 className="primaryButton compact"
                 type="button"
-                disabled={!result.canStart || lookup.startingId !== null}
+                disabled={!result.canStart || result.verification === "checking" || lookup.startingId !== null}
                 onClick={() => lookup.selectResult(result.id)}
               >
                 {lookup.startingId === result.id
@@ -408,37 +451,49 @@ export default function SourcePanel({
             )}
           </div>
           {!transitionPending && episode && lookup.session?.backend !== "debrid" && episodeFiles.length > 1 ? (
-            <div className="episodeFileList" aria-label="Episodes in this source">
-              {episodeFiles.map(({ file, display }) => {
-                const active = selectedFile?.id === file.id;
-                const { primary, expandable } = episodeFileCardModel(display);
-                const expansionKey = `${lookup.session.id}:${file.id}`;
-                const expanded = expandedFileId === expansionKey;
-                return (
-                  <div
-                    className={active ? "episodeFileChoice active" : "episodeFileChoice"}
-                    key={file.id}
-                  >
-                    <button className="episodeFileSelect" type="button"
-                      aria-current={active ? "true" : undefined}
-                      aria-label={`${primary}. ${display.technical.join(", ")}. Select file`}
-                      onClick={() => void (lookup.selectEpisodeFile || lookup.setSelectedFileId)(file.id)}>
-                      <span className="episodeFileHeading">
-                        <strong className={!display.recognized ? "unidentifiedFileName" : ""}>{primary}</strong>
-                        {active ? <span className="playingBadge">Playing</span> : null}
-                      </span>
-                      <small>{display.technical.join(" · ")}</small>
-                      {display.recognized ? <span className="episodeFilename">{display.filename}</span>
-                        : <span className="episodeFilename">Unidentified episode</span>}
-                    </button>
-                    {expandable ? <button className="episodeFileExpand" type="button"
-                      aria-expanded={expanded} onClick={() => setExpandedFileId(expanded ? null : expansionKey)}>
-                      {expanded ? "Hide full name" : "Show full name"}
-                    </button> : null}
-                    {expanded ? <div className="episodeFileFullName">{display.fullPath}</div> : null}
-                  </div>
-                );
-              })}
+            <div className="torplayEpisodeBrowser">
+              <div className="torplayEpisodeHeading">
+                <div>
+                  <span className="eyebrow">TorPlay</span>
+                  <h3>Episodes in this source</h3>
+                </div>
+                <span>{episodeFiles.length} episodes</span>
+              </div>
+              <div className="episodeFileList torplayEpisodeList" aria-label="TorPlay episodes in this source">
+                {episodeFiles.map(({ file, display }) => {
+                  const active = selectedFile?.id === file.id;
+                  const { primary, expandable } = episodeFileCardModel(display);
+                  const expansionKey = `${lookup.session.id}:${file.id}`;
+                  const expanded = expandedFileId === expansionKey;
+                  return (
+                    <div
+                      className={active ? "episodeFileChoice active" : "episodeFileChoice"}
+                      key={file.id}
+                    >
+                      <button className="episodeFileSelect" type="button"
+                        aria-current={active ? "true" : undefined}
+                        aria-label={`${primary}. ${display.technical.join(", ")}. Select file`}
+                        onClick={() => void (lookup.selectEpisodeFile || lookup.setSelectedFileId)(file.id)}>
+                        <span className="episodeFileHeading">
+                          <strong className={!display.recognized ? "unidentifiedFileName" : ""}>{primary}</strong>
+                          {active ? <span className="playingBadge">Playing</span> : null}
+                        </span>
+                        <small>{display.technical.join(" · ")}</small>
+                        {display.mediaBadges.length ? <span className="mediaCapabilityBadges compact" aria-label="Inferred media formats">
+                          {display.mediaBadges.map((badge) => <span key={badge.id}>{badge.label}</span>)}
+                        </span> : null}
+                        {display.recognized ? <span className="episodeFilename">{display.filename}</span>
+                          : <span className="episodeFilename">Unidentified episode</span>}
+                      </button>
+                      {expandable ? <button className="episodeFileExpand" type="button"
+                        aria-expanded={expanded} onClick={() => setExpandedFileId(expanded ? null : expansionKey)}>
+                        {expanded ? "Hide full name" : "Show full name"}
+                      </button> : null}
+                      {expanded ? <div className="episodeFileFullName">{display.fullPath}</div> : null}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           ) : !transitionPending && !episode && lookup.session?.files.length > 1 ? (
             <div className="fileList" aria-label="Video files">

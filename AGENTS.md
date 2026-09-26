@@ -40,35 +40,74 @@ Do not rewrite unrelated files.
 
 ## GitHub Issue Tasks
 
-When asked to implement a GitHub issue:
+When asked to implement one or more GitHub issues:
 
-1. Read the complete issue before modifying code.
-2. Treat the issue description and acceptance criteria as the task specification.
-3. Inspect the relevant existing implementation first.
-4. For bugs, reproduce or establish the root cause before implementing a fix.
+1. Read the complete issue description and acceptance criteria before modifying code.
+2. Treat each issue as its own task specification.
+3. Inspect the relevant existing implementation before making changes.
+4. For bugs, reproduce the problem or establish the root cause before implementing a fix.
 5. Keep changes scoped to the issue. Avoid unrelated refactoring.
 6. Add or update relevant tests.
-7. Run tests and lint before completing the task.
-8. Report the root cause/approach, changed files, tests, and verification results.
+7. Run appropriate tests, lint, and build verification before completing the task.
+8. Report the approach, changed files, tests, and verification results.
 
-## Git Workflow
+When multiple issues are requested, keep their implementation scope logically separated even if they are worked on during the same session.
 
-Use `main` as the stable/release branch and `develop` as the integration/manual-testing branch.
+Do not perform Git or GitHub workflow operations merely because the task came from a GitHub issue.
 
-1. Fetch origin and start new work from a clean, current `origin/develop` on a scoped `feat/...`, `fix/...`, or `refactor/...` branch.
+---
 
-2. Implement and verify the change locally with relevant tests, the full test suite, lint, and a production build. Do not rely on GitHub CI for verification.
+## Git and GitHub Workflow
 
-3. Push the completed branch and open a pull request into `develop`. Merge only after local verification passes.
+Git and GitHub operations are **opt-in only**.
 
-4. If testing on `develop` finds a problem, create a separate `fix/...` branch from current `develop`, fix and verify it locally, then merge it back through a pull request. Do not rewrite the original feature commit.
+Unless the user explicitly asks to use Git or GitHub in the current request:
 
-5. Delete completed feature/fix/refactor branches only after their pull requests are successfully merged.
+- Do not create or switch branches.
+- Do not stage files with `git add`.
+- Do not create commits.
+- Do not push branches.
+- Do not create, update, or merge pull requests.
+- Do not delete branches.
+- Do not modify published Git history.
+- Do not promote `develop` to `main`.
 
-6. Promote `develop` to `main` only through a pull request after explicit user approval, successful local verification, and manual testing. Never promote it automatically.
+Implement requested code changes only in the current working tree.
 
-7. Never directly push implementation changes to protected `main` or `develop`, force-push, rewrite published history, or discard unrelated work.
+Mentioning a GitHub issue, issue number, branch name, or pull request does **not** by itself authorize Git/GitHub operations.
 
-8. Only bump the application version when preparing a public release/build. During beta, increment only the beta number unless instructed otherwise.
+### Branch model
 
-After completion, report the branch, pull request, commit, local verification results, and merge status.
+When the user explicitly asks to use the Git/GitHub workflow:
+
+- `main` is the stable/release branch.
+- `develop` is the integration/manual-testing branch.
+- Normal implementation work uses scoped `feat/...`, `fix/...`, or `refactor/...` branches.
+- Never directly push implementation changes to `main` or `develop`.
+- Never force-push or rewrite published history unless explicitly instructed.
+
+### One or multiple issues
+
+The workflow must support any number of requested issues.
+
+Each independent issue should normally have its own:
+
+- branch,
+- changes,
+- commit(s),
+- push,
+- pull request into `develop`,
+- merge.
+
+Do not combine unrelated issues into one branch or pull request unless the user explicitly asks for a combined change.
+
+Multiple issue branches and pull requests may be open at the same time.
+
+For example:
+
+```text
+develop
+  ├── feat/issue-101-...
+  ├── fix/issue-102-...
+  ├── feat/issue-103-...
+  └── fix/issue-104-...

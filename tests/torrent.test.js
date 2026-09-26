@@ -3,11 +3,14 @@ import test from "node:test";
 import bencode from "bencode";
 import {
   bufferVideoFile,
+  cancelVideoFilePrefetch,
   classifyVideoFile,
   DEFAULT_TORRENT_TRACKERS,
   inspectTorrentSource,
+  getVideoFilePrefetch,
   listPublicVideoFiles,
   parseTorrentTrackers,
+  prefetchVideoFile,
   registerActiveConversion,
   resolveTorrentInput,
   validateTorrentInput,
@@ -329,6 +332,73 @@ test("a distant seek replaces only that viewer's buffer-ahead lease", () => {
   assert.equal(resource.pieceRefs.has(499), false);
 });
 
+test("keeps next-episode prefetch separate from the active episode lease", () => {
+  const calls = [];
+  const completed = new Set();
+  const first = { name: "Show.S01E01.mp4", offset: 0, length: 48 };
+  const second = { name: "Show.S01E02.mp4", offset: 48, length: 48 };
+  const third = { name: "Show.S01E03.mp4", offset: 96, length: 48 };
+  const resource = {
+    torrent: {
+      files: [first, second, third],
+      pieceLength: 16,
+      bitfield: { get: (piece) => completed.has(piece) },
+      select: (start, end, priority) => calls.push(["select", start, end, priority]),
+      deselect: (start, end) => calls.push(["deselect", start, end]),
+    },
+    pieceRefs: new Map(),
+  };
+  const session = { resource, selectedFileId: null, priorityLease: null,
+    prefetch: null, activeConversion: null, lastActivity: 0 };
+
+  bufferVideoFile(session, first, { start: 0, end: 31 });
+  const preparing = prefetchVideoFile(session, second, 32);
+
+  assert.equal(preparing.state, "preparing");
+  assert.deepEqual([...resource.pieceRefs], [[0, 1], [1, 1], [3, 1], [4, 1]]);
+  assert.equal(resource.pieceRefs.has(6), false);
+  assert.equal(resource.pieceRefs.has(7), false);
+  assert.equal(resource.pieceRefs.has(8), false);
+
+  completed.add(3);
+  completed.add(4);
+  assert.deepEqual(getVideoFilePrefetch(session), {
+    state: "ready", fileId: "1", targetBytes: 32, downloadedBytes: 32,
+  });
+
+  bufferVideoFile(session, second, { start: 0, end: 15 });
+  assert.equal(session.prefetch, null);
+  assert.equal(resource.pieceRefs.get(3), 1);
+  assert.equal(resource.pieceRefs.has(4), false);
+  assert.equal(calls.some(([operation, start, end]) =>
+    operation === "deselect" && start <= 3 && end >= 3), false);
+});
+
+test("replaces and cancels a bounded next-episode prefetch lease", () => {
+  const calls = [];
+  const first = { name: "Show.S01E01.mp4", offset: 0, length: 64 };
+  const second = { name: "Show.S01E02.mp4", offset: 64, length: 64 };
+  const resource = {
+    torrent: {
+      files: [first, second], pieceLength: 16,
+      bitfield: { get: () => false },
+      select: (start, end) => calls.push(["select", start, end]),
+      deselect: (start, end) => calls.push(["deselect", start, end]),
+    },
+    pieceRefs: new Map(),
+  };
+  const session = { resource, selectedFileId: null, priorityLease: null,
+    prefetch: null, activeConversion: null, lastActivity: 0 };
+
+  prefetchVideoFile(session, second, 16);
+  prefetchVideoFile(session, second, 48);
+  assert.deepEqual([...resource.pieceRefs], [[4, 1], [5, 1], [6, 1]]);
+  assert.equal(cancelVideoFilePrefetch(session, first), false);
+  assert.equal(cancelVideoFilePrefetch(session, second), true);
+  assert.deepEqual([...resource.pieceRefs], []);
+  assert.deepEqual(getVideoFilePrefetch(session), { state: "idle" });
+});
+
 test("keeps original torrent indexes and safe relative paths in public files", () => {
   const files = [
     { name: "readme.txt", path: "Show/readme.txt", length: 3, downloaded: 0 },
@@ -369,25 +439,22 @@ test("keeps original torrent indexes and safe relative paths in public files", (
 test("classifies native and converted video containers", () => {
   assert.deepEqual(classifyVideoFile("movie.MP4"), {
     mimeType: "video/mp4",
+    sourceMimeType: "video/mp4",
     playbackMode: "native",
   });
   assert.deepEqual(classifyVideoFile("episode.mkv"), {
     mimeType: "video/mp4",
+    sourceMimeType: "video/x-matroska",
     playbackMode: "transcode",
   });
-  for (const extension of [
-    "3g2",
-    "3gp",
-    "divx",
-    "mpeg",
-    "mpg",
-    "mts",
-    "ogm",
-    "ogv",
-    "vob",
-  ]) {
+  for (const [extension, sourceMimeType] of Object.entries({
+    "3g2": "video/3gpp2", "3gp": "video/3gpp", divx: "video/x-msvideo",
+    mpeg: "video/mpeg", mpg: "video/mpeg", mts: "video/mp2t",
+    ogm: "video/ogg", ogv: "video/ogg", vob: "video/mpeg",
+  })) {
     assert.deepEqual(classifyVideoFile(`legacy.${extension}`), {
       mimeType: "video/mp4",
+      sourceMimeType,
       playbackMode: "transcode",
     });
   }

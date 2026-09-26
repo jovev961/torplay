@@ -31,6 +31,7 @@ test("validates configured providers without including credentials in results", 
       OMDB_API_KEY: secrets[1],
       OPENSUBTITLES_API_KEY: secrets[2],
       SUBDL_API_KEY: secrets[3],
+      WATCH_TOGETHER_SIGNAL_URL: "https://signal.example.com",
     },
     fetchImpl: async (url) => {
       const value = String(url);
@@ -38,11 +39,12 @@ test("validates configured providers without including credentials in results", 
       if (value.includes("localhost:8191")) return response({ status: "ok", sessions: [] });
       if (value.includes("omdbapi")) return response({ Response: "True" });
       if (value.includes("subdl")) return response({ status: true });
+      if (value.includes("signal.example.com")) return response({ status: "ok", service: "torplay-watch-together" });
       return response({ data: [] });
     },
     useCache: false,
   });
-  assert.deepEqual(results.map(({ status }) => status), ["valid", "valid", "valid", "valid", "valid", "valid"]);
+  assert.deepEqual(results.map(({ status }) => status), ["valid", "valid", "valid", "valid", "valid", "valid", "valid"]);
   const serialized = JSON.stringify(results);
   for (const secret of secrets) assert.equal(serialized.includes(secret), false);
 });

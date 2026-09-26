@@ -4,21 +4,23 @@ import AppHeader from "../../../components/AppHeader.js";
 import ShowDetails from "../../../components/ShowDetails.js";
 import { getSeasonDetails, getShowDetails } from "../../../lib/metadata/tmdb.js";
 import { requireSetupReady } from "../../_lib/require-setup.js";
+import { getServerI18n } from "../../_lib/i18n.js";
 
 export const dynamic = "force-dynamic";
 
 export default async function ShowPage({ params, searchParams }) {
   await requireSetupReady();
+  const { locale, t } = await getServerI18n();
   let show;
   let initialSeason = null;
   const query = await searchParams;
   try {
     const { id } = await params;
-    show = await getShowDetails(id);
+    show = await getShowDetails(id, { locale });
     const requestedSeason = Number(query?.season);
     const defaultSeason = show.seasons.find((season) => season.number === requestedSeason)
       ?? show.seasons.find((season) => season.number > 0) ?? show.seasons[0];
-    if (defaultSeason) initialSeason = await getSeasonDetails(show.id, defaultSeason.number);
+    if (defaultSeason) initialSeason = await getSeasonDetails(show.id, defaultSeason.number, { locale });
   } catch (error) {
     if (error.status === 404 || error.status === 400) notFound();
     return <main className="shell"><div className="notice error">{error.message}</div></main>;
@@ -34,17 +36,17 @@ export default async function ShowPage({ params, searchParams }) {
         <div className="backdropShade" />
         <div className="detailsContent">
           <div className="detailPoster">
-            {show.posterUrl ? <Image src={show.posterUrl} alt={`${show.title} poster`} fill loading="eager" sizes="240px" /> : null}
+            {show.posterUrl ? <Image src={show.posterUrl} alt={t("{title} poster", { title: show.title })} fill loading="eager" sizes="240px" /> : null}
           </div>
           <div className="detailCopy">
-            <span className="eyebrow">Series</span>
+            <span className="eyebrow">{t("Series")}</span>
             <h1>{show.title}</h1>
             <div className="detailMeta">
               {show.year ? <span>{show.year}</span> : null}
               {show.status ? <span>{show.status}</span> : null}
               {show.genres.length ? <span>{show.genres.join(" · ")}</span> : null}
             </div>
-            <p>{show.overview || "No description is available."}</p>
+            <p>{show.overview || t("No description is available.")}</p>
           </div>
         </div>
       </section>
@@ -54,9 +56,9 @@ export default async function ShowPage({ params, searchParams }) {
         initialEpisodeNumber={Number(query?.episode) || null}
         initialIntent={query?.resume === "1" ? "resume" : query?.start === "1" ? "start" : null}
       /> : (
-        <div className="notice">No seasons are available for this show.</div>
+        <div className="notice">{t("No seasons are available for this show.")}</div>
       )}
-      <footer className="detailDisclaimer">Only select sources you are authorized to view.</footer>
+      <footer className="detailDisclaimer">{t("Only select sources you are authorized to view.")}</footer>
     </main>
   );
 }

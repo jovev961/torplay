@@ -1,15 +1,22 @@
-import { profileAvatar } from "../lib/profiles/avatars.js";
+import Image from "next/image";
+import { profileAvatarSrc } from "../lib/profiles/avatars.js";
 
 export default function ProfileAvatar({ avatarId, label = "", size = "medium" }) {
-  const avatar = profileAvatar(avatarId);
+  const imageSize = size === "small" ? "34px" : size === "large" ? "126px" : "72px";
   return (
     <span
-      className={`profileAvatar profileAvatar-${avatar.id} profileAvatar-${size}`}
+      className={`profileAvatar profileAvatar-${size}`}
       role={label ? "img" : undefined}
       aria-label={label || undefined}
       aria-hidden={label ? undefined : true}
     >
-      <span>{avatar.symbol}</span>
+      <Image
+        src={profileAvatarSrc(avatarId)}
+        alt=""
+        fill
+        sizes={imageSize}
+        loading={size === "large" ? "eager" : undefined}
+      />
     </span>
   );
 }

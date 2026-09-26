@@ -18,6 +18,7 @@ import {
   PlaybackError,
   probeVideoFile,
   resolveFfmpegPath,
+  resolvePlaybackFfmpegPath,
   resolveFfprobePath,
   waitForTorrentBuffer,
 } from "../lib/video/transcode.js";
@@ -60,7 +61,7 @@ test("builds HLS stream-copy and H.264/AAC conversion arguments", () => {
   assert.equal(remux.includes("libx264"), false);
   assert.ok(remux.includes("hls"));
   assert.ok(remux.includes("event"));
-  assert.ok(remux.includes("1.25"));
+  assert.ok(remux.includes("1.5"));
 
   const transcode = buildFfmpegArgs(
     { videoCodec: "hevc", audioCodec: "ac3" },
@@ -82,19 +83,76 @@ test("builds HLS stream-copy and H.264/AAC conversion arguments", () => {
   assert.ok(randomAccess.includes("libx264"));
   assert.ok(randomAccess.includes("aac"));
   assert.equal(randomAccess.includes("copy"), false);
+
+  const selectedTrack = buildFfmpegArgs({
+    videoCodec: "h264",
+    audioCodec: "aac",
+    audioStreams: [
+      { index: 2, codec: "aac", language: "en" },
+      { index: 5, codec: "ac3", language: "mk" },
+    ],
+  }, "/tmp/hls-audio-test", { audioStreamIndex: 5 });
+  assert.equal(selectedTrack[selectedTrack.indexOf("-map", selectedTrack.indexOf("-map") + 1) + 1], "0:5");
+  assert.ok(selectedTrack.includes("aac"));
+});
+
+test("parses audio language, layout, and special-track dispositions", () => {
+  const media = parseProbeOutput(JSON.stringify({
+    format: { format_name: "matroska" },
+    streams: [
+      { index: 0, codec_type: "video", codec_name: "h264" },
+      { index: 2, codec_type: "audio", codec_name: "aac", channels: 2,
+        channel_layout: "stereo", tags: { language: "eng", title: "Main" },
+        disposition: { default: 1 } },
+      { index: 5, codec_type: "audio", codec_name: "ac3", channels: 6,
+        tags: { language: "mac", title: "Director Commentary" },
+        disposition: { comment: 1 } },
+    ],
+  }));
+  assert.equal(media.audioStreams.length, 2);
+  assert.deepEqual(media.audioStreams[0], {
+    index: 2, ordinal: 0, codec: "aac", profile: null, language: "en", title: "Main", channels: 2,
+    channelLayout: "stereo", sampleRate: null, bitRate: null, atmos: null, atmosEvidence: null,
+    default: true, commentary: false, audioDescription: false,
+  });
+  assert.equal(media.audioStreams[1].language, "mk");
+  assert.equal(media.audioStreams[1].commentary, true);
 });
 
 test("parses probe output and rejects media without video", () => {
   assert.deepEqual(parseProbeOutput(JSON.stringify({
     format: { format_name: "matroska,webm" },
     streams: [
-      { codec_type: "video", codec_name: "h264" },
-      { codec_type: "audio", codec_name: "aac" },
+      { index: 0, codec_type: "video", codec_name: "h264" },
+      { index: 1, codec_type: "audio", codec_name: "aac" },
     ],
   })), {
     container: "matroska,webm",
     videoCodec: "h264",
+    video: {
+      codec: "h264", codecTag: null, profile: null, level: null, width: null, height: null,
+      frameRate: null, bitRate: null, pixelFormat: null, bitDepth: null, colorRange: null,
+      colorSpace: null, colorTransfer: null, colorPrimaries: null, dolbyVision: null,
+      hdrFormat: null, hdr10Plus: false, masteringDisplay: false,
+    },
     audioCodec: "aac",
+    audioStreams: [{
+      index: 1,
+      ordinal: 0,
+      codec: "aac",
+      profile: null,
+      language: "und",
+      title: null,
+      channels: null,
+      channelLayout: null,
+      sampleRate: null,
+      bitRate: null,
+      atmos: null,
+      atmosEvidence: null,
+      default: false,
+      commentary: false,
+      audioDescription: false,
+    }],
     duration: null,
     subtitleStreams: [],
   });
@@ -102,6 +160,71 @@ test("parses probe output and rejects media without video", () => {
     () => parseProbeOutput(JSON.stringify({ streams: [{ codec_type: "audio", codec_name: "aac" }] })),
     (error) => error instanceof PlaybackError && error.code === "UNSUPPORTED_STREAMS",
   );
+});
+
+test("normalizes Dolby Vision, HDR, and Atmos probe metadata", () => {
+  const media = parseProbeOutput(JSON.stringify({
+    format: { format_name: "matroska,webm", duration: "42" },
+    streams: [
+      { index: 0, codec_type: "video", codec_name: "hevc", codec_tag_string: "dvh1",
+        profile: "Main 10", level: 153, width: 3840, height: 2160,
+        avg_frame_rate: "24000/1001", pix_fmt: "yuv420p10le", color_primaries: "bt2020",
+        color_transfer: "smpte2084", color_space: "bt2020nc", side_data_list: [
+          { side_data_type: "DOVI configuration record", dv_profile: 8, dv_level: 6,
+            rpu_present_flag: 1, el_present_flag: 0, bl_present_flag: 1,
+            dv_bl_signal_compatibility_id: 1 },
+          { side_data_type: "HDR Dynamic Metadata SMPTE2094-40 (HDR10+)" },
+        ] },
+      { index: 3, codec_type: "audio", codec_name: "eac3",
+        profile: "Dolby Digital Plus + Dolby Atmos", channels: 6, channel_layout: "5.1(side)",
+        sample_rate: "48000", bit_rate: "768000", tags: { language: "eng", title: "Main" },
+        disposition: { default: 1 } },
+    ],
+  }));
+  assert.equal(media.videoCodec, "hevc");
+  assert.equal(media.video.hdrFormat, "dolby-vision");
+  assert.equal(media.video.hdr10Plus, true);
+  assert.equal(media.video.bitDepth, 10);
+  assert.equal(media.video.dolbyVision.profile, 8);
+  assert.equal(media.video.dolbyVision.baseLayerCompatibility, "hdr10");
+  assert.equal(media.audioStreams[0].atmos, true);
+  assert.equal(media.audioStreams[0].sampleRate, 48000);
+  assert.equal(media.audioStreams[0].bitRate, 768000);
+});
+
+test("builds fMP4 remux and selective Dolby audio conversion arguments", () => {
+  const media = {
+    videoCodec: "hevc", video: { dolbyVision: { profile: 8 }, hdrFormat: "dolby-vision" },
+    audioCodec: "truehd", audioStreams: [{ index: 2, codec: "truehd", channels: 8 }],
+  };
+  const args = buildFfmpegArgs(media, "/tmp/dolby-hls", {
+    audioStreamIndex: 2,
+    plan: { name: "selective-transcode", videoAction: "copy", audioAction: "transcode-eac3",
+      segmentFormat: "fmp4" },
+  });
+  assert.equal(args[args.indexOf("-c:v") + 1], "copy");
+  assert.equal(args[args.indexOf("-c:a") + 1], "eac3");
+  assert.equal(args[args.indexOf("-tag:v") + 1], "dvh1");
+  assert.ok(args.includes("-hls_segment_type"));
+  assert.ok(args.some((value) => value.endsWith("segment-%05d.m4s")));
+  assert.equal(args.includes("libx264"), false);
+});
+
+test("bounds UHD HDR compatibility conversion for real-time playback", () => {
+  const media = {
+    videoCodec: "hevc",
+    video: { width: 3840, height: 2160, hdrFormat: "hdr10", colorTransfer: "smpte2084" },
+    audioCodec: "eac3",
+    audioStreams: [{ index: 1, codec: "eac3", channels: 6, default: true }],
+  };
+  const args = buildFfmpegArgs(media, "/tmp/hdr-compatibility", {
+    plan: { name: "compatibility-transcode", videoAction: "transcode-h264",
+      audioAction: "transcode-aac-stereo", segmentFormat: "mpegts" },
+  });
+
+  assert.match(args[args.indexOf("-vf") + 1], /min\(1920,iw\)/);
+  assert.equal(args[args.indexOf("-preset") + 1], "superfast");
+  assert.equal(args[args.indexOf("-readrate") + 1], "1.5");
 });
 
 test("prebuffers a contiguous prefix and reports incomplete torrent data", async () => {
@@ -179,6 +302,30 @@ test("resolves bundled FFmpeg and FFprobe executables", () => {
   assert.match(resolveFfprobePath(), /ffprobe/i);
 });
 
+test("uses bundled FFmpeg when configured FFmpeg lacks HDR tone-mapping filters", () => {
+  const selected = resolvePlaybackFfmpegPath({
+    video: { hdrFormat: "hdr10", colorTransfer: "smpte2084" },
+  }, {
+    videoAction: "transcode-h264",
+  }, {
+    ffmpegPath: "/configured/ffmpeg",
+    hasFilter: (executable, filter) => filter === "zscale" && executable !== "/configured/ffmpeg",
+  });
+  assert.notEqual(selected, "/configured/ffmpeg");
+  assert.match(selected, /ffmpeg/i);
+});
+
+test("keeps configured FFmpeg for copied HDR and supported tone mapping", () => {
+  assert.equal(resolvePlaybackFfmpegPath({
+    video: { hdrFormat: "hdr10", colorTransfer: "smpte2084" },
+  }, { videoAction: "copy" }, { ffmpegPath: "/configured/ffmpeg", hasFilter: () => false }),
+  "/configured/ffmpeg");
+  assert.equal(resolvePlaybackFfmpegPath({
+    video: { hdrFormat: "hdr10", colorTransfer: "smpte2084" },
+  }, { videoAction: "transcode-h264" }, { ffmpegPath: "/configured/ffmpeg", hasFilter: () => true }),
+  "/configured/ffmpeg");
+});
+
 test("probe failures log complete stderr and expose the exit code", async () => {
   const child = new EventEmitter();
   child.stdin = new PassThrough();
@@ -220,6 +367,44 @@ test("probe failures log complete stderr and expose the exit code", async () => 
   } finally {
     console.error = previousConsoleError;
   }
+});
+
+test("prepares HLS from the explicitly selected language track", async (context) => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "torplay-multi-audio-test-"));
+  const fixture = path.join(directory, "multi-audio.mkv");
+  const generated = spawnSync(resolveFfmpegPath(), [
+    "-y", "-hide_banner", "-loglevel", "error",
+    "-f", "lavfi", "-i", "testsrc2=size=320x180:rate=24",
+    "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=44100",
+    "-f", "lavfi", "-i", "sine=frequency=880:sample_rate=44100",
+    "-t", "3", "-map", "0:v:0", "-map", "1:a:0", "-map", "2:a:0",
+    "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+    "-c:a:0", "aac", "-metadata:s:a:0", "language=eng", "-disposition:a:0", "default",
+    "-c:a:1", "ac3", "-metadata:s:a:1", "language=mkd", "-disposition:a:1", "0",
+    fixture,
+  ], { encoding: "utf8" });
+  assert.equal(generated.status, 0, generated.stderr);
+  const details = await stat(fixture);
+  const file = {
+    name: "multi-audio.mkv",
+    length: details.size,
+    createReadStream: (options) => createReadStream(fixture, options),
+  };
+  context.after(async () => { await rm(directory, { recursive: true, force: true }); });
+
+  const media = await probeVideoFile(file, { context: "multi-audio fixture" });
+  assert.deepEqual(media.audioStreams.map((track) => track.language), ["en", "mk"]);
+  const macedonian = media.audioStreams[1];
+  const job = createHlsPlaybackJob(file, {
+    media,
+    audioStreamIndex: macedonian.index,
+    context: "selected Macedonian audio",
+  });
+  context.after(() => job.stop());
+  await job.ready;
+  assert.equal(job.audioStreamIndex, macedonian.index);
+  assert.equal(job.strategy, "transcode");
+  assert.ok((await readdir(job.outputDirectory)).includes("index.m3u8"));
 });
 
 test("remuxes H.264/AAC from zero and accurately transcodes nonzero seeks", async (context) => {
@@ -323,6 +508,25 @@ test("remuxes H.264/AAC from zero and accurately transcodes nonzero seeks", asyn
   assert.ok((await readdir(seekJob.outputDirectory)).some((name) => /^segment-\d{5}\.ts$/.test(name)));
   await seekJob.completed;
   seekJob.stop();
+
+  const copiedSeek = createHlsPlaybackJob(file, {
+    context: "test keyframe-aligned copy seek",
+    inputUrl: `http://127.0.0.1:${server.address().port}/fixture.mkv`,
+    media,
+    startTime: 12.3,
+    readRate: 100,
+    startTimeoutMs: 10_000,
+    plan: { name: "remux", delivery: "hls", videoAction: "copy", audioAction: "copy",
+      audioStreamIndex: media.audioStreams[0].index, segmentFormat: "mpegts",
+      output: { videoCodec: "h264", audioCodec: "aac", hdrFormat: null } },
+  });
+  context.after(() => copiedSeek.stop());
+  await copiedSeek.ready;
+  assert.equal(copiedSeek.strategy, "remux");
+  assert.ok(copiedSeek.originSeconds <= 12.3);
+  assert.ok(copiedSeek.originSeconds >= 10);
+  assert.ok(Math.abs(copiedSeek.originSeconds + copiedSeek.startOffsetSeconds - 12.3) < 0.01);
+  assert.ok((await readdir(copiedSeek.outputDirectory)).some((name) => /^segment-\d{5}\.ts$/.test(name)));
 });
 
 test("transcodes an HEVC/E-AC-3 MKV into H.264/AAC HLS", async (context) => {
@@ -380,4 +584,29 @@ test("transcodes an HEVC/E-AC-3 MKV into H.264/AAC HLS", async (context) => {
   assert.ok(streams.some((stream) => stream.codec_type === "video" && stream.codec_name === "h264"));
   assert.ok(streams.some((stream) => stream.codec_type === "audio" && stream.codec_name === "aac"));
   job.stop();
+
+  const remux = createHlsPlaybackJob(file, {
+    context: "test HEVC E-AC-3 fMP4 preservation path",
+    media: job.media,
+    plan: { name: "remux", delivery: "hls", videoAction: "copy", audioAction: "copy",
+      audioStreamIndex: job.media.audioStreams[0].index, segmentFormat: "fmp4",
+      output: { videoCodec: "hevc", audioCodec: "eac3", hdrFormat: null } },
+    audioStreamIndex: job.media.audioStreams[0].index,
+    prebuffer: { bytes: details.size, timeoutMs: 5_000 },
+    startTimeoutMs: 10_000,
+    torrentRead: { chunkBytes: 32 * 1024, stallTimeoutMs: 5_000 },
+  });
+  context.after(() => remux.stop());
+  await remux.ready;
+  const remuxFiles = await readdir(remux.outputDirectory);
+  assert.ok(remuxFiles.includes("init.mp4"));
+  assert.ok(remuxFiles.some((name) => /^segment-\d{5}\.m4s$/.test(name)));
+  const preserved = spawnSync(resolveFfprobePath(), [
+    "-v", "error", "-show_entries", "stream=codec_type,codec_name", "-of", "json",
+    path.join(remux.outputDirectory, "index.m3u8"),
+  ], { encoding: "utf8" });
+  assert.equal(preserved.status, 0, preserved.stderr);
+  const preservedStreams = JSON.parse(preserved.stdout).streams;
+  assert.ok(preservedStreams.some((stream) => stream.codec_type === "video" && stream.codec_name === "hevc"));
+  assert.ok(preservedStreams.some((stream) => stream.codec_type === "audio" && stream.codec_name === "eac3"));
 });

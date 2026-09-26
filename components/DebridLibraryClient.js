@@ -7,6 +7,7 @@ import DebridLibraryFileRow from "./DebridLibraryFileRow.js";
 import { useProfile } from "./ProfileProvider.js";
 import { releaseTorrentSession } from "./useSourceLookup.js";
 import { formatFileSize } from "../lib/video/episode-display.js";
+import { inferMediaBadges } from "../lib/video/media-capabilities.js";
 
 async function json(response) {
   const data = await response.json().catch(() => ({}));
@@ -263,6 +264,7 @@ export default function DebridLibraryClient() {
   const disconnected = providers.filter((entry) => entry.disconnected);
   const connected = providers.filter((entry) => !entry.disconnected && !entry.error);
   const failed = providers.filter((entry) => entry.error);
+  const selectedBadges = selected ? inferMediaBadges(selected.name) : [];
 
   return <section className="debridLibrary">
     <div className="debridLibraryHeading">
@@ -308,22 +310,31 @@ export default function DebridLibraryClient() {
       {disconnected.length > 0 ? <p>{disconnected.map((entry) => label[entry.provider]).join(" and ")} {disconnected.length === 1 ? "is" : "are"} not connected. <Link href="/settings#services">Connect in Settings →</Link></p> : null}
     </div> : null}
     <div className="debridLibraryGrid">
-      {items.map((item) => <article className="panel debridLibraryCard" key={`${item.provider}:${item.resourceId}`}>
-        <span className="eyebrow">{label[item.provider]} · {item.ownership === "external" ? "Provider account item" : "Added by TorPlay"}</span>
-        <h2>{item.name}</h2>
-        <p>{item.status}{item.progress != null ? ` · ${Math.round(item.progress * 100)}%` : ""}
-          {item.size ? ` · ${formatFileSize(item.size)}` : ""}</p>
-        {item.progress != null && item.status !== "ready" ? <progress max={1} value={item.progress} /> : null}
-        <div className="debridLibraryActions">
-          <button className="debridLibraryOpen" type="button" onClick={() => void open(item)}>View files</button>
-          <button className="debridLibraryDelete" type="button" onClick={() => void remove(item)}>{active.has(item.status) ? "Cancel and delete" : "Delete"}</button>
-        </div>
-      </article>)}
+      {items.map((item) => {
+        const badges = inferMediaBadges(item.name);
+        return <article className="panel debridLibraryCard" key={`${item.provider}:${item.resourceId}`}>
+          <span className="eyebrow">{label[item.provider]} · {item.ownership === "external" ? "Provider account item" : "Added by TorPlay"}</span>
+          <h2>{item.name}</h2>
+          {badges.length ? <div className="mediaCapabilityBadges compact" aria-label="Inferred media formats">
+            {badges.map((badge) => <span key={badge.id}>{badge.label}</span>)}
+          </div> : null}
+          <p>{item.status}{item.progress != null ? ` · ${Math.round(item.progress * 100)}%` : ""}
+            {item.size ? ` · ${formatFileSize(item.size)}` : ""}</p>
+          {item.progress != null && item.status !== "ready" ? <progress max={1} value={item.progress} /> : null}
+          <div className="debridLibraryActions">
+            <button className="debridLibraryOpen" type="button" onClick={() => void open(item)}>View files</button>
+            <button className="debridLibraryDelete" type="button" onClick={() => void remove(item)}>{active.has(item.status) ? "Cancel and delete" : "Delete"}</button>
+          </div>
+        </article>;
+      })}
     </div>
     {providers.some((entry) => entry.hasMore) ? <button className="debridLibraryMore" type="button" disabled={loading}
       onClick={() => void refresh(page + 1)}>Load more</button> : null}
     {selected ? <section className="panel debridLibraryDetail">
       <h2>{selected.name}</h2>
+      {selectedBadges.length ? <div className="mediaCapabilityBadges compact" aria-label="Inferred media formats">
+        {selectedBadges.map((badge) => <span key={badge.id}>{badge.label}</span>)}
+      </div> : null}
       <p>{label[selected.provider]} · {selected.status}</p>
       {selected.ownership === "external" ? <div className="debridFileReview">
         <strong>Title for direct playback</strong>

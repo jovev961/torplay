@@ -16,7 +16,7 @@ import {
 } from "../lib/subtitles/timeline.js";
 import { PROGRESS_SAVE_INTERVAL_MS } from "../lib/history/constants.js";
 import { isPlaybackAtEnd, shouldOfferNextEpisode, shouldShowUpNext } from "../lib/playback/autoplay.js";
-import { activeSkipSegment } from "../lib/playback/segment-controls.js";
+import { activeSkipSegment, automaticSegment, segmentPlaybackRange, showManualSkip } from "../lib/playback/segment-controls.js";
 import { isRemotePlaybackSessionActive } from "../lib/remote-playback/client-state.js";
 import { remotePlaybackSource } from "../lib/remote-playback/source.js";
 import {
@@ -28,7 +28,15 @@ import {
 } from "../lib/video/fullscreen.js";
 import { closesPlayerMenu, nextMenuIndex } from "../lib/video/menu-navigation.js";
 import { clampSeekTarget, seekHasArrived, skipTarget } from "../lib/video/seek-target.js";
+import { waitForSynchronizedPosition } from "../lib/video/media-readiness.js";
+import { detectClientCapabilities } from "../lib/video/client-capabilities.js";
+import { codecLabel, playbackMediaBadges } from "../lib/video/media-capabilities.js";
+import { nextPlaybackFallback } from "../lib/video/playback-recovery.js";
 import { useRemotePlayback } from "./useRemotePlayback.js";
+import { isSpecialAudioTrack, selectAudioTrack } from "../lib/video/audio-tracks.js";
+import { useOptionalProfile } from "./ProfileProvider.js";
+import { useOptionalI18n } from "./I18nProvider.js";
+import { useOptionalWatchTogether } from "./WatchTogetherProvider.js";
 
 async function responseJson(response) {
   const contentType = response.headers.get("content-type") || "";
@@ -64,6 +72,107 @@ function browserStorage() {
   }
 }
 
+function waitForCanPlay(video, { timeoutMs = 15_000, signal } = {}) {
+  if (video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const timer = timeoutMs === null ? null
+      : setTimeout(() => finish(new Error("The local source did not become ready in time.")), timeoutMs);
+    const onReady = () => finish();
+    const onError = () => finish(new Error("The local source could not be played."));
+    const onAbort = () => finish(signal.reason instanceof Error
+      ? signal.reason : new DOMException("Playback preparation was replaced.", "AbortError"));
+    function finish(error) {
+      if (timer) clearTimeout(timer);
+      video.removeEventListener("canplay", onReady);
+      video.removeEventListener("error", onError);
+      signal?.removeEventListener("abort", onAbort);
+      if (error) reject(error);
+      else resolve();
+    }
+    video.addEventListener("canplay", onReady, { once: true });
+    video.addEventListener("error", onError, { once: true });
+    signal?.addEventListener("abort", onAbort, { once: true });
+    if (signal?.aborted) onAbort();
+  });
+}
+
+function pauseForSync(video) {
+  if (video.paused) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const onPause = () => finish();
+    const onError = () => finish(new Error("The local player could not pause for synchronization."));
+    function finish(error) {
+      video.removeEventListener("pause", onPause);
+      video.removeEventListener("error", onError);
+      if (error) reject(error);
+      else resolve();
+    }
+    video.addEventListener("pause", onPause, { once: true });
+    video.addEventListener("error", onError, { once: true });
+    video.pause();
+    if (video.paused) queueMicrotask(onPause);
+  });
+}
+
+async function playForSync(video) {
+  try {
+    await video.play();
+    return;
+  } catch (error) {
+    if (error?.name !== "NotAllowedError" || video.muted) throw error;
+  }
+
+  // A transcoded seek replaces the MediaSource. Some browsers treat the new
+  // source as a fresh autoplay attempt even though the user was already
+  // watching. Muted playback is permitted; restore the viewer's own setting
+  // immediately after playback has actually started.
+  const wasMuted = video.muted;
+  video.muted = true;
+  try {
+    await video.play();
+  } catch (error) {
+    video.muted = wasMuted;
+    throw error;
+  }
+  video.muted = wasMuted;
+}
+
+function waitForDecodedFrame(video, { signal, timeoutMs = 30_000 } = {}) {
+  const haveCurrentData = typeof HTMLMediaElement === "undefined"
+    ? 2 : HTMLMediaElement.HAVE_CURRENT_DATA;
+  const ready = () => !video.seeking && video.readyState >= haveCurrentData;
+  if (ready()) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const events = ["loadeddata", "canplay", "seeked", "torplayhlsbuffered"];
+    const timer = setTimeout(() => finish(new Error("The local source did not buffer the shared position in time.")), timeoutMs);
+    const onReady = (event) => {
+      if (video.seeking) return;
+      // loadeddata/canplay are the media element's decoded-frame signals. For
+      // hls.js, FRAG_BUFFERED confirms that the requested starting fragment is
+      // appended and can be played even when the paused element has not yet
+      // advanced its readyState.
+      if (ready() || event?.type === "loadeddata" || event?.type === "canplay"
+        || event?.type === "torplayhlsbuffered") finish();
+    };
+    const onError = () => finish(new Error("The local source could not load the shared position."));
+    const onAbort = () => finish(signal.reason instanceof Error
+      ? signal.reason : new DOMException("Playback preparation was replaced.", "AbortError"));
+    function finish(error) {
+      clearTimeout(timer);
+      for (const event of events) video.removeEventListener(event, onReady);
+      video.removeEventListener("error", onError);
+      signal?.removeEventListener("abort", onAbort);
+      if (error) reject(error);
+      else resolve();
+    }
+    for (const event of events) video.addEventListener(event, onReady);
+    video.addEventListener("error", onError, { once: true });
+    signal?.addEventListener("abort", onAbort, { once: true });
+    if (signal?.aborted) onAbort();
+    else queueMicrotask(onReady);
+  });
+}
+
 function SubtitleCue({ cue }) {
   const cueRef = useRef(null);
 
@@ -93,6 +202,7 @@ function Icon({ name }) {
     next: <path d="M17 5h2v14h-2V5zM5 5l11 7-11 7V5z" />,
     cast: <path d="M3 18v3h3a3 3 0 0 0-3-3zm0-5v2a6 6 0 0 1 6 6h2a8 8 0 0 0-8-8zm0-5v2c6.08 0 11 4.92 11 11h2C16 13.82 10.18 8 3 8zm2-5a2 2 0 0 0-2 2v5h2V5h14v10h-6v2h6a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2H5z" />,
     settings: <path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zm9 4.8v-2.6l-2.1-.6a7 7 0 0 0-.7-1.6l1.1-1.9-1.9-1.9-1.9 1.1a7 7 0 0 0-1.6-.7L13.3 3h-2.6l-.6 2.1a7 7 0 0 0-1.6.7L6.6 4.7 4.7 6.6l1.1 1.9a7 7 0 0 0-.7 1.6l-2.1.6v2.6l2.1.6a7 7 0 0 0 .7 1.6l-1.1 1.9 1.9 1.9 1.9-1.1a7 7 0 0 0 1.6.7l.6 2.1h2.6l.6-2.1a7 7 0 0 0 1.6-.7l1.9 1.1 1.9-1.9-1.1-1.9a7 7 0 0 0 .7-1.6l2.1-.6z" />,
+    together: <path d="M8.5 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zm7-1a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM8.5 13C4.36 13 2 15.04 2 18v2h13v-2c0-2.96-2.36-5-6.5-5zm7 0c-.5 0-.96.04-1.4.11A6.2 6.2 0 0 1 17 18v2h5v-2c0-3-2.3-5-6.5-5z" />,
   };
   return (
     <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
@@ -126,11 +236,13 @@ export default function VideoPlayer({
   const videoRef = useRef(null);
   const captionMenuRef = useRef(null);
   const captionButtonRef = useRef(null);
+  const audioButtonRef = useRef(null);
   const sourcePickerRef = useRef(null);
   const episodePromptRef = useRef(null);
   const skipButtonRef = useRef(null);
   const autoSkippedRef = useRef(new Set());
   const hlsRef = useRef(null);
+  const playbackReadyAbortRef = useRef(null);
   const abortRef = useRef(null);
   const pollRef = useRef(null);
   const hideTimerRef = useRef(null);
@@ -157,13 +269,20 @@ export default function VideoPlayer({
   const castWasActiveRef = useRef(false);
   const castTransitionRef = useRef(false);
   const remoteOriginRef = useRef(null);
+  const playWhenReadyRef = useRef(true);
+  const failedStrategiesRef = useRef([]);
+  const failedAudioCodecsRef = useRef([]);
   const [playbackError, setPlaybackError] = useState("");
   const [subtitleError, setSubtitleError] = useState("");
   const [playbackHint, setPlaybackHint] = useState("");
-  const [playbackState, setPlaybackState] = useState(
-    file.playbackMode === "native" ? "native" : autoStart ? "preparing" : "idle",
-  );
+  const [playbackState, setPlaybackState] = useState("inspecting");
   const [playbackDetails, setPlaybackDetails] = useState(null);
+  const [clientCapabilities, setClientCapabilities] = useState(null);
+  const [audioInspection, setAudioInspection] = useState("loading");
+  const [audioTracks, setAudioTracks] = useState([]);
+  const [selectedAudioStreamIndex, setSelectedAudioStreamIndex] = useState(null);
+  const [audioError, setAudioError] = useState("");
+  const [savingAudioPreference, setSavingAudioPreference] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [buffering, setBuffering] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -172,6 +291,7 @@ export default function VideoPlayer({
   const [seekPreview, setSeekPreview] = useState(null);
   const [skipFeedback, setSkipFeedback] = useState(null);
   const [segments, setSegments] = useState({ intro: null, recap: null, outro: null, preview: null });
+  const [segmentSourceIdentity, setSegmentSourceIdentity] = useState(null);
   const [countdownRemaining, setCountdownRemaining] = useState(null);
   const [settingsError, setSettingsError] = useState("");
   const [savingSetting, setSavingSetting] = useState(false);
@@ -197,18 +317,41 @@ export default function VideoPlayer({
   const [pipSupported, setPipSupported] = useState(false);
   const [progressError, setProgressError] = useState("");
   const [writerToken, setWriterToken] = useState(null);
+  const profileContext = useOptionalProfile();
+  const i18n = useOptionalI18n();
+  const watchTogether = useOptionalWatchTogether();
+  const activeProfile = profileContext?.activeProfile || null;
+  const updateAudioPreferences = profileContext?.updateAudioPreferences;
+  const displayLanguage = i18n?.displayLanguage || ((code) => {
+    try { return new Intl.DisplayNames(["en"], { type: "language" }).of(code) || code; }
+    catch { return code; }
+  });
+  const t = i18n?.t || ((message, values = {}) => String(message).replace(/\{(\w+)\}/g,
+    (match, name) => Object.hasOwn(values, name) ? String(values[name]) : match));
   const remotePlayback = useRemotePlayback(videoRef);
   const baseUrl = `/api/torrents/${encodeURIComponent(sessionId)}/files/${encodeURIComponent(file.id)}`;
   const playbackUrl = `${baseUrl}/playback`;
   const sourceIdentity = [sessionId, file.id, profileId || "guest", media?.mediaType || "media",
     media?.tmdbId || "unknown", media?.seasonNumber ?? -1, media?.episodeNumber ?? -1].join(":");
+  const currentSegments = segmentSourceIdentity === sourceIdentity ? segments
+    : { intro: null, recap: null, outro: null, preview: null };
+  const preferredAudioLanguage = activeProfile?.id === profileId
+    ? activeProfile.audioPreferences?.preferredLanguage || "original" : "original";
+  const requiresPreparedPlayback = playbackDetails?.delivery !== "direct";
+  const selectedAudioTrack = audioTracks.find((track) => track.index === selectedAudioStreamIndex) || null;
   const subtitles = subtitleDiscovery.tracks;
   const subtitleUrl = `${baseUrl}/subtitles`;
   const subtitleStyleClass = subtitleAppearanceClassName(subtitleAppearance);
   const isFullscreen = browserFullscreen || viewportFullscreen;
-  const segmentDuration = file.playbackMode === "transcode"
+  const segmentDuration = requiresPreparedPlayback
     ? Number(playbackDetails?.duration || playbackDetails?.media?.duration) : duration;
   const segmentDurationRounded = Math.round(segmentDuration);
+  const watchTogetherActive = Boolean(media && watchTogether?.matchesMedia(media));
+  const watchTogetherTransportLocked = watchTogetherActive
+    && (watchTogether.isGuest || !watchTogether.allReady);
+  const watchTogetherPlaybackLocked = watchTogetherTransportLocked
+    || (watchTogetherActive && watchTogether.seekSyncing);
+  const attachWatchTogetherPlayer = watchTogether?.attachPlayer;
 
   useEffect(() => {
     if (media?.mediaType !== "tv" || !media.tmdbId || !media.episodeNumber
@@ -221,14 +364,58 @@ export default function VideoPlayer({
     void fetch(`/api/playback/segments?${params}`, { cache: "no-store", signal: controller.signal })
       .then(async (response) => response.ok ? responseJson(response) : null)
       .then((data) => {
-        if (!controller.signal.aborted) setSegments(data?.segments || {
-          intro: null, recap: null, outro: null, preview: null,
-        });
+        if (!controller.signal.aborted) {
+          setSegments(data?.segments || { intro: null, recap: null, outro: null, preview: null });
+          setSegmentSourceIdentity(sourceIdentity);
+        }
       })
       .catch(() => {});
     return () => controller.abort();
   }, [media?.mediaType, media?.tmdbId, media?.seasonNumber, media?.episodeNumber,
     segmentDurationRounded, sourceIdentity]);
+
+  const currentPreferredAudioLanguage = useEffectEvent(() => preferredAudioLanguage);
+
+  useEffect(() => {
+    let cancelled = false;
+    const controller = new AbortController();
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setAudioInspection("loading");
+      setAudioError("");
+      setPlaybackState("inspecting");
+    });
+    void fetch(playbackUrl, { cache: "no-store", signal: controller.signal })
+      .then(async (response) => {
+        const payload = await responseJson(response);
+        if (!response.ok) throw new Error(payload?.error || "Audio tracks could not be inspected.");
+        if (cancelled) return;
+        const tracks = Array.isArray(payload?.media?.audioTracks) ? payload.media.audioTracks : [];
+        const selected = selectAudioTrack(tracks, currentPreferredAudioLanguage());
+        const capabilities = await detectClientCapabilities(payload.media, selected?.index ?? null, {
+          videoElement: videoRef.current,
+        });
+        if (tracks.length > 1 && selected && !selected.default) capabilities.direct = "unsupported";
+        if (cancelled) return;
+        setAudioTracks(tracks);
+        setSelectedAudioStreamIndex(selected?.index ?? null);
+        setClientCapabilities(capabilities);
+        setPlaybackDetails(payload);
+        setAudioInspection("ready");
+        setPlaybackState("idle");
+      })
+      .catch((error) => {
+        if (cancelled || error.name === "AbortError") return;
+        setAudioInspection("failed");
+        setAudioError(error.message || "Audio tracks could not be inspected.");
+        setPlaybackState("failed");
+        setPlaybackError(error.message || "The video could not be inspected for playback.");
+      });
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [playbackUrl, sourceIdentity]);
 
   const saveProgress = useCallback(async ({
     position = timelineRef.current.position,
@@ -288,6 +475,8 @@ export default function VideoPlayer({
 
   function failPlayback(message) {
     stopPolling();
+    playbackReadyAbortRef.current?.abort(new Error(message || "The video could not be prepared for playback."));
+    playbackReadyAbortRef.current = null;
     hlsRef.current?.destroy();
     hlsRef.current = null;
     seekTargetRef.current = null;
@@ -296,14 +485,36 @@ export default function VideoPlayer({
     setPlaybackError(message || "The video could not be prepared for playback.");
   }
 
+  function recordPlaybackFailure(details) {
+    const fallback = nextPlaybackFallback(details, {
+      failedStrategies: failedStrategiesRef.current,
+      failedAudioCodecs: failedAudioCodecsRef.current,
+    });
+    failedStrategiesRef.current = fallback.failedStrategies;
+    failedAudioCodecsRef.current = fallback.failedAudioCodecs;
+    return fallback.retry;
+  }
+
+  function retryWithCompatibilityFallback(details, message) {
+    if (!recordPlaybackFailure(details)) return false;
+    setPlaybackHint(`${message} Trying the next compatible playback method…`);
+    void preparePlayback(timelineRef.current.position || initialPosition,
+      selectedAudioStreamIndex, playWhenReadyRef.current);
+    return true;
+  }
+
   async function reportPlayerFailure(message) {
     const status = await refreshStatus();
     if (status?.state !== "failed") failPlayback(message);
   }
 
-  function startPreparedVideo(video) {
+  function startPreparedVideo(video, poll = true) {
     setPlaybackState("ready");
-    startPolling();
+    if (poll) startPolling();
+    if (!playWhenReadyRef.current) {
+      setPlaybackHint("");
+      return;
+    }
     void video.play().then(
       () => setPlaybackHint(""),
       (error) => {
@@ -316,19 +527,36 @@ export default function VideoPlayer({
     );
   }
 
-  function attachHls(manifestUrl, generation = playbackGenerationRef.current) {
+  function attachHls(
+    manifestUrl,
+    generation = playbackGenerationRef.current,
+    details = playbackDetails,
+    capabilities = clientCapabilities,
+  ) {
     const video = videoRef.current;
     if (!video) return;
 
     recoveryRef.current = { media: false, network: false };
-    if (Hls.isSupported()) {
-      const hls = new Hls({ enableWorker: false });
+    const preferNative = capabilities?.transport?.nativeHls === "supported"
+      && Boolean(details?.playbackPlan?.output?.hdrFormat
+        || details?.playbackPlan?.output?.videoCodec === "hevc");
+    if (!preferNative && Hls.isSupported()) {
+      const hls = new Hls({
+        // Keep high-bitrate fMP4 demuxing off the UI thread. This is
+        // particularly important for HDR and Dolby Vision playback on TVs.
+        enableWorker: true,
+        startFragPrefetch: true,
+        startPosition: Math.max(0, Number(details?.startOffsetSeconds) || 0),
+      });
       hlsRef.current = hls;
       hls.on(Hls.Events.MEDIA_ATTACHED, () => {
         if (generation === playbackGenerationRef.current) hls.loadSource(manifestUrl);
       });
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         if (generation === playbackGenerationRef.current) startPreparedVideo(video);
+      });
+      hls.on(Hls.Events.FRAG_BUFFERED, () => {
+        if (generation === playbackGenerationRef.current) video.dispatchEvent(new Event("torplayhlsbuffered"));
       });
       hls.on(Hls.Events.ERROR, (_event, data) => {
         if (generation !== playbackGenerationRef.current) return;
@@ -343,14 +571,17 @@ export default function VideoPlayer({
           hls.startLoad();
           return;
         }
-        void reportPlayerFailure(
-          `HLS playback failed: ${data.details || data.error?.message || "unknown player error"}.`,
-        );
+        const message = `HLS playback failed: ${data.details || data.error?.message || "unknown player error"}.`;
+        if (!retryWithCompatibilityFallback(details, message)) void reportPlayerFailure(message);
       });
       hls.attachMedia(video);
     } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
       video.addEventListener("canplay", () => {
-        if (generation === playbackGenerationRef.current) startPreparedVideo(video);
+        if (generation === playbackGenerationRef.current) {
+          const offset = Math.max(0, Number(details?.startOffsetSeconds) || 0);
+          if (offset > 0 && offset < video.duration) video.currentTime = offset;
+          startPreparedVideo(video);
+        }
       }, { once: true });
       video.src = manifestUrl;
       video.load();
@@ -359,9 +590,31 @@ export default function VideoPlayer({
     }
   }
 
-  async function preparePlayback(startTime = 0) {
+  function attachDirect(sourceUrl, startTime, generation = playbackGenerationRef.current) {
+    const video = videoRef.current;
+    if (!video) return;
+    video.addEventListener("loadedmetadata", () => {
+      if (generation !== playbackGenerationRef.current) return;
+      if (startTime > 0 && startTime < video.duration) video.currentTime = startTime;
+    }, { once: true });
+    video.addEventListener("canplay", () => {
+      if (generation === playbackGenerationRef.current) startPreparedVideo(video, false);
+    }, { once: true });
+    video.src = sourceUrl;
+    video.load();
+  }
+
+  async function preparePlayback(
+    startTime = 0,
+    audioStreamIndex = selectedAudioStreamIndex,
+    playWhenReady = true,
+    waitUntilReady = false,
+  ) {
     const generation = ++playbackGenerationRef.current;
     abortRef.current?.abort();
+    playbackReadyAbortRef.current?.abort(new DOMException("Playback preparation was replaced.", "AbortError"));
+    const readyController = new AbortController();
+    playbackReadyAbortRef.current = readyController;
     hlsRef.current?.destroy();
     hlsRef.current = null;
     const video = videoRef.current;
@@ -371,25 +624,67 @@ export default function VideoPlayer({
     setPlaybackError("");
     setPlaybackHint("");
     setPlaybackState("preparing");
+    playWhenReadyRef.current = playWhenReady;
     abortRef.current = new AbortController();
     try {
+      let requestCapabilities = clientCapabilities;
+      if (playbackDetails?.media) {
+        requestCapabilities = await detectClientCapabilities(
+          playbackDetails.media,
+          audioStreamIndex,
+          { videoElement: videoRef.current },
+        );
+        const requestedTrack = audioTracks.find((track) => track.index === audioStreamIndex);
+        if (audioTracks.length > 1 && requestedTrack && !requestedTrack.default) {
+          requestCapabilities.direct = "unsupported";
+        }
+        setClientCapabilities(requestCapabilities);
+      }
       const response = await fetch(playbackUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ startTime }),
+        body: JSON.stringify({
+          startTime,
+          audioStreamIndex,
+          capabilities: requestCapabilities,
+          failedStrategies: failedStrategiesRef.current,
+          failedAudioCodecs: failedAudioCodecsRef.current,
+        }),
         signal: abortRef.current.signal,
       });
       const payload = await responseJson(response);
       if (generation !== playbackGenerationRef.current) return;
       if (!response.ok) {
-        throw new Error(payload?.error || `Playback preparation failed with HTTP ${response.status}.`);
+        const error = new Error(payload?.error || `Playback preparation failed with HTTP ${response.status}.`);
+        error.playbackStrategy = payload?.strategy || null;
+        error.playbackPlan = payload?.playbackPlan || null;
+        throw error;
       }
-      if (!payload?.manifestUrl) throw new Error("The server did not return an HLS playlist.");
+      if (!payload?.manifestUrl && !payload?.sourceUrl) {
+        throw new Error("The server did not return a playable source.");
+      }
       preparedRef.current = true;
       setPlaybackDetails(payload);
-      attachHls(payload.manifestUrl, generation);
+      setAudioTracks(payload.media?.audioTracks || []);
+      setSelectedAudioStreamIndex(payload.media?.selectedAudioStreamIndex ?? audioStreamIndex ?? null);
+      if (payload.delivery === "direct") attachDirect(payload.sourceUrl, startTime, generation);
+      else attachHls(payload.manifestUrl, generation, payload, requestCapabilities);
+      if (waitUntilReady) await waitForDecodedFrame(video, { signal: readyController.signal });
+      if (generation !== playbackGenerationRef.current) return false;
+      if (playbackReadyAbortRef.current === readyController) playbackReadyAbortRef.current = null;
+      return true;
     } catch (error) {
-      if (generation === playbackGenerationRef.current && error.name !== "AbortError") failPlayback(error.message);
+      if (generation === playbackGenerationRef.current && error.name !== "AbortError") {
+        if (recordPlaybackFailure({
+          strategy: error.playbackStrategy,
+          playbackPlan: error.playbackPlan,
+        })) {
+          setPlaybackHint(`${error.message} Trying the next compatible playback method…`);
+          return preparePlayback(startTime, audioStreamIndex, playWhenReady, waitUntilReady);
+        }
+        failPlayback(error.message);
+      }
+      return false;
     }
   }
 
@@ -408,6 +703,8 @@ export default function VideoPlayer({
     castTransitionRef.current = remotePlayback.castState.active;
     playbackGenerationRef.current += 1;
     abortRef.current?.abort();
+    playbackReadyAbortRef.current?.abort(new DOMException("Playback source changed.", "AbortError"));
+    playbackReadyAbortRef.current = null;
     stopPolling();
     hlsRef.current?.destroy();
     hlsRef.current = null;
@@ -417,11 +714,12 @@ export default function VideoPlayer({
     seekTargetRef.current = null;
     const video = videoRef.current;
     video?.pause();
-    if (file.playbackMode === "transcode") {
-      video?.removeAttribute("src");
-      video?.load();
-    }
+    video?.removeAttribute("src");
+    video?.load();
     preparedRef.current = false;
+    failedStrategiesRef.current = [];
+    failedAudioCodecsRef.current = [];
+    setClientCapabilities(null);
     initialSeekAppliedRef.current = false;
     resetSentRef.current = false;
     endedRef.current = false;
@@ -435,6 +733,7 @@ export default function VideoPlayer({
     setSeekPreview(null);
     setSkipFeedback(null);
     setSegments({ intro: null, recap: null, outro: null, preview: null });
+    setSegmentSourceIdentity(null);
     setCountdownRemaining(null);
     autoSkippedRef.current = new Set();
     setPlaybackDetails(null);
@@ -443,19 +742,29 @@ export default function VideoPlayer({
     setProgressError("");
     setPlaying(false);
     setBuffering(false);
-    setPlaybackState(file.playbackMode === "native" ? "native" : autoStart ? "preparing" : "idle");
+    setPlaybackState("inspecting");
+    setAudioInspection("loading");
+    setAudioTracks([]);
+    setSelectedAudioStreamIndex(null);
+    setAudioError("");
     setSubtitleDiscovery((current) => ({ ...current, state: "loading", tracks: [] }));
     setSubtitleCues({});
     setActiveSubtitleId(null);
     setSubtitleError("");
     setMenu(null);
-    if (remotePlayback.castState.active) switchCastForCurrentSource();
-  }, [sourceIdentity, file.playbackMode, autoStart, remotePlayback.castState.active]);
+  }, [sourceIdentity, remotePlayback.castState.active]);
+
+  useEffect(() => {
+    if (audioInspection === "ready" && castTransitionRef.current
+      && remotePlayback.castState.active) switchCastForCurrentSource();
+  }, [audioInspection, remotePlayback.castState.active]);
 
   useEffect(() => {
     if (!suspended) return;
     playbackGenerationRef.current += 1;
     abortRef.current?.abort();
+    playbackReadyAbortRef.current?.abort(new DOMException("Playback was suspended.", "AbortError"));
+    playbackReadyAbortRef.current = null;
     stopPolling();
     hlsRef.current?.destroy();
     hlsRef.current = null;
@@ -478,13 +787,14 @@ export default function VideoPlayer({
   }, [suspended]);
 
   const startAutomatically = useEffectEvent(() => {
+    if (audioInspection === "loading") return;
     if (remotePlayback.castState.active) {
       if (castTransitionRef.current) return;
       void remotePlayback.switchCastSource(() => prepareRemoteSource(initialPosition))
         .finally(() => { castTransitionRef.current = false; });
       return;
     }
-    if (file.playbackMode === "transcode") {
+    if (requiresPreparedPlayback) {
       initialSeekAppliedRef.current = true;
       void preparePlayback(initialPosition);
       return;
@@ -501,11 +811,11 @@ export default function VideoPlayer({
   });
 
   useEffect(() => {
-    if (!autoStart) return undefined;
+    if (!autoStart || watchTogetherActive) return undefined;
     let cancelled = false;
     queueMicrotask(() => { if (!cancelled) startAutomatically(); });
     return () => { cancelled = true; };
-  }, [autoStart, sourceIdentity]);
+  }, [audioInspection, autoStart, sourceIdentity, watchTogetherActive]);
 
   async function getRemoteOrigin() {
     if (remoteOriginRef.current) return remoteOriginRef.current;
@@ -518,7 +828,10 @@ export default function VideoPlayer({
     return payload.origin;
   }
 
-  async function prepareRemoteSource(startTime = timelineRef.current.position) {
+  async function prepareRemoteSource(
+    startTime = timelineRef.current.position,
+    audioStreamIndex = selectedAudioStreamIndex,
+  ) {
     const origin = await getRemoteOrigin();
     let mediaPath = `${baseUrl}/stream`;
     let contentType = file.mimeType;
@@ -527,11 +840,20 @@ export default function VideoPlayer({
     let sourceDuration = timelineRef.current.duration;
     let mode = "direct";
 
-    if (file.playbackMode === "transcode") {
+    {
       const response = await fetch(playbackUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ startTime: receiverStartTime }),
+        body: JSON.stringify({
+          startTime: receiverStartTime,
+          audioStreamIndex,
+          capabilities: {
+            direct: "unsupported",
+            hls: "supported",
+            video: { h264: "supported", hevc: "unsupported", hdr: "unsupported", dolbyVision: "unsupported" },
+            audio: { aac: "supported", ac3: "unsupported", eac3: "unsupported", truehd: "unsupported", atmos: "unsupported" },
+          },
+        }),
       });
       const payload = await responseJson(response);
       if (!response.ok) {
@@ -623,7 +945,9 @@ export default function VideoPlayer({
       }
       const nextDuration = cast.duration || timelineRef.current.duration;
       timelineRef.current = { position: cast.position, duration: nextDuration };
-      if (!nearEndNotifiedRef.current && shouldOfferNextEpisode(cast.position, nextDuration, segments.outro)) {
+      if (!nearEndNotifiedRef.current && shouldOfferNextEpisode(
+        cast.position, nextDuration, segmentPlaybackRange(currentSegments.outro),
+      )) {
         nearEndNotifiedRef.current = true;
         onNearEnd?.({ position: cast.position, duration: nextDuration });
       }
@@ -632,9 +956,9 @@ export default function VideoPlayer({
         void saveProgress({ position: nextDuration, duration: nextDuration }).finally(() => onEnded?.());
       }
     } else if (castWasActiveRef.current) {
-      if (file.playbackMode === "native" && video && timelineRef.current.position < video.duration) {
+      if (!requiresPreparedPlayback && video && timelineRef.current.position < video.duration) {
         video.currentTime = timelineRef.current.position;
-      } else if (file.playbackMode === "transcode") {
+      } else if (requiresPreparedPlayback) {
         hlsRef.current?.destroy();
         hlsRef.current = null;
         video?.removeAttribute("src");
@@ -643,12 +967,12 @@ export default function VideoPlayer({
     }
     castWasActiveRef.current = cast.active;
   }, [
-    file.playbackMode,
+    requiresPreparedPlayback,
     onEnded,
     onNearEnd,
     remotePlayback.castState,
     saveProgress,
-    segments.outro,
+    currentSegments.outro,
   ]);
 
   useEffect(() => {
@@ -762,6 +1086,7 @@ export default function VideoPlayer({
 
   useEffect(() => () => {
     abortRef.current?.abort();
+    playbackReadyAbortRef.current?.abort(new DOMException("Player closed.", "AbortError"));
     stopPolling();
     hlsRef.current?.destroy();
     clearTimeout(hideTimerRef.current);
@@ -783,7 +1108,7 @@ export default function VideoPlayer({
   }
 
   function updateTimeline(video) {
-    const origin = file.playbackMode === "transcode" ? (playbackDetails?.originSeconds || 0) : 0;
+    const origin = requiresPreparedPlayback ? (playbackDetails?.originSeconds || 0) : 0;
     const nextPosition = origin + (video.currentTime || 0);
     const pendingSeek = seekTargetRef.current;
     const seekConfirmed = pendingSeek && seekHasArrived(
@@ -804,8 +1129,10 @@ export default function VideoPlayer({
       position: visiblePosition,
       duration: nextDuration,
     };
-    if (!pendingSeek && playbackState !== "preparing" && !suspended
-      && !nearEndNotifiedRef.current && shouldOfferNextEpisode(nextPosition, nextDuration, segments.outro)) {
+    if (!pendingSeek && playbackState !== "preparing" && !suspended && !watchTogether?.isGuest
+      && !nearEndNotifiedRef.current && shouldOfferNextEpisode(
+        nextPosition, nextDuration, segmentPlaybackRange(currentSegments.outro),
+      )) {
       nearEndNotifiedRef.current = true;
       onNearEnd?.({ position: nextPosition, duration: nextDuration });
     }
@@ -827,7 +1154,7 @@ export default function VideoPlayer({
     setPlaying(false);
     if (!isPlaybackAtEnd(timeline.position, timeline.duration)) {
       void saveProgress(timeline).finally(() => {
-        if (file.playbackMode === "transcode" && !earlyEndRecoveryRef.current) {
+        if (requiresPreparedPlayback && !earlyEndRecoveryRef.current) {
           earlyEndRecoveryRef.current = true;
           setPlaybackHint("Playback ended before the episode was finished. Resuming from the current position…");
           void preparePlayback(timeline.position);
@@ -840,12 +1167,12 @@ export default function VideoPlayer({
 
     endedRef.current = true;
     void saveProgress({ position: timeline.duration, duration: timeline.duration }).finally(() => {
-      onEnded?.();
+      if (!watchTogether?.isGuest) onEnded?.();
     });
   }
 
   async function togglePlayback() {
-    if (suspended) return;
+    if (suspended || playbackState === "inspecting" || watchTogetherPlaybackLocked) return;
     if (remotePlayback.castState.active) {
       remotePlayback.toggleCastPlayback();
       return;
@@ -853,7 +1180,7 @@ export default function VideoPlayer({
     const video = videoRef.current;
     if (!video) return;
     if (
-      file.playbackMode === "transcode"
+      requiresPreparedPlayback
       && (["idle", "failed"].includes(playbackState) || !hlsRef.current)
     ) {
       await preparePlayback(initialSeekAppliedRef.current ? effectiveCurrentTime : initialPosition);
@@ -922,6 +1249,69 @@ export default function VideoPlayer({
     else if (subtitles[0]) selectSubtitle(subtitles[0].id);
   }
 
+  function audioLanguageLabel(track) {
+    return track?.language && track.language !== "und"
+      ? displayLanguage(track.language)
+      : t("Unknown language");
+  }
+
+  function audioTrackDetails(track) {
+    return [
+      track.commentary ? t("Commentary") : null,
+      track.audioDescription ? t("Audio description") : null,
+      track.title,
+      track.channelLayout || (track.channels ? t("{count} channels", { count: track.channels }) : null),
+      track.atmos ? "Dolby Atmos" : null,
+      track.codec?.toUpperCase(),
+    ].filter(Boolean).join(" · ");
+  }
+
+  async function switchAudioTrack(streamIndex) {
+    const nextTrack = audioTracks.find((track) => track.index === streamIndex);
+    if (!nextTrack || streamIndex === selectedAudioStreamIndex) {
+      setMenu(null);
+      return;
+    }
+    const previousIndex = selectedAudioStreamIndex;
+    const position = timelineRef.current.position || initialPosition;
+    const shouldResume = effectivePlaying;
+    setSelectedAudioStreamIndex(streamIndex);
+    setAudioError("");
+    setMenu(null);
+
+    if (!preparedRef.current && !remotePlayback.castState.active) return;
+    if (remotePlayback.castState.active) {
+      const source = await remotePlayback.switchCastSource(
+        () => prepareRemoteSource(position, streamIndex),
+      );
+      if (!source) setSelectedAudioStreamIndex(previousIndex);
+      return;
+    }
+
+    const switched = await preparePlayback(position, streamIndex, shouldResume);
+    if (switched) return;
+    setSelectedAudioStreamIndex(previousIndex);
+    setAudioError(t("The selected audio track could not be played. Restoring the previous track."));
+    if (previousIndex !== null) await preparePlayback(position, previousIndex, shouldResume);
+  }
+
+  async function saveSelectedAudioPreference() {
+    if (!profileId || !updateAudioPreferences || !selectedAudioTrack || selectedAudioTrack.language === "und"
+      || isSpecialAudioTrack(selectedAudioTrack)) return;
+    setSavingAudioPreference(true);
+    setAudioError("");
+    try {
+      await updateAudioPreferences(profileId, { preferredLanguage: selectedAudioTrack.language });
+      setPlaybackHint(t("{language} will be preferred for this profile.", {
+        language: audioLanguageLabel(selectedAudioTrack),
+      }));
+    } catch (error) {
+      setAudioError(error.message || t("Audio preference could not be saved."));
+    } finally {
+      setSavingAudioPreference(false);
+    }
+  }
+
   function updateSubtitleAppearance(patch) {
     const next = normalizeSubtitleAppearance({ ...subtitleAppearance, ...patch });
     setSubtitleAppearance(next);
@@ -933,8 +1323,8 @@ export default function VideoPlayer({
     setSubtitleAppearance(next);
   }
 
-  function requestSeek(target, immediate = false) {
-    if (!effectiveDuration || suspended) return;
+  function requestSeek(target, immediate = false, fromWatchTogether = false) {
+    if (!effectiveDuration || suspended || (watchTogetherTransportLocked && !fromWatchTogether)) return;
     const next = clampSeekTarget(target, effectiveDuration);
     if (next === null) return;
     seekTargetRef.current = { target: next };
@@ -956,8 +1346,10 @@ export default function VideoPlayer({
       return;
     }
     const commit = async () => {
+      if (watchTogetherActive && watchTogether?.isHost && !fromWatchTogether
+        && watchTogether.seekTogether(next)) return;
       setBuffering(true);
-      if (file.playbackMode === "native") {
+      if (!requiresPreparedPlayback) {
         if (videoRef.current) videoRef.current.currentTime = next;
         return;
       }
@@ -967,7 +1359,7 @@ export default function VideoPlayer({
   }
 
   function skipBy(seconds) {
-    if (suspended || !effectiveDuration) return;
+    if (suspended || !effectiveDuration || watchTogetherTransportLocked) return;
     const target = skipTarget(effectiveCurrentTime, seekTargetRef.current?.target, seconds, effectiveDuration);
     if (target === null) return;
     requestSeek(target, true);
@@ -1073,7 +1465,7 @@ export default function VideoPlayer({
     revealControls();
   }
 
-  const nativeUrl = file.playbackMode === "native" ? `${baseUrl}/stream` : undefined;
+  const nativeUrl = playbackDetails?.delivery === "direct" ? playbackDetails.sourceUrl : undefined;
   const effectivePlaying = remotePlayback.castState.active ? remotePlayback.castState.playing : playing;
   const effectiveBuffering = remotePlayback.castState.active ? remotePlayback.castBusy : buffering;
   const effectiveCurrentTime = remotePlayback.castState.active
@@ -1084,23 +1476,93 @@ export default function VideoPlayer({
     : duration;
   const effectiveMuted = remotePlayback.castState.active ? remotePlayback.castState.muted : muted;
   const effectiveVolume = remotePlayback.castState.active ? remotePlayback.castState.volume : volume;
-  const canSeek = effectiveDuration > 0;
+  const canSeek = effectiveDuration > 0 && !watchTogetherTransportLocked;
   const timelineTime = seekPreview ?? effectiveCurrentTime;
   const playedRatio = effectiveDuration > 0 ? timelineTime / effectiveDuration : 0;
-  const skipSegment = activeSkipSegment(timelineTime, segments);
-  const showSkipButton = !suspended && !playbackPreferences.autoSkipIntrosRecaps && Boolean(skipSegment);
-  const showEpisodePrompt = !suspended && Boolean(nextEpisodePrompt)
+  const skipSegment = activeSkipSegment(timelineTime, currentSegments);
+  const showSkipButton = !suspended && showManualSkip(skipSegment, playbackPreferences.autoSkipIntrosRecaps);
+  const showEpisodePrompt = !suspended && !watchTogether?.isGuest && Boolean(nextEpisodePrompt)
     && (nextEpisodePrompt.immediate
-      || shouldShowUpNext(timelineTime, effectiveDuration, segments.outro));
+      || shouldShowUpNext(timelineTime, effectiveDuration, segmentPlaybackRange(currentSegments.outro)));
   const activateEpisodePrompt = useEffectEvent(() => nextEpisodePrompt?.onAction?.());
   const autoSkipSegment = useEffectEvent((segment) => {
     if (autoSkippedRef.current.has(segment.type)) return;
     autoSkippedRef.current.add(segment.type);
-    requestSeek(segment.end, true);
+    requestSeek(segment.endMs / 1000, true);
+  });
+
+  const watchTogetherController = useEffectEvent(() => ({
+    getState: () => ({
+      position: timelineRef.current.position,
+      duration: timelineRef.current.duration,
+      playing: Boolean(videoRef.current && !videoRef.current.paused && !videoRef.current.ended),
+    }),
+    play: async () => {
+      const video = videoRef.current;
+      if (!video) throw new Error("The local player is unavailable.");
+      if (requiresPreparedPlayback && (["idle", "failed"].includes(playbackState) || !hlsRef.current)) {
+        const prepared = await preparePlayback(timelineRef.current.position, selectedAudioStreamIndex, true);
+        if (!prepared) throw new Error("The local source could not be prepared.");
+      }
+      await waitForCanPlay(video);
+      await playForSync(video);
+    },
+    pause: () => videoRef.current?.pause(),
+    pauseForSync: async () => {
+      const video = videoRef.current;
+      if (!video) throw new Error("The local player is unavailable.");
+      await pauseForSync(video);
+    },
+    seek: async (target) => {
+      const video = videoRef.current;
+      if (!video) throw new Error("The local player is unavailable.");
+      const next = clampSeekTarget(target, timelineRef.current.duration);
+      if (next === null) return;
+      timelineRef.current.position = next;
+      setSeekPreview(next);
+      if (requiresPreparedPlayback) {
+        const prepared = await preparePlayback(next, selectedAudioStreamIndex, false, true);
+        if (!prepared) throw new Error("The local source could not seek to the host position.");
+      } else {
+        video.currentTime = next;
+        await waitForSynchronizedPosition(video, next);
+      }
+      seekTargetRef.current = null;
+      setSeekPreview(null);
+    },
+    setRate: (rate) => {
+      if (videoRef.current) videoRef.current.playbackRate = rate;
+      setPlaybackRate(rate);
+    },
+    prime: async () => {
+      const video = videoRef.current;
+      if (!video) throw new Error("The local player is unavailable.");
+      const wasMuted = video.muted;
+      video.muted = true;
+      await video.play();
+      video.pause();
+      video.muted = wasMuted;
+    },
+  }));
+
+  useEffect(() => {
+    if (!watchTogetherActive || !attachWatchTogetherPlayer) return undefined;
+    if (videoRef.current) videoRef.current.playbackRate = 1;
+    return attachWatchTogetherPlayer(media, watchTogetherController());
+  }, [attachWatchTogetherPlayer, media, sourceIdentity, watchTogetherActive]);
+
+  const prepareWatchTogetherSource = useEffectEvent(() => {
+    void preparePlayback(initialPosition, selectedAudioStreamIndex, false);
   });
 
   useEffect(() => {
-    if (suspended || !playbackPreferences.autoSkipIntrosRecaps || !skipSegment) return;
+    if (!watchTogetherActive || !requiresPreparedPlayback || audioInspection !== "ready"
+      || playbackState !== "idle") return;
+    queueMicrotask(() => prepareWatchTogetherSource());
+  }, [audioInspection, playbackState, requiresPreparedPlayback, sourceIdentity, watchTogetherActive]);
+
+  useEffect(() => {
+    if (suspended || !playbackPreferences.autoSkipIntrosRecaps || !automaticSegment(skipSegment)) return;
     autoSkipSegment(skipSegment);
   }, [suspended, playbackPreferences.autoSkipIntrosRecaps, skipSegment, sourceIdentity]);
 
@@ -1127,7 +1589,7 @@ export default function VideoPlayer({
 
   useEffect(() => {
     if (!showEpisodePrompt || nextEpisodePrompt?.kind !== "ready"
-      || !playbackPreferences.autoPlayNextEpisode || !segments.outro || !effectivePlaying) {
+      || !playbackPreferences.autoPlayNextEpisode || !automaticSegment(currentSegments.outro) || !effectivePlaying) {
       queueMicrotask(() => setCountdownRemaining(null));
       return undefined;
     }
@@ -1143,7 +1605,7 @@ export default function VideoPlayer({
     }, 1000);
     return () => clearInterval(timer);
   }, [showEpisodePrompt, nextEpisodePrompt?.kind, playbackPreferences.autoPlayNextEpisode,
-    segments.outro, effectivePlaying, sourceIdentity]);
+    currentSegments.outro, effectivePlaying, sourceIdentity]);
 
   async function updatePlaybackSetting(key) {
     if (!onPlaybackPreferencesChange || savingSetting) return;
@@ -1183,6 +1645,11 @@ export default function VideoPlayer({
     }))
     .filter((group) => group.tracks.length > 0);
 
+  const playbackBadges = playbackMediaBadges(
+    playbackDetails?.media,
+    playbackDetails?.playbackPlan,
+  );
+
   useEffect(() => {
     if (menu !== "captions") return;
     const items = captionMenuItems();
@@ -1190,9 +1657,24 @@ export default function VideoPlayer({
     focusCaptionMenuItem(active || items[0]);
   }, [activeSubtitleId, menu, subtitles.length]);
 
-  const conversionLabel = playbackDetails
-    ? `${playbackDetails.strategy === "remux" ? "Remuxing without video conversion" : "Converting to H.264 + AAC"} · ${playbackDetails.media.videoCodec}${playbackDetails.media.audioCodec ? ` / ${playbackDetails.media.audioCodec}` : ""}`
-    : playbackState === "preparing"
+  const output = playbackDetails?.playbackPlan?.output;
+  const hdrLabel = output?.hdrFormat === "dolby-vision" ? "Dolby Vision"
+    : output?.hdrFormat === "hdr10-plus" ? "HDR10+"
+      : output?.hdrFormat === "hdr10" ? "HDR10"
+        : output?.hdrFormat === "hlg" ? "HLG"
+          : output?.hdrFormat === "hdr" ? "HDR" : "";
+  const videoAction = playbackDetails?.playbackPlan?.videoAction === "copy" ? "preserved"
+    : playbackDetails?.playbackPlan?.videoAction === "use-compatible-base-layer"
+      ? "compatible layer" : "converted";
+  const audioAction = playbackDetails?.playbackPlan?.audioAction === "copy" ? "preserved" : "converted";
+  const conversionLabel = playbackDetails?.strategy
+    ? `${playbackDetails.strategy === "direct" ? "Direct play"
+      : playbackDetails.strategy === "remux" ? "Remux"
+        : playbackDetails.strategy === "selective-transcode" ? "Selective conversion"
+          : "Compatibility conversion"} · Video: ${codecLabel(output?.videoCodec || playbackDetails.media.videoCodec)}${hdrLabel ? ` ${hdrLabel}` : ""} (${videoAction})${output?.audioCodec || playbackDetails.media.audioCodec ? ` · Audio: ${codecLabel(output?.audioCodec || playbackDetails.media.audioCodec)} (${audioAction})` : ""}`
+    : playbackState === "inspecting"
+      ? t("Inspecting audio tracks…")
+      : playbackState === "preparing"
       ? "Buffering torrent data, probing codecs, and preparing playback…"
       : "This source will be inspected and prepared when you press play.";
 
@@ -1213,7 +1695,7 @@ export default function VideoPlayer({
           ref={videoRef}
           playsInline
           x-webkit-airplay="allow"
-          preload={file.playbackMode === "native" ? "auto" : "none"}
+          preload={!requiresPreparedPlayback ? "auto" : "none"}
           src={nativeUrl}
           onPointerUp={handleVideoPointerUp}
           onClick={(event) => {
@@ -1230,8 +1712,9 @@ export default function VideoPlayer({
             video.muted = muted;
             video.playbackRate = playbackRate;
             updateTimeline(video);
+            if (watchTogetherActive) watchTogether.reportPlayer({ duration: Number(video.duration) || 0 });
             if (
-              file.playbackMode === "native"
+              !requiresPreparedPlayback
               && !initialSeekAppliedRef.current
               && initialPosition > 0
               && initialPosition < video.duration
@@ -1240,25 +1723,42 @@ export default function VideoPlayer({
               video.currentTime = initialPosition;
             }
           }}
-          onDurationChange={(event) => updateTimeline(event.currentTarget)}
+          onDurationChange={(event) => {
+            const timeline = updateTimeline(event.currentTarget);
+            if (watchTogetherActive) watchTogether.reportPlayer({ duration: timeline.duration });
+          }}
           onTimeUpdate={(event) => updateTimeline(event.currentTarget)}
           onProgress={(event) => updateTimeline(event.currentTarget)}
           onPlay={() => {
             setPlaying(true);
             revealControls(true);
+            if (watchTogetherActive) queueMicrotask(() => watchTogether.broadcastPlayback(true));
           }}
           onPause={() => {
             setPlaying(false);
             revealControls(false);
             if (!endedRef.current) void saveProgress();
+            if (watchTogetherActive) queueMicrotask(() => watchTogether.broadcastPlayback(true));
           }}
           onPlaying={() => {
             setBuffering(false);
             setPlaybackHint("");
+            if (watchTogetherActive) watchTogether.reportPlayer({ canPlay: true, buffering: false,
+              duration: timelineRef.current.duration });
           }}
-          onWaiting={() => setBuffering(true)}
-          onCanPlay={() => setBuffering(false)}
-          onSeeked={() => void saveProgress()}
+          onWaiting={() => {
+            setBuffering(true);
+            if (watchTogetherActive) watchTogether.reportPlayer({ buffering: true });
+          }}
+          onCanPlay={() => {
+            setBuffering(false);
+            if (watchTogetherActive) watchTogether.reportPlayer({ canPlay: true, buffering: false,
+              duration: timelineRef.current.duration || Number(videoRef.current?.duration) || 0 });
+          }}
+          onSeeked={() => {
+            void saveProgress();
+            if (watchTogetherActive) queueMicrotask(() => watchTogether.broadcastPlayback(true));
+          }}
           onEnded={(event) => handlePlaybackEnded(event.currentTarget)}
           onVolumeChange={(event) => {
             setVolume(event.currentTarget.volume);
@@ -1266,7 +1766,14 @@ export default function VideoPlayer({
           }}
           onError={() => {
             if (playbackState === "preparing" || suspended) return;
-            if (file.playbackMode === "transcode") {
+            if (playbackDetails?.delivery === "direct") {
+              const message = mediaErrorMessage(videoRef.current?.error);
+              if (!retryWithCompatibilityFallback(playbackDetails, message)) {
+                setPlaybackError("The browser could not play this video. Try another source.");
+              }
+              return;
+            }
+            if (requiresPreparedPlayback) {
               const mediaError = videoRef.current?.error;
               const hls = hlsRef.current;
               if (mediaError?.code === 3 && hls && !recoveryRef.current.media) {
@@ -1275,8 +1782,6 @@ export default function VideoPlayer({
               } else {
                 void reportPlayerFailure(mediaErrorMessage(mediaError));
               }
-            } else {
-              setPlaybackError("The browser could not play this video. Try another source.");
             }
           }}
         >
@@ -1309,7 +1814,7 @@ export default function VideoPlayer({
           <button type="button" onClick={() => setHomeScreenHintVisible(false)} aria-label="Dismiss fullscreen tip">Got it</button>
         </div> : null}
         {showSkipButton ? <button className="playerSegmentSkip" ref={skipButtonRef} type="button"
-          onClick={() => requestSeek(skipSegment.end, true)}>
+          onClick={() => requestSeek(skipSegment.endMs / 1000, true)}>
           Skip {skipSegment.type === "recap" ? "Recap" : "Intro"}
         </button> : null}
         {showEpisodePrompt ? <div className="playerEpisodePrompt" ref={episodePromptRef}
@@ -1318,9 +1823,10 @@ export default function VideoPlayer({
           onKeyDown={handleEpisodePromptKeyDown}>
           {nextEpisodePrompt.title ? <strong>{nextEpisodePrompt.title}</strong> : null}
           <span>{nextEpisodePrompt.text}</span>
-          {countdownRemaining !== null && nextEpisodePrompt.kind === "ready" && segments.outro
+          {countdownRemaining !== null && nextEpisodePrompt.kind === "ready" && automaticSegment(currentSegments.outro)
             ? <small>Playing in {countdownRemaining} seconds</small> : null}
-          {nextEpisodePrompt.kind === "ready" && playbackPreferences.autoPlayNextEpisode && !segments.outro
+          {nextEpisodePrompt.kind === "ready" && playbackPreferences.autoPlayNextEpisode
+            && !automaticSegment(currentSegments.outro)
             ? <small>Will play when this episode ends</small> : null}
           {nextEpisodePrompt.action || nextEpisodePrompt.secondaryAction ? <div className="playerEpisodePromptActions">
             {nextEpisodePrompt.action ? <button type="button" onClick={nextEpisodePrompt.onAction}>
@@ -1348,25 +1854,36 @@ export default function VideoPlayer({
           <span className="playbackModeBadge">
             {remotePlayback.castState.active
               ? `Playing on ${remotePlayback.castState.deviceName}`
-              : remotePlayback.airPlayActive ? "Playing with AirPlay" : file.playbackMode === "native" ? "Native" : "HLS"}
+              : remotePlayback.airPlayActive ? "Playing with AirPlay" : !requiresPreparedPlayback ? "Native" : "HLS"}
           </span>
         </div>
+        {playbackBadges.length ? <div className="playerMediaBadges mediaCapabilityBadges" aria-label="Playback media formats">
+          {playbackBadges.map((badge) => <span
+            className={badge.playbackStatus === "active" ? "active" : "inactive"}
+            key={badge.id}
+            aria-label={badge.statusLabel}
+            title={badge.statusLabel}
+          >{badge.label}</span>)}
+        </div> : null}
 
         <div className="playerCenter">
-          {playbackState === "preparing" || effectiveBuffering ? (
+          {playbackState === "inspecting" || playbackState === "preparing" || effectiveBuffering ? (
             <div className="playerSpinner" role="status" aria-label="Buffering" />
           ) : null}
-          {!suspended && playbackState !== "preparing" && !effectiveBuffering && !effectivePlaying ? (
-            <button className="centerPlayButton" type="button" onClick={() => void togglePlayback()}>
+              {!suspended && !["inspecting", "preparing"].includes(playbackState)
+            && !effectiveBuffering && !effectivePlaying ? (
+            <button className="centerPlayButton" type="button" disabled={watchTogetherPlaybackLocked}
+              onClick={() => void togglePlayback()}>
               <Icon name="play" />
               <span className="srOnly">
-                {file.playbackMode === "transcode" && ["idle", "failed"].includes(playbackState)
+                {requiresPreparedPlayback && ["idle", "failed"].includes(playbackState)
                   ? playbackState === "failed" ? "Retry playback" : "Prepare and play"
-                  : "Play"}
+                  : watchTogether?.isGuest ? "Waiting for host" : !watchTogether?.allReady && watchTogetherActive
+                    ? "Waiting for everyone" : "Play"}
               </span>
             </button>
           ) : null}
-          {file.playbackMode === "transcode" && ["idle", "failed"].includes(playbackState) ? (
+          {requiresPreparedPlayback && ["idle", "failed"].includes(playbackState) ? (
             <span className="prepareLabel">
               {playbackState === "failed" ? "Retry playback" : "Prepare & play"}
             </span>
@@ -1374,6 +1891,38 @@ export default function VideoPlayer({
         </div>
 
         <div className="playerBottomBar">
+          {menu === "audio" ? (
+            <div className="playerMenu captionMenu audioMenu" id="audio-menu" role="menu" aria-label={t("Audio tracks")}>
+              <div className="captionMenuHeader"><span>{t("Audio")}</span></div>
+              <div className="captionTrackList">
+                {audioTracks.map((track) => (
+                  <button
+                    className={selectedAudioStreamIndex === track.index ? "active" : ""}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={selectedAudioStreamIndex === track.index}
+                    key={track.index}
+                    onClick={() => void switchAudioTrack(track.index)}
+                  >
+                    <span>{selectedAudioStreamIndex === track.index ? "✓ " : ""}{audioLanguageLabel(track)}</span>
+                    <small>{audioTrackDetails(track) || t("Audio track {number}", { number: track.index })}</small>
+                  </button>
+                ))}
+              </div>
+              {profileId && selectedAudioTrack && selectedAudioTrack.language !== "und"
+                && !isSpecialAudioTrack(selectedAudioTrack) ? (
+                  <div className="captionMenuFooter">
+                    <button type="button" disabled={savingAudioPreference
+                      || preferredAudioLanguage === selectedAudioTrack.language}
+                    onClick={() => void saveSelectedAudioPreference()}>
+                      {preferredAudioLanguage === selectedAudioTrack.language
+                        ? t("Preferred for this profile")
+                        : t("Always prefer {language}", { language: audioLanguageLabel(selectedAudioTrack) })}
+                    </button>
+                  </div>
+                ) : null}
+            </div>
+          ) : null}
           {menu === "captions" ? (
             <div
               className="playerMenu captionMenu"
@@ -1538,6 +2087,7 @@ export default function VideoPlayer({
                   type="button"
                   role="menuitemradio"
                   aria-checked={playbackRate === rate}
+                  disabled={watchTogetherActive}
                   key={rate}
                   onClick={() => {
                     if (videoRef.current) videoRef.current.playbackRate = rate;
@@ -1565,6 +2115,34 @@ export default function VideoPlayer({
                 </button>
                 {settingsError ? <small role="alert">{settingsError}</small> : null}
               </div> : null}
+            </div>
+          ) : null}
+          {menu === "together" && watchTogetherActive ? (
+            <div className="playerMenu watchTogetherPlayerMenu" aria-label="Watch Together">
+              <span>Room {watchTogether.room.code}</span>
+              <div className="watchTogetherPlayerRoster">
+                {watchTogether.participants.map((participant) => (
+                  <div key={participant.id}>
+                    <strong>{participant.name}{participant.role === "host" ? " · Host" : ""}</strong>
+                    <small>{participant.channel === "reconnecting" ? "Reconnecting…"
+                      : participant.channel === "failed" ? "Connection failed"
+                      : participant.syncFailed ? "Sync failed" : participant.syncing ? "Seeking…"
+                      : participant.ready ? participant.buffering ? "Buffering" : "Ready"
+                      : participant.compatible === false ? "Choose another source" : "Not ready"}</small>
+                  </div>
+                ))}
+              </div>
+              {watchTogether.localPlayback.canPlay && !watchTogether.localPlayback.ready ? (
+                <button type="button" onClick={() => void watchTogether.markReady()}>I&apos;m ready</button>
+              ) : null}
+              {watchTogether.localPlayback.syncFailed ? (
+                <button type="button" onClick={() => void watchTogether.retrySeekSync()}>Retry sync</button>
+              ) : null}
+              <small className="remotePlaybackNote">{watchTogether.isHost
+                ? watchTogether.seekSyncing ? "Waiting for everyone to reach the shared position."
+                  : watchTogether.allReady ? "Everyone is ready. You control playback." : "Waiting for everyone to become ready."
+                : "The host controls play, pause, seeking, and episodes."}</small>
+              <button className="remoteStopButton" type="button" onClick={watchTogether.leaveRoom}>Leave room</button>
             </div>
           ) : null}
           {menu === "remote" ? (
@@ -1596,7 +2174,7 @@ export default function VideoPlayer({
                   {remotePlayback.airPlayAvailable ? (
                     <button
                       type="button"
-                      disabled={file.playbackMode === "transcode" && playbackState !== "ready"}
+                      disabled={requiresPreparedPlayback && playbackState !== "ready"}
                       onClick={remotePlayback.showAirPlayPicker}
                     >
                       AirPlay
@@ -1640,13 +2218,14 @@ export default function VideoPlayer({
           <div className="playerControls">
             <div className="controlGroup">
               {onPreviousEpisode ? <button type="button" aria-label="Previous episode"
-                title="Previous episode" disabled={!hasPreviousEpisode || suspended}
+                title="Previous episode" disabled={!hasPreviousEpisode || suspended || watchTogetherPlaybackLocked}
                 onClick={onPreviousEpisode}><Icon name="previous" /></button> : null}
-              <button type="button" aria-label={effectivePlaying ? "Pause" : "Play"} onClick={() => void togglePlayback()}>
+              <button type="button" aria-label={effectivePlaying ? "Pause" : "Play"}
+                disabled={watchTogetherPlaybackLocked} onClick={() => void togglePlayback()}>
                 <Icon name={effectivePlaying ? "pause" : "play"} />
               </button>
               {onNextEpisode ? <button type="button" aria-label="Next episode"
-                title="Next episode" disabled={!hasNextEpisode || suspended}
+                title="Next episode" disabled={!hasNextEpisode || suspended || watchTogetherPlaybackLocked}
                 onClick={onNextEpisode}><Icon name="next" /></button> : null}
               <button
                 type="button"
@@ -1690,6 +2269,23 @@ export default function VideoPlayer({
               <span className="playerTime">{formatTime(timelineTime)} / {effectiveDuration ? formatTime(effectiveDuration) : "--:--"}</span>
             </div>
             <div className="controlGroup">
+              {audioTracks.length > 1 ? (
+                <button
+                  className={menu === "audio" ? "active" : ""}
+                  ref={audioButtonRef}
+                  type="button"
+                  aria-label={t("Audio tracks")}
+                  aria-expanded={menu === "audio"}
+                  aria-controls="audio-menu"
+                  onClick={() => {
+                    clearTimeout(hideTimerRef.current);
+                    setControlsVisible(true);
+                    setMenu(menu === "audio" ? null : "audio");
+                  }}
+                >
+                  <span className="ccIcon">A</span>
+                </button>
+              ) : null}
               <button
                 className={activeSubtitleId !== null ? "active" : ""}
                 ref={captionButtonRef}
@@ -1719,7 +2315,16 @@ export default function VideoPlayer({
               >
                 <Icon name="settings" />
               </button>
-              {remotePlayback.castAvailable || remotePlayback.airPlayAvailable || remotePlayback.castState.active ? (
+              {watchTogetherActive ? (
+                <button className={menu === "together" ? "active" : ""} type="button"
+                  aria-label="Watch Together" aria-expanded={menu === "together"}
+                  onClick={() => {
+                    clearTimeout(hideTimerRef.current);
+                    setControlsVisible(true);
+                    setMenu(menu === "together" ? null : "together");
+                  }}><Icon name="together" /></button>
+              ) : null}
+              {!watchTogetherActive && (remotePlayback.castAvailable || remotePlayback.airPlayAvailable || remotePlayback.castState.active) ? (
                 <button
                   className={menu === "remote" || remotePlayback.castState.active || remotePlayback.airPlayActive ? "active" : ""}
                   type="button"
@@ -1749,8 +2354,9 @@ export default function VideoPlayer({
         </div>
       </div>
 
-      {file.playbackMode === "transcode" ? <div className="conversionNotice">{conversionLabel}</div> : null}
+      {requiresPreparedPlayback ? <div className="conversionNotice">{conversionLabel}</div> : null}
       {subtitleError ? <div className="notice error" role="alert">{subtitleError}</div> : null}
+      {audioError ? <div className="notice error" role="alert">{audioError}</div> : null}
       {remotePlayback.error ? <div className="notice error" role="alert">Remote playback: {remotePlayback.error}</div> : null}
       {playbackError ? <div className="notice error" role="alert">{playbackError}</div> : null}
       {playbackHint ? <div className="notice">{playbackHint}</div> : null}

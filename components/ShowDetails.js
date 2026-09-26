@@ -1,15 +1,19 @@
 "use client";
 
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { useEffect, useEffectEvent, useMemo, useReducer, useRef, useState } from "react";
 import SourcePanel from "./SourcePanel.js";
-import ReadyEpisodes from "./ReadyEpisodes.js";
+import ReadyEpisodes, { shouldShowReadyEpisodes } from "./ReadyEpisodes.js";
 import { useSourceLookup } from "./useSourceLookup.js";
 import useSavedProgress from "./useSavedProgress.js";
 import { useProfile } from "./ProfileProvider.js";
 import { formatPlaybackTime } from "../lib/history/presentation.js";
 import { findEpisodeFile } from "../lib/video/episode.js";
 import { autoplayReducer } from "../lib/playback/autoplay.js";
+import { useI18n } from "./I18nProvider.js";
+import { useWatchTogether } from "./WatchTogetherProvider.js";
+import { mediaIdentityHref, sameMediaIdentity } from "../lib/watch-together/protocol.js";
 
 async function readJson(response) {
   const data = await response.json();
@@ -22,7 +26,11 @@ function episodeCode(season, episode) {
 }
 
 export default function ShowDetails({ show, initialSeason, initialEpisodeNumber = null, initialIntent = null }) {
+  const { t } = useI18n();
   const { activeProfile } = useProfile();
+  const router = useRouter();
+  const watchTogether = useWatchTogether();
+  const registerPageMedia = watchTogether.registerPageMedia;
   const [season, setSeason] = useState(initialSeason);
   const [playingSeason, setPlayingSeason] = useState(initialSeason);
   const [selectedSeasonNumber, setSelectedSeasonNumber] = useState(initialSeason.number);
@@ -45,11 +53,13 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
   const lookup = useSourceLookup();
   const playbackRef = useRef(null);
   const autoplayAbortRef = useRef(null);
+  const prefetchRef = useRef(null);
   const preparingNextRef = useRef(false);
   const advancingRef = useRef(false);
   const lastReadySessionRef = useRef(null);
   const pendingSourceClearedRef = useRef(false);
   const manualNextRequestedRef = useRef(false);
+  const restoredEpisodeRef = useRef("");
   const [playbackPreferences, setPlaybackPreferences] = useState({
     autoSkipIntrosRecaps: false, autoPlayNextEpisode: false,
   });
@@ -77,6 +87,52 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
   const saved = useSavedProgress(activeProfile?.id, media);
   const resumable = saved.progress && !saved.progress.completed && saved.progress.position >= 30;
   const readySessionId = lookup.session?.backend === "debrid" ? lookup.session.id : null;
+  const guestMediaLocked = Boolean(watchTogether.isGuest && watchTogether.room);
+  const roomMediaMismatch = Boolean(guestMediaLocked
+    && !sameMediaIdentity(watchTogether.room.media, media));
+  const roomMediaHref = roomMediaMismatch ? mediaIdentityHref(watchTogether.room.media) : null;
+  const restoreCachedEpisode = useEffectEvent(async (episode, key) => {
+    const hit = await lookup.restore({
+      type: "show",
+      query: show.sourceTitle || show.title,
+      originalTitle: show.originalTitle,
+      tmdbId: show.id,
+      imdbId: show.imdbId,
+      year: show.year,
+      season: episode.season,
+      episode: episode.number,
+    });
+    if (!hit || selectedEpisodeKey !== key) return;
+    const initialKey = initialEpisodeNumber
+      ? `${initialSeason.number}:${initialEpisodeNumber}` : null;
+    setPlaybackIntent(key === initialKey && initialIntent
+      ? initialIntent : resumable ? "resume" : "start");
+    setPlayingSeason(season);
+    setLaunchedEpisodeKey(key);
+    setTransitionPosition(null);
+  });
+
+  useEffect(() => registerPageMedia(roomMediaMismatch ? null : media),
+    [media, registerPageMedia, roomMediaMismatch]);
+
+  useEffect(() => {
+    if (roomMediaHref) router.replace(roomMediaHref);
+  }, [roomMediaHref, router]);
+
+  useEffect(() => {
+    if (!selectedEpisode || saved.loading || guestMediaLocked || launchedEpisodeKey === selectedEpisodeKey) return;
+    const key = `${activeProfile?.id || "guest"}:show:${show.id}:${selectedEpisodeKey}`;
+    if (restoredEpisodeRef.current === key) return;
+    restoredEpisodeRef.current = key;
+    void restoreCachedEpisode(selectedEpisode, selectedEpisodeKey);
+  }, [activeProfile?.id, guestMediaLocked, launchedEpisodeKey, saved.loading,
+    selectedEpisode, selectedEpisodeKey, show.id]);
+
+  useEffect(() => {
+    if (media && watchTogether.room && watchTogether.isHost && !watchTogether.matchesMedia(media)) {
+      watchTogether.changeMedia(media);
+    }
+  }, [media, watchTogether]);
   const playerFile = lookup.session?.status === "ready" && selectedEpisode
     ? lookup.session.files.find((file) => file.id === lookup.selectedFileId)
       || lookup.session.files.find((file) => file.id === lookup.session.suggestedFileId)
@@ -145,6 +201,13 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
 
   useEffect(() => () => {
     autoplayAbortRef.current?.abort();
+    const pending = prefetchRef.current;
+    pending?.controller.abort();
+    if (pending) {
+      void fetch(`/api/torrents/${encodeURIComponent(pending.sessionId)}/files/${encodeURIComponent(pending.fileId)}/prefetch`, {
+        method: "DELETE", keepalive: true,
+      }).catch(() => {});
+    }
   }, []);
 
   useEffect(() => {
@@ -162,13 +225,36 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
   }, []);
 
   useEffect(() => {
-    if (autoplay.phase === "ready" && (manualNextRequestedRef.current
+    if (!guestMediaLocked && autoplay.phase === "ready" && (manualNextRequestedRef.current
       || (autoplay.endReached && playbackPreferences.autoPlayNextEpisode))) advanceAfterEnd();
-  }, [autoplay.endReached, autoplay.phase, playbackPreferences.autoPlayNextEpisode]);
+  }, [autoplay.endReached, autoplay.phase, guestMediaLocked, playbackPreferences.autoPlayNextEpisode]);
+
+  function stopNextEpisodePrefetch() {
+    const pending = prefetchRef.current;
+    prefetchRef.current = null;
+    if (!pending) return;
+    pending.controller.abort();
+    void fetch(`/api/torrents/${encodeURIComponent(pending.sessionId)}/files/${encodeURIComponent(pending.fileId)}/prefetch`, {
+      method: "DELETE", keepalive: true,
+    }).catch(() => {});
+  }
+
+  function startNextEpisodePrefetch(fileId) {
+    if (!lookup.session?.id || lookup.session.backend === "debrid") return;
+    const pending = prefetchRef.current;
+    if (pending?.sessionId === lookup.session.id && pending.fileId === String(fileId)) return;
+    if (pending) stopNextEpisodePrefetch();
+    const controller = new AbortController();
+    prefetchRef.current = { sessionId: lookup.session.id, fileId: String(fileId), controller };
+    void fetch(`/api/torrents/${encodeURIComponent(lookup.session.id)}/files/${encodeURIComponent(fileId)}/prefetch`, {
+      method: "POST", signal: controller.signal,
+    }).catch(() => {});
+  }
 
   async function clearAutoplay(nextPhase = "reset") {
     autoplayAbortRef.current?.abort();
     autoplayAbortRef.current = null;
+    stopNextEpisodePrefetch();
     preparingNextRef.current = false;
     advancingRef.current = false;
     manualNextRequestedRef.current = false;
@@ -177,6 +263,7 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
   }
 
   async function changeSeason(event) {
+    if (guestMediaLocked) return;
     const number = Number(event.target.value);
     setSelectedSeasonNumber(number);
     setLoadingSeason(true);
@@ -201,6 +288,7 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
   }
 
   async function chooseEpisode(item) {
+    if (guestMediaLocked) return;
     const selected = { ...item, season: season.number };
     if (pendingEpisode) {
       await clearAutoplay();
@@ -246,7 +334,8 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
     setTransitionPosition(null);
     await lookup.search({
       type: "show",
-      query: show.title,
+      query: show.sourceTitle || show.title,
+      originalTitle: show.originalTitle,
       tmdbId: show.id,
       imdbId: show.imdbId,
       year: show.year,
@@ -256,6 +345,7 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
   }
 
   async function playReadyEpisode(number) {
+    if (guestMediaLocked) return;
     const item = season.episodes.find((entry) => entry.number === number)
       || { number, title: `Episode ${number}` };
     const selected = { ...item, season: season.number };
@@ -274,6 +364,7 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
   }
 
   async function prepareNextEpisode(endReached = false, fromManual = false) {
+    if (guestMediaLocked) return;
     if (fromManual) manualNextRequestedRef.current = true;
     if (!lookup.session?.id || !["idle", ...(fromManual ? ["cancelled"] : [])].includes(autoplay.phase)
       || preparingNextRef.current) {
@@ -302,6 +393,7 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
         dispatchAutoplay({ type: "manual", payload: result });
         return;
       }
+      startNextEpisodePrefetch(result.fileId);
       dispatchAutoplay({ type: "ready", payload: result });
     } catch (error) {
       if (error.name !== "AbortError") {
@@ -343,7 +435,8 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
     const { nextSeason, selected } = await resolveEpisodeDetails(episode);
     pendingSourceClearedRef.current = !lookup.session;
     setPendingEpisode({ nextSeason, selected, resumePosition });
-    await lookup.search({ type: "show", query: show.title, tmdbId: show.id, imdbId: show.imdbId,
+    await lookup.search({ type: "show", query: show.sourceTitle || show.title, originalTitle: show.originalTitle,
+      tmdbId: show.id, imdbId: show.imdbId,
       year: show.year, season: selected.season, episode: selected.number });
   }
 
@@ -361,7 +454,7 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
   }
 
   async function playNextEpisode() {
-    if (autoplay.phase !== "ready" || advancingRef.current) return;
+    if (guestMediaLocked || autoplay.phase !== "ready" || advancingRef.current) return;
     advancingRef.current = true;
     manualNextRequestedRef.current = false;
     dispatchAutoplay({ type: "advancing" });
@@ -393,7 +486,7 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
   }
 
   async function playPreviousEpisode() {
-    if (!lookup.session?.id || previousBusy || !hasPreviousEpisode) return;
+    if (guestMediaLocked || !lookup.session?.id || previousBusy || !hasPreviousEpisode) return;
     setPreviousBusy(true);
     setEpisodeNavigationError("");
     await clearAutoplay();
@@ -426,6 +519,7 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
   }
 
   function playNextFromControls() {
+    if (guestMediaLocked) return;
     if (autoplay.phase === "ready") void playNextEpisode();
     else if (autoplay.phase === "manual") void chooseNextSource();
     else if (autoplay.phase === "resolving") manualNextRequestedRef.current = true;
@@ -433,7 +527,7 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
   }
 
   async function chooseNextSource() {
-    if (!autoplay.nextEpisode) return;
+    if (guestMediaLocked || !autoplay.nextEpisode) return;
     const nextEpisode = autoplay.nextEpisode;
     await clearAutoplay();
     try {
@@ -448,6 +542,10 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
    * episode, session, and file state above is committed together only after the
    * preparation succeeds, keeping watch-history ownership on the old player.
    */
+
+  if (roomMediaMismatch) {
+    return <div className="notice">{t("Following the host’s selection…")}</div>;
+  }
 
   return (
     <>
@@ -477,7 +575,7 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
                 media,
                 initialPosition: transitionPosition ?? (playbackIntent === "resume" ? saved.progress?.position || 0 : 0),
                 resetProgress: playbackIntent === "start",
-                autoStart: autoStartEpisodeKey === selectedEpisodeKey,
+                autoStart: !watchTogether.room && autoStartEpisodeKey === selectedEpisodeKey,
                 onNearEnd: handleNearEnd,
                 onEnded: handleEpisodeEnded,
                 onPreviousEpisode: playPreviousEpisode,
@@ -489,26 +587,26 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
                 nextEpisodePrompt: autoplay.phase === "ready" ? {
                   kind: "ready",
                   immediate: manualNextRequestedRef.current,
-                  title: "Up Next",
+                  title: t("Up Next"),
                   text: `${episodeCode(autoplay.nextEpisode.season, autoplay.nextEpisode.number)} · ${autoplay.nextEpisode.title}`,
-                  action: "Play Next Episode",
+                  action: t("Play Next Episode"),
                   onAction: () => void playNextEpisode(),
-                  secondaryAction: "Cancel",
+                  secondaryAction: t("Cancel"),
                   onSecondaryAction: () => void cancelAutoplay(),
                 } : autoplay.phase === "manual" ? {
                   kind: "manual",
                   immediate: manualNextRequestedRef.current,
-                  title: autoplay.nextEpisode ? "Choose a source" : "Next episode unavailable",
-                  text: autoplay.error || "Choose a source for the next episode.",
-                  action: autoplay.nextEpisode ? "Choose source" : null,
+                  title: t(autoplay.nextEpisode ? "Choose a source" : "Next episode unavailable"),
+                  text: autoplay.error || t("Choose a source for the next episode."),
+                  action: autoplay.nextEpisode ? t("Choose source") : null,
                   onAction: autoplay.nextEpisode ? () => void chooseNextSource() : null,
-                  secondaryAction: "Dismiss",
+                  secondaryAction: t("Dismiss"),
                   onSecondaryAction: () => void cancelAutoplay(),
                 } : ["resolving", "advancing"].includes(autoplay.phase) ? {
                   kind: "loading",
                   immediate: manualNextRequestedRef.current,
-                  title: "Up Next",
-                  text: autoplay.phase === "advancing" ? "Starting the next episode…" : "Finding the next episode…",
+                  title: t("Up Next"),
+                  text: t(autoplay.phase === "advancing" ? "Starting the next episode…" : "Finding the next episode…"),
                 } : null,
               }}
             />
@@ -517,14 +615,15 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
               <span className="eyebrow">{episodeCode(selectedEpisode.season, selectedEpisode.number)}</span>
               <h2>{selectedEpisode.title}</h2>
               <div className="resumeActions">
-                {resumable ? <button className="primaryButton" type="button" onClick={() => void launchEpisode("resume")}>Resume at {formatPlaybackTime(saved.progress.position)}</button> : null}
+                {resumable ? <button className="primaryButton" type="button" onClick={() => void launchEpisode("resume")}>{t(`Resume at ${formatPlaybackTime(saved.progress.position)}`)}</button> : null}
                 <button className={resumable ? "secondaryButton" : "primaryButton"} type="button" onClick={() => void launchEpisode("start")}>
-                  {saved.progress ? "Start from beginning" : "Find authorized sources"}
+                  {t(saved.progress ? "Start from beginning" : "Find authorized sources")}
                 </button>
               </div>
             </div>
           )}
-          {launchedEpisodeKey === selectedEpisodeKey && playerFile ? (
+          {shouldShowReadyEpisodes({ session: lookup.session, hasPlayerFile: Boolean(playerFile),
+            launchedEpisodeKey, selectedEpisodeKey }) ? (
             <ReadyEpisodes
               seasonNumber={selectedSeasonNumber}
               seasonName={show.seasons.find((item) => item.number === selectedSeasonNumber)?.name}
@@ -534,7 +633,7 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
                 ? { season: selectedEpisode.season, episode: selectedEpisode.number } : null}
               loading={readyLoading}
               unavailable={readyUnavailable}
-              disabled={loadingSeason}
+              disabled={loadingSeason || guestMediaLocked}
               onPlay={(number) => void playReadyEpisode(number)}
             />
           ) : null}
@@ -546,12 +645,16 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
       <section className="seasonSection" aria-labelledby="episodes-heading">
         <div className="seasonToolbar">
           <div>
-            <span className="eyebrow">Episodes</span>
+            <span className="eyebrow">{t("Episodes")}</span>
             <h2 id="episodes-heading">{season?.name || "Seasons"}</h2>
+            {guestMediaLocked ? (
+              <small className="watchTogetherHint">{t("The host controls the title and episode. Choose your source above.")}</small>
+            ) : null}
           </div>
           <label>
-            <span className="srOnly">Choose a season</span>
-            <select value={selectedSeasonNumber} onChange={changeSeason} disabled={loadingSeason}>
+            <span className="srOnly">{t("Choose a season")}</span>
+            <select value={selectedSeasonNumber} onChange={changeSeason}
+              disabled={loadingSeason || guestMediaLocked}>
               {show.seasons.map((item) => (
                 <option value={item.number} key={item.number}>{item.name}</option>
               ))}
@@ -560,9 +663,9 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
         </div>
 
         {seasonError ? <div className="notice error" role="alert">{seasonError}</div> : null}
-        {loadingSeason ? <div className="notice">Loading episodes…</div> : null}
+        {loadingSeason ? <div className="notice">{t("Loading episodes…")}</div> : null}
         {!loadingSeason && season?.episodes.length === 0 ? (
-          <div className="notice">No episode data is available for this season.</div>
+          <div className="notice">{t("No episode data is available for this season.")}</div>
         ) : null}
 
         {!loadingSeason && season?.episodes.length > 0 ? (
@@ -576,6 +679,7 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
                   className={active ? "episodeCard active" : "episodeCard"}
                   type="button"
                   key={episode.number}
+                  disabled={guestMediaLocked}
                   onClick={() => chooseEpisode(episode)}
                 >
                   <div className="episodeStill">

@@ -24,7 +24,8 @@ async function respond(request, context, includeBody) {
 }
 
 export async function streamVideoFile(request, match, includeBody = true) {
-  if (match.playbackMode === "transcode") {
+  const directNegotiated = new URL(request.url).searchParams.get("direct") === "1";
+  if (match.playbackMode === "transcode" && !directNegotiated) {
     return Response.json(
       {
         code: "HLS_REQUIRED",
@@ -91,7 +92,7 @@ export async function streamVideoFile(request, match, includeBody = true) {
     "Accept-Ranges": "bytes",
     "Cache-Control": "no-store",
     "Content-Length": String(range.end - range.start + 1),
-    "Content-Type": match.mimeType,
+    "Content-Type": directNegotiated ? match.sourceMimeType || match.mimeType : match.mimeType,
   });
   if (range.partial) {
     headers.set("Content-Range", `bytes ${range.start}-${range.end}/${match.file.length}`);

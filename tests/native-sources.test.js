@@ -94,6 +94,9 @@ test("native source selection is empty by default and persists add, toggle, and 
       new URL(url).pathname.endsWith("list_movies.json") ? Response.json(fixtures.yts) : Response.json(fixtures.eztv)
     ) });
     assert.deepEqual(health.map((item) => item.status), ["connected", "connected"]);
+    const cachedStatuses = [];
+    await nativeSourceHealth({ environment, onCached: (result, stale) => cachedStatuses.push([result.provider, stale]) });
+    assert.deepEqual(cachedStatuses, [["yts", false], ["eztv", false]]);
     assert.deepEqual(configuredProviders({ ...environment, TORPLAY_SEARCH_PROVIDERS: "eztv" }).map((item) => item.id), ["eztv"]);
     assert.throws(() => configuredProviders({ ...environment, TORPLAY_SEARCH_PROVIDERS: "knaben" }), /Unknown/);
     await assert.rejects(changeNativeSource("add", { id: "yts" }, { environment }), /already configured/);
@@ -109,6 +112,30 @@ test("native source selection is empty by default and persists add, toggle, and 
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test("native health reports a fast source before a slow source finishes", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "torplay-health-stream-"));
+  const environment = { TORPLAY_CONFIG_PATH: path.join(directory, "torplay.env") };
+  try {
+    await changeNativeSource("add", { id: "yts" }, { environment });
+    await changeNativeSource("add", { id: "eztv" }, { environment });
+    let finishEztv;
+    let reportYts;
+    const ytsReported = new Promise((resolve) => { reportYts = resolve; });
+    const reports = [];
+    const health = nativeSourceHealth({ environment, refresh: true,
+      fetchImpl: async (url) => new URL(url).pathname.endsWith("list_movies.json")
+        ? Response.json(fixtures.yts)
+        : new Promise((resolve) => { finishEztv = () => resolve(Response.json(fixtures.eztv)); }),
+      onResult: (result) => { reports.push(result.provider); if (result.provider === "yts") reportYts(); },
+    });
+    await ytsReported;
+    assert.deepEqual(reports, ["yts"]);
+    finishEztv();
+    await health;
+    assert.deepEqual(reports, ["yts", "eztv"]);
+  } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
 test("invalid native source files fail closed", async () => {

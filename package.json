@@ -12,6 +12,7 @@
     "build": "next build",
     "start": "next start",
     "start:home": "node scripts/home.js",
+    "start:watch-together-signaling": "node src/server.mjs",
     "firewall:home": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/windows-firewall.ps1",
     "release:windows": "node scripts/release-windows.js",
     "release:linux": "node scripts/release-linux.js",
@@ -39,9 +40,11 @@
     "qrcode.react": "^4.2.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
+    "redis": "^5.12.1",
     "tar-stream": "^3.2.1",
     "tough-cookie": "^6.0.2",
     "webtorrent": "^3.0.21",
+    "ws": "^8.21.3",
     "yaml": "^2.9.1"
   },
   "devDependencies": {

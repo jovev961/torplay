@@ -5,6 +5,21 @@ import path from "node:path";
 import test from "node:test";
 import { GET } from "../app/api/search/route.js";
 
+test("search rejects conflicting cache modes", async () => {
+  const response = await GET(new Request(
+    "http://localhost/api/search?q=Sintel&type=movie&cacheOnly=1&refresh=1",
+  ));
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), {
+    error: "Cache-only search cannot also refresh providers.",
+  });
+  const invalid = await GET(new Request(
+    "http://localhost/api/search?q=Sintel&type=movie&cacheOnly=true",
+  ));
+  assert.equal(invalid.status, 400);
+  assert.deepEqual(await invalid.json(), { error: "cacheOnly must be 1 when provided." });
+});
+
 test("search returns a stable configuration prompt when no torrent source is enabled", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "torplay-empty-search-"));
   const keys = [
@@ -25,6 +40,13 @@ test("search returns a stable configuration prompt when no torrent source is ena
       error: "Add a torrent source in Settings before searching.",
       code: "NO_TORRENT_SOURCES",
     });
+    const streamed = await GET(new Request("http://localhost/api/search?q=Sintel&type=movie", {
+      headers: { Accept: "application/x-ndjson" },
+    }));
+    assert.match(streamed.headers.get("content-type"), /application\/x-ndjson/);
+    const events = (await streamed.text()).trim().split("\n").map((line) => JSON.parse(line));
+    assert.deepEqual(events.map((event) => event.type), ["started", "usenet", "error", "complete"]);
+    assert.equal(events[2].code, "NO_TORRENT_SOURCES");
   } finally {
     for (const [key, value] of Object.entries(previous)) {
       if (value === undefined) delete process.env[key];

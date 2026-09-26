@@ -5,6 +5,7 @@ import CatalogResults from "../../components/CatalogResults.js";
 import { catalogHref } from "../../lib/metadata/catalog.js";
 import { getGenreDefinitions, searchCatalog } from "../../lib/metadata/tmdb.js";
 import { requireSetupReady } from "../_lib/require-setup.js";
+import { getServerI18n } from "../_lib/i18n.js";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,7 @@ function value(input, fallback = "") {
 
 export default async function SearchPage({ searchParams }) {
   await requireSetupReady();
+  const { locale, t } = await getServerI18n();
   const params = await searchParams;
   const query = value(params.q).trim();
   const type = ["movie", "tv"].includes(value(params.type)) ? params.type : "all";
@@ -21,25 +23,27 @@ export default async function SearchPage({ searchParams }) {
   const page = value(params.page, "1");
 
   const [genreState, resultState] = await Promise.all([
-    getGenreDefinitions("all").then((genres) => ({ genres, error: "" })).catch((error) => ({ genres: [], error: error.message })),
+    getGenreDefinitions("all", { locale }).then((genres) => ({ genres, error: "" })).catch((error) => ({ genres: [], error: error.message })),
     query
-      ? searchCatalog({ query, type, genre, page }).then((result) => ({ result, error: "" })).catch((error) => ({ result: null, error: error.message }))
+      ? searchCatalog({ query, type, genre, page, locale }).then((result) => ({ result, error: "" })).catch((error) => ({ result: null, error: error.message }))
       : Promise.resolve({ result: null, error: "" }),
   ]);
   const selectedGenre = genreState.genres.find((item) => item.slug === genre);
-  const typeLabel = type === "movie" ? "movies" : type === "tv" ? "TV shows" : "movies or TV shows";
+  const typeLabel = type === "movie" ? t("movies") : type === "tv" ? t("TV shows") : t("movies or TV shows");
   const emptyMessage = selectedGenre
-    ? `No ${selectedGenre.name} ${typeLabel} matched “${query}” on this provider page.`
-    : `No ${typeLabel} matched “${query}”.`;
+    ? t("No {genre} {type} matched “{query}” on this provider page.", {
+      genre: selectedGenre.name, type: typeLabel, query,
+    })
+    : t("No {type} matched “{query}”.", { type: typeLabel, query });
   const currentHref = catalogHref("/search", { query, type, genre, page: Number(page) || 1 });
 
   return (
     <main className="shell homeShell">
       <AppHeader active="search" />
       <section className="catalogHero compactCatalogHero">
-        <span className="eyebrow">Search the catalog</span>
-        <h1>Find movies and TV shows together.</h1>
-        <p>Search TMDB metadata first, then choose an authorized source from the title page.</p>
+        <span className="eyebrow">{t("Search the catalog")}</span>
+        <h1>{t("Find movies and TV shows together.")}</h1>
+        <p>{t("Search TMDB metadata first, then choose an authorized source from the title page.")}</p>
       </section>
       <CatalogFilters
         key={`${query}|${type}|${genre}`}
@@ -49,11 +53,11 @@ export default async function SearchPage({ searchParams }) {
         initialGenre={genre}
         genres={genreState.genres}
       />
-      {genreState.error ? <div className="notice error">Genres are unavailable: {genreState.error}</div> : null}
-      {!query ? <div className="notice">Enter a title to search movies and TV shows.</div> : null}
+      {genreState.error ? <div className="notice error">{t("Genres are unavailable:")} {genreState.error}</div> : null}
+      {!query ? <div className="notice">{t("Enter a title to search movies and TV shows.")}</div> : null}
       {resultState.error ? (
         <div className="notice error" role="alert">
-          {resultState.error} <a className="inlineLink" href={currentHref}>Retry</a>
+          {resultState.error} <a className="inlineLink" href={currentHref}>{t("Retry")}</a>
         </div>
       ) : null}
       {resultState.result ? (

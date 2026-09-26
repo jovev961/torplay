@@ -8,6 +8,7 @@ import {
   getMovieDetails,
   getSeasonDetails,
   getShowDetails,
+  getTitleRecommendations,
   getTrending,
   searchCatalog,
   searchMetadata,
@@ -29,6 +30,24 @@ async function withTmdb(run) {
 test("builds TMDB image URLs and rejects invalid paths", () => {
   assert.equal(tmdbImage("/poster.jpg", "w500"), "https://image.tmdb.org/t/p/w500/poster.jpg");
   assert.equal(tmdbImage("https://example.test/image.jpg", "w500"), null);
+});
+
+test("recommendations use matching movie and TV endpoints and normalized cards", async () => {
+  await withTmdb(async () => {
+    const paths = [];
+    const fetchImpl = async (url, options) => {
+      paths.push(new URL(url).pathname);
+      assert.equal(options.headers.Authorization, "Bearer tmdb-secret");
+      return new Response(JSON.stringify({ results: [{
+        id: 99, title: "Film", name: "Series", release_date: "2020-01-01", first_air_date: "2021-01-01",
+      }] }), { status: 200 });
+    };
+    const movie = await getTitleRecommendations("movie", 10, { fetchImpl });
+    const show = await getTitleRecommendations("tv", 20, { fetchImpl });
+    assert.deepEqual(paths, ["/3/movie/10/recommendations", "/3/tv/20/recommendations"]);
+    assert.deepEqual(movie.map((item) => [item.mediaType, item.title, item.year]), [["movie", "Film", "2020"]]);
+    assert.deepEqual(show.map((item) => [item.mediaType, item.title, item.year]), [["tv", "Series", "2021"]]);
+  });
 });
 
 test("uses a server-side bearer token and normalizes separate media types", async () => {

@@ -53,6 +53,7 @@ test("uses TMDB titles first and infers compact technical labels", () => {
     code: "S01E02",
     title: "First Dance (Official)",
     technical: ["1080p", "HEVC", "1.1 GB"],
+    mediaBadges: [{ id: "hevc", label: "HEVC / H.265", verification: "inferred" }],
     filename: "Reacher.S01E02.First.Dance.1080p.10bit.HEVC.mkv",
     fullPath: "Reacher (2022)/Season 1/Reacher.S01E02.First.Dance.1080p.10bit.HEVC.mkv",
     recognized: true,

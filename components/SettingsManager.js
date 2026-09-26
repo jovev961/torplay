@@ -461,19 +461,40 @@ export default function SettingsManager() {
 
         {selectedSection === "playback" ? <section className={styles.settingsSection} id="playback">
           <div className={styles.sectionHeading}><div><h2>Playback preferences</h2><p>Choose how TorPlay should start a video.</p></div></div>
-          <div className={styles.summaryCard}>
-            <h3>Episode playback</h3>
-            <label className={styles.checkboxLabel}><input type="checkbox"
-              checked={snapshot.playback.autoSkipIntrosRecaps}
-              disabled={!snapshot.canEdit || saving === "playback"}
-              onChange={(event) => void savePlaybackSetting("autoSkipIntrosRecaps", event.target.checked)} />
-              Automatically skip intros and recaps</label>
-            <label className={styles.checkboxLabel}><input type="checkbox"
-              checked={snapshot.playback.autoPlayNextEpisode}
-              disabled={!snapshot.canEdit || saving === "playback"}
-              onChange={(event) => void savePlaybackSetting("autoPlayNextEpisode", event.target.checked)} />
-              Automatically play next episode</label>
-            <p>Skip times are provided by <a href="https://skipdb.tv" target="_blank" rel="noreferrer">SkipDB</a> when reliable episode data is available.</p>
+          <div className={styles.playbackCard}>
+            <div className={styles.playbackCardHeader}>
+              <div>
+                <span className={styles.playbackEyebrow}>Your viewing experience</span>
+                <h3>Episode playback</h3>
+                <p>Choose what happens while you watch a series.</p>
+              </div>
+              <span className={styles.playbackSaveHint}>{saving === "playback" ? "Saving…" : "Changes save automatically"}</span>
+            </div>
+            <div className={styles.playbackOptions}>
+              <label className={styles.playbackOption}>
+                <span className={styles.playbackOptionText}>
+                  <strong>Skip intros and recaps</strong>
+                  <small>Jump past matched intro and recap segments when they are available.</small>
+                </span>
+                <input type="checkbox"
+                  checked={snapshot.playback.autoSkipIntrosRecaps}
+                  disabled={!snapshot.canEdit || saving === "playback"}
+                  onChange={(event) => void savePlaybackSetting("autoSkipIntrosRecaps", event.target.checked)} />
+                <span className={styles.playbackSwitch} aria-hidden="true" />
+              </label>
+              <label className={styles.playbackOption}>
+                <span className={styles.playbackOptionText}>
+                  <strong>Play the next episode</strong>
+                  <small>Start the next episode automatically when the current one ends.</small>
+                </span>
+                <input type="checkbox"
+                  checked={snapshot.playback.autoPlayNextEpisode}
+                  disabled={!snapshot.canEdit || saving === "playback"}
+                  onChange={(event) => void savePlaybackSetting("autoPlayNextEpisode", event.target.checked)} />
+                <span className={styles.playbackSwitch} aria-hidden="true" />
+              </label>
+            </div>
+            <p className={styles.playbackSourceNote}>Skip times come from <a href="https://skipdb.tv" target="_blank" rel="noreferrer">SkipDB</a> and <a href="https://introdb.app" target="_blank" rel="noreferrer">IntroDB</a>. IntroDB offers manual skips; automatic skips use duration-matched SkipDB ranges.</p>
           </div>
           <DebridSettings canEdit={snapshot.canEdit} section="playback" />
           <details className={styles.diagnostics}><summary>Supported formats and technical details</summary>

@@ -57,7 +57,10 @@ test("custom providers may be the only source, may be disabled, and cache health
     let calls = 0;
     const options = { environment, fetchImpl: async (...args) => { calls++; return fetchImpl(...args); } };
     assert.equal((await customProviderHealth(options))[0].status, "connected");
-    await customProviderHealth(options); assert.equal(calls, 2);
+    const cachedStatuses = [];
+    await customProviderHealth({ ...options, onCached: (result, stale) => cachedStatuses.push([result.provider, stale]) });
+    assert.deepEqual(cachedStatuses, [[created.id, false]]);
+    assert.equal(calls, 2);
     await customProviderHealth({ ...options, refresh: true }); assert.equal(calls, 4);
     await changeCustomProvider("remove", { id: created.id }, { environment });
     assert.deepEqual(readCustomProviders(environment), []);

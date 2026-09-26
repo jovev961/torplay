@@ -25,6 +25,9 @@ export async function POST(request) {
     let body;
     try { body = await request.json(); } catch { return json({ error: "Request body must be valid JSON." }, 400); }
     if (body?.action === "health") {
+      if (request.headers.get("accept")?.includes("application/x-ndjson")) {
+        return streamHealth(request, body.refresh === true);
+      }
       const [native, custom] = await Promise.all([
         nativeSourceHealth({ refresh: body.refresh === true }),
         customProviderHealth({ refresh: body.refresh === true }),
@@ -58,4 +61,44 @@ export async function POST(request) {
       ...(error.canAddUnverified ? { canAddUnverified: true, confirmationToken: error.confirmationToken } : {}),
     }, error.status || 400);
   }
+}
+
+function streamHealth(request, refresh) {
+  const encoder = new TextEncoder();
+  const cancellation = new AbortController();
+  const stream = new ReadableStream({
+    start(controller) {
+      let closed = false;
+      const emit = (event) => {
+        if (!closed && !cancellation.signal.aborted) controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
+      };
+      const abort = () => cancellation.abort();
+      request.signal.addEventListener("abort", abort, { once: true });
+      const options = {
+        refresh, signal: cancellation.signal,
+        onCached: (result, stale) => emit({ type: "status", result, stale }),
+        onResult: (result) => emit({ type: "status", result, stale: false }),
+      };
+      emit({ type: "started" });
+      void Promise.allSettled([nativeSourceHealth(options), customProviderHealth(options)])
+        .then((settled) => {
+          if (settled.some((result) => result.status === "rejected")) {
+            emit({ type: "error", error: "Some source statuses could not be checked." });
+          }
+          emit({ type: "complete" });
+        }).finally(() => {
+          request.signal.removeEventListener("abort", abort);
+          if (!closed) {
+            closed = true;
+            try { controller.close(); } catch { /* The reader may have cancelled the stream. */ }
+          }
+        });
+    },
+    cancel() { cancellation.abort(); },
+  });
+  return new Response(stream, { headers: {
+    "Content-Type": "application/x-ndjson; charset=utf-8",
+    "Cache-Control": "no-store",
+    "X-Accel-Buffering": "no",
+  } });
 }
