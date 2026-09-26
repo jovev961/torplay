@@ -3,6 +3,7 @@ node_modules/
 out/
 .env*
 !.env.local.example
+!services/watch-together-signaling/.env.example
 .data/
 persistent-data/
 .release/
