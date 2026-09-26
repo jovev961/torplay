@@ -49,10 +49,16 @@ async function verifiedDownload(url, filename, expected) {
   return destination;
 }
 
-function bundle(entry, destination) {
+export function bundleLinuxRuntime(entry, destination) {
   buildSync({
     entryPoints: [path.join(root, "scripts", entry)], outfile: destination,
     bundle: true, platform: "node", format: "esm", target: "node24", legalComments: "none",
+    banner: {
+      js: `
+import { createRequire as __torplayCreateRequire } from "node:module";
+const require = __torplayCreateRequire(import.meta.url);
+`,
+    },
   });
 }
 
@@ -136,9 +142,9 @@ async function stageAppDir() {
   copyStandaloneBuild(standalone, app);
   cpSync(path.join(root, ".next/static"), path.join(app, ".next/static"), { recursive: true });
   cpSync(path.join(root, "public"), path.join(app, "public"), { recursive: true });
-  bundle("linux-launcher.js", path.join(runtime, "linux-launcher.mjs"));
-  bundle("linux-port-helper.js", path.join(runtime, "linux-port-helper.mjs"));
-  bundle("runtime-watchdog.js", path.join(runtime, "runtime-watchdog.mjs"));
+  bundleLinuxRuntime("linux-launcher.js", path.join(runtime, "linux-launcher.mjs"));
+  bundleLinuxRuntime("linux-port-helper.js", path.join(runtime, "linux-port-helper.mjs"));
+  bundleLinuxRuntime("runtime-watchdog.js", path.join(runtime, "runtime-watchdog.mjs"));
   cpSync(path.join(root, "installer/linux/AppRun"), path.join(stage, "AppRun"));
   cpSync(path.join(root, "installer/linux/torplay.desktop"), path.join(stage, "torplay.desktop"));
   cpSync(path.join(root, "public/torplay-logo.png"), path.join(stage, "torplay.png"));
