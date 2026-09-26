@@ -1,7 +1,9 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { appendFileSync, closeSync, openSync } from "node:fs";
-import { chmod, mkdir, open, readFile, unlink } from "node:fs/promises";
+import {
+  chmod, copyFile, cp, mkdir, open, readFile, readdir, rename, rm, symlink, unlink, writeFile,
+} from "node:fs/promises";
 import net from "node:net";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -31,6 +33,45 @@ export async function ensureLinuxDirectories(paths) {
   const file = await open(paths.configPath, "a", 0o600);
   await file.close();
   await chmod(paths.configPath, 0o600);
+}
+
+export async function prepareLinuxNextRuntime(paths, serverEntry) {
+  const packagedRoot = path.dirname(serverEntry);
+  const packagedNext = path.join(packagedRoot, ".next");
+  const buildId = (await readFile(path.join(packagedNext, "BUILD_ID"), "utf8")).trim();
+  if (!/^[a-zA-Z0-9_-]+$/.test(buildId)) throw new Error("The packaged Next.js build ID is invalid.");
+  const runtimeRoot = path.join(paths.nextRuntimePath, buildId);
+  const readyPath = path.join(runtimeRoot, ".torplay-runtime-ready");
+  try {
+    if ((await readFile(readyPath, "utf8")).trim() === buildId) {
+      return path.join(runtimeRoot, "server.js");
+    }
+  } catch { /* Create or repair the writable runtime below. */ }
+
+  const temporaryRoot = `${runtimeRoot}.${process.pid}.${randomUUID()}.tmp`;
+  await mkdir(paths.nextRuntimePath, { recursive: true, mode: 0o700 });
+  await rm(runtimeRoot, { recursive: true, force: true });
+  await rm(temporaryRoot, { recursive: true, force: true });
+  await mkdir(temporaryRoot, { recursive: true, mode: 0o700 });
+  try {
+    await copyFile(serverEntry, path.join(temporaryRoot, "server.js"));
+    await cp(packagedNext, path.join(temporaryRoot, ".next"), {
+      recursive: true,
+      verbatimSymlinks: true,
+    });
+    await mkdir(path.join(temporaryRoot, ".next/cache"), { recursive: true, mode: 0o700 });
+    for (const entry of await readdir(packagedRoot, { withFileTypes: true })) {
+      if (entry.name === ".next" || entry.name === "server.js" || entry.name.startsWith(".env")) continue;
+      await symlink(path.join(packagedRoot, entry.name), path.join(temporaryRoot, entry.name),
+        entry.isDirectory() ? "dir" : "file");
+    }
+    await writeFile(path.join(temporaryRoot, ".torplay-runtime-ready"), `${buildId}\n`, { mode: 0o600 });
+    await rename(temporaryRoot, runtimeRoot);
+  } catch (error) {
+    await rm(temporaryRoot, { recursive: true, force: true });
+    throw error;
+  }
+  return path.join(runtimeRoot, "server.js");
 }
 
 async function liveTorPlayProcess(pid) {
@@ -137,6 +178,7 @@ export async function startLinuxApp({
   serverEntry = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "app", "server.js"),
   watchdogEntry = bundledPath("runtime-watchdog.mjs"),
   openBrowser = openLinuxBrowser,
+  writableNextRuntime = false,
 } = {}) {
   await ensureLinuxDirectories(paths);
   const port = await availableLoopbackPort();
@@ -171,6 +213,8 @@ export async function startLinuxApp({
   };
 
   try {
+    const runtimeServerEntry = writableNextRuntime
+      ? await prepareLinuxNextRuntime(paths, serverEntry) : serverEntry;
     const fileEnvironment = readLocalEnvironment(paths.configPath);
     const loaded = linuxRuntimeEnvironment(paths, { ...fileEnvironment, ...environment });
     const childEnvironment = {
@@ -181,8 +225,8 @@ export async function startLinuxApp({
       TORPLAY_SUPERVISOR_PID: String(process.pid),
       NODE_OPTIONS: [loaded.NODE_OPTIONS, `--import=${pathToFileURL(watchdogEntry).href}`].filter(Boolean).join(" "),
     };
-    child = spawn(node, [serverEntry], {
-      cwd: path.dirname(serverEntry), env: childEnvironment, stdio: ["ignore", logFd, logFd],
+    child = spawn(node, [runtimeServerEntry], {
+      cwd: path.dirname(runtimeServerEntry), env: childEnvironment, stdio: ["ignore", logFd, logFd],
     });
     closeSync(logFd);
     logFd = null;
@@ -231,7 +275,7 @@ async function main() {
     console.log(await readFile(paths.statusPath, "utf8"));
     return;
   }
-  const runtime = await startLinuxApp({ paths });
+  const runtime = await startLinuxApp({ paths, writableNextRuntime: true });
   if (runtime.existing) return;
   for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
     process.once(signal, () => void runtime.stop());
