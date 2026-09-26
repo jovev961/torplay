@@ -67,7 +67,9 @@ export async function smokeLinuxAppImage(image) {
         .then(JSON.parse).catch(() => null);
       return current?.state === "running" ? current : null;
     });
-    assert.match(status.url, /^http:\/\/127\.0\.0\.1:\d+$/);
+    assert.equal(status.url, "http://127.0.0.1");
+    assert.equal(status.networkUrl, "http://torplay.local");
+    assert.deepEqual(status.components, { TorPlay: "OK", "LAN proxy": "OK", mDNS: "OK" });
     assert.equal((await fetch(`${status.url}/api/health`)).status, 200);
     assert.equal((await fetch(`${status.url}/`)).status, 200);
     const settings = await jsonResponse(`${status.url}/api/settings`, undefined, 200);
@@ -92,9 +94,10 @@ export async function smokeLinuxAppImage(image) {
     assert.equal((await stat(writableNextCache)).isDirectory(), true);
     assert.equal((await stat(path.join(root, "data/torplay/torplay.db"))).isFile(), true);
     const access = await (await fetch(`${status.url}/api/network-access`)).json();
-    assert.equal(access.scope, "desktop");
-    assert.equal(access.lanUrl, null);
-    assert.equal((await fetch(`${status.url}/api/playback/remote`)).status, 409);
+    assert.equal(access.hostnameUrl, status.networkUrl);
+    assert.match(access.lanUrl, /^http:\/\/(?:10\.|172\.(?:1[6-9]|2\d|3[01])\.|192\.168\.)/);
+    const remote = await jsonResponse(`${status.url}/api/playback/remote`, undefined, 200);
+    assert.equal(remote.origin, status.networkUrl);
     await waitUntil(async () => (await readFile(environment.TORPLAY_SMOKE_BROWSER_LOG, "utf8").catch(() => "")).includes(status.url));
     const second = spawn(image, ["--appimage-extract-and-run"], { env: environment, stdio: "inherit" });
     assert.equal(await waitForExit(second, 90_000), 0);

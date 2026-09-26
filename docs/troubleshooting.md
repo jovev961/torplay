@@ -50,15 +50,15 @@ Distinguish a failed optional service connection from an indexer search failure.
 Check these conditions:
 
 - TorPlay Status reports TorPlay, LAN proxy, and mDNS as `OK`.
-- The Windows network profile is **Private**, not Public.
+- On Windows, the network profile is **Private**, not Public. On Ubuntu, allow the AppImage's configured TCP port and UDP 5353 through any enabled firewall only for the private LAN.
 - The client is on the same home network.
 - Guest Wi-Fi, client isolation, or access-point isolation is disabled.
 - No other device is already advertising `torplay.local`.
 - A VPN or virtual adapter is not confusing mDNS interface selection.
 
-If necessary, set `TORPLAY_MDNS_INTERFACE` to the Windows interface name or local IP, restart TorPlay, and test again.
+If necessary, set `TORPLAY_MDNS_INTERFACE` to the physical interface name or local IP, restart TorPlay, and test again.
 
-Ordinary browser hostname navigation does not use the DNS-SD service port. A custom `TORPLAY_PUBLIC_PORT` therefore requires the port in the URL; the installer is designed for port 80.
+Ordinary browser hostname navigation does not use the DNS-SD service port. A custom `TORPLAY_PUBLIC_PORT` therefore requires the port in the URL. The Windows installer uses port 80. The Linux AppImage requests one-time authorization for port 80 and falls back to port 3000 if authorization or optional PolicyKit installation is declined or unsuccessful.
 
 If a TV or mobile device cannot resolve `torplay.local`, open **Settings → General → Network Access** on the TorPlay computer and use the displayed LAN IPv4 URL or scan its QR code. The address is detected dynamically and may change after switching Wi-Fi, Ethernet, or DHCP networks.
 
@@ -82,7 +82,7 @@ Do not disable Windows Firewall.
 
 ## A port is already in use
 
-TorPlay requires internal port 3000 and public port 80 by default. Stop the conflicting application or change the source-runtime configuration. For an installed household deployment, keeping port 80 is recommended so `http://torplay.local` remains simple.
+The Windows home runtime requires internal port 3000 and public port 80 by default. The Linux AppImage uses a private random internal port and prefers public port 80, with port 3000 as its safe fallback. Stop the conflicting application or change the applicable runtime configuration.
 
 ## Sources load slowly or do not start
 

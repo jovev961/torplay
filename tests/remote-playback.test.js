@@ -24,11 +24,13 @@ test("remote playback uses a LAN-visible request origin", () => {
   assert.equal(remotePlaybackOrigin(request, { NODE_ENV: "production" }), "http://192.168.1.40");
 });
 
-test("desktop-local Linux never invents a torplay.local media origin", () => {
+test("Linux AppImage uses its advertised LAN origin for remote playback", () => {
   const request = new Request("http://127.0.0.1:39123/api/playback/remote");
   assert.equal(remotePlaybackOrigin(request, {
-    NODE_ENV: "production", TORPLAY_DISTRIBUTION: "linux-appimage",
-  }), "http://127.0.0.1:39123");
+    NODE_ENV: "production",
+    TORPLAY_DISTRIBUTION: "linux-appimage",
+    TORPLAY_PUBLIC_PORT: "3000",
+  }), "http://torplay.local:3000");
 });
 
 test("remote playback replaces a production loopback origin with the home hostname", () => {

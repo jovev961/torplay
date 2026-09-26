@@ -9,7 +9,11 @@ import test from "node:test";
 import { linuxPaths, linuxRuntimeEnvironment } from "../scripts/linux-paths.js";
 import { copyStandaloneBuild, isLinuxX64Elf, validateLinuxStage } from "../scripts/release-linux.js";
 import { networkAccessDetails } from "../lib/network/access.js";
-import { prepareLinuxNextRuntime, startLinuxApp } from "../scripts/linux-launcher.js";
+import {
+  availableLoopbackPort, linuxLanConfig, policyKitInstallCommand, prepareLinuxNextRuntime,
+  resolveLinuxLanConfig, startLinuxApp,
+} from "../scripts/linux-launcher.js";
+import { enableUnprivilegedPort } from "../scripts/linux-port-helper.js";
 import { sendControlCommand } from "../scripts/runtime-control.js";
 
 function temporaryDirectory(callback) {
@@ -24,7 +28,7 @@ function elf() {
   return bytes;
 }
 
-test("Linux paths use XDG storage and force a loopback runtime", () => temporaryDirectory((directory) => {
+test("Linux paths use XDG storage and keep Next on loopback", () => temporaryDirectory((directory) => {
   const paths = linuxPaths({
     XDG_CONFIG_HOME: path.join(directory, "config"),
     XDG_DATA_HOME: path.join(directory, "data"),
@@ -41,11 +45,76 @@ test("Linux paths use XDG storage and force a loopback runtime", () => temporary
   assert.equal(environment.TORPLAY_DISTRIBUTION, "linux-appimage");
 }));
 
+test("Linux LAN config prefers the standard torplay.local HTTP endpoint", () => {
+  assert.deepEqual(linuxLanConfig({}), {
+    publicHostname: "torplay.local",
+    publicPort: 80,
+    mdnsInterface: null,
+  });
+  assert.deepEqual(linuxLanConfig({
+    TORPLAY_PUBLIC_HOSTNAME: "living-room.local",
+    TORPLAY_PUBLIC_PORT: "8080",
+    TORPLAY_MDNS_INTERFACE: "wlan0",
+  }), {
+    publicHostname: "living-room.local",
+    publicPort: 8080,
+    mdnsInterface: "wlan0",
+  });
+  assert.throws(() => linuxLanConfig({ TORPLAY_PUBLIC_HOSTNAME: "example.com" }), /valid \.local/);
+  assert.throws(() => linuxLanConfig({ TORPLAY_PUBLIC_PORT: "0" }), /1 to 65535/);
+});
+
+test("Linux port selection authorizes port 80 and falls back safely", async () => {
+  const config = linuxLanConfig({});
+  let authorizationCalls = 0;
+  const authorized = await resolveLinuxLanConfig(config, {
+    probePort: async () => authorizationCalls ? { available: true } : { available: false, code: "EACCES" },
+    authorizePort: async () => { authorizationCalls += 1; return true; },
+  });
+  assert.equal(authorized.publicPort, 80);
+  assert.equal(authorizationCalls, 1);
+
+  const cancelled = await resolveLinuxLanConfig(config, {
+    probePort: async () => ({ available: false, code: "EACCES" }),
+    authorizePort: async () => false,
+  });
+  assert.deepEqual(cancelled, { ...config, publicPort: 3000, fallbackFromPort: 80 });
+
+  let occupiedAuthorizationCalls = 0;
+  const occupied = await resolveLinuxLanConfig(config, {
+    probePort: async () => ({ available: false, code: "EADDRINUSE" }),
+    authorizePort: async () => { occupiedAuthorizationCalls += 1; return true; },
+  });
+  assert.equal(occupied.publicPort, 3000);
+  assert.equal(occupiedAuthorizationCalls, 0);
+});
+
+test("PolicyKit installation is distro-specific and privileged helper writes exact settings", () => {
+  assert.deepEqual(policyKitInstallCommand('ID=ubuntu\nID_LIKE="debian"\n'),
+    ["apt-get", "install", "-y", "policykit-1"]);
+  assert.deepEqual(policyKitInstallCommand("ID=fedora\n"), ["dnf", "install", "-y", "polkit"]);
+  assert.deepEqual(policyKitInstallCommand("ID=arch\n"),
+    ["pacman", "-S", "--needed", "--noconfirm", "polkit"]);
+  assert.equal(policyKitInstallCommand("ID=unknown\n"), null);
+
+  temporaryDirectory((directory) => {
+    const procPath = path.join(directory, "ip_unprivileged_port_start");
+    const configPath = path.join(directory, "99-torplay-ports.conf");
+    writeFileSync(procPath, "1024\n");
+    enableUnprivilegedPort({ uid: 0, procPath, configPath });
+    assert.equal(readFileSync(procPath, "utf8"), "80\n");
+    assert.match(readFileSync(configPath, "utf8"), /ip_unprivileged_port_start=80/);
+    assert.throws(() => enableUnprivilegedPort({ uid: 1000, procPath, configPath }),
+      /Administrator authorization/);
+  });
+});
+
 test("Linux AppImage packaging runs only when manually requested", () => {
   const workflow = readFileSync(path.resolve(".github/workflows/linux-appimage.yml"), "utf8");
   assert.match(workflow, /workflow_dispatch:/);
   assert.doesNotMatch(workflow, /\b(pull_request|push):/);
   assert.match(workflow, /runs-on: ubuntu-24\.04/);
+  assert.match(workflow, /sudo sysctl -w net\.ipv4\.ip_unprivileged_port_start=80/);
 });
 
 test("Linux stage rejects absent files, wrong native architecture, and secrets", () => temporaryDirectory((directory) => {
@@ -53,6 +122,7 @@ test("Linux stage rejects absent files, wrong native architecture, and secrets",
   const required = [
     "AppRun", "torplay.desktop", "torplay.png", ".DirIcon", "usr/bin/node",
     `${app}/server.js`, "usr/lib/torplay/runtime/linux-launcher.mjs",
+    "usr/lib/torplay/runtime/linux-port-helper.mjs",
     "usr/lib/torplay/runtime/runtime-watchdog.mjs", `${app}/node_modules/better-sqlite3/package.json`,
     `${app}/node_modules/better-sqlite3/build/Release/better_sqlite3.node`,
     `${app}/node_modules/bindings/bindings.js`, `${app}/node_modules/file-uri-to-path/index.js`,
@@ -118,18 +188,25 @@ test("Linux runtime mirrors .next into XDG cache and resolves packaged externals
   }
 });
 
-test("Linux network details never advertise a LAN address", () => {
+test("Linux network details advertise the supervised LAN endpoint", () => {
   const request = new Request("http://127.0.0.1:39123/api/network-access");
   const details = networkAccessDetails(request, {
-    environment: { TORPLAY_DISTRIBUTION: "linux-appimage", PORT: "39123" },
+    environment: {
+      TORPLAY_DISTRIBUTION: "linux-appimage",
+      TORPLAY_SUPERVISOR_PID: "42",
+      TORPLAY_PUBLIC_HOSTNAME: "torplay.local",
+      TORPLAY_PUBLIC_PORT: "3000",
+    },
     interfaces: { eth0: [{ family: "IPv4", address: "192.168.1.22", internal: false }] },
   });
   assert.deepEqual(details, {
-    scope: "desktop", hostnameUrl: "http://127.0.0.1:39123", lanAddress: null, lanUrl: null,
+    hostnameUrl: "http://torplay.local:3000",
+    lanAddress: "192.168.1.22",
+    lanUrl: "http://192.168.1.22:3000",
   });
 });
 
-test("Linux supervisor starts a loopback server and Quit cleans up its child and socket", async () => {
+test("Linux supervisor starts a LAN proxy and mDNS, then Quit cleans up", async () => {
   const directory = mkdtempSync(path.join(os.tmpdir(), "torplay-linux-runtime-"));
   const app = path.join(directory, "app");
   mkdirSync(app);
@@ -148,19 +225,35 @@ test("Linux supervisor starts a loopback server and Quit cleans up its child and
     XDG_RUNTIME_DIR: path.join(directory, "run"),
   });
   let browserUrl;
+  let mdnsOptions;
+  let mdnsStopped = false;
   let runtime;
+  const publicPort = await availableLoopbackPort();
   try {
     runtime = await startLinuxApp({
-      paths, environment: {}, serverEntry: server,
+      paths, environment: { TORPLAY_PUBLIC_PORT: String(publicPort) }, serverEntry: server,
       watchdogEntry: path.resolve("scripts/runtime-watchdog.js"),
       openBrowser: async (url) => { browserUrl = url; return true; },
+      startMdns: async (options) => {
+        mdnsOptions = options;
+        return { stop: async () => { mdnsStopped = true; } };
+      },
     });
     assert.equal(browserUrl, runtime.url);
+    assert.equal(runtime.url, `http://127.0.0.1:${publicPort}`);
+    assert.equal(runtime.networkUrl, `http://torplay.local:${publicPort}`);
+    assert.deepEqual(mdnsOptions, {
+      hostname: "torplay.local", port: publicPort, mdnsInterface: null,
+    });
     assert.equal((await fetch(`${runtime.url}/api/health`)).status, 200);
+    assert.deepEqual(runtime.reporter.get().components, {
+      TorPlay: "OK", "LAN proxy": "OK", mDNS: "OK",
+    });
     assert.equal(existsSync(paths.controlPath), true);
     await sendControlCommand({ endpoint: paths.controlPath });
     await new Promise((resolve) => runtime.child.once("exit", resolve));
     await runtime.stop();
+    assert.equal(mdnsStopped, true);
     assert.equal(existsSync(paths.lockPath), false);
     assert.equal(existsSync(paths.controlPath), false);
   } finally {
