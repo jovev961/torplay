@@ -7,12 +7,12 @@ import {
   SettingsError,
   configurationWritable,
   parseSettingsEnvironment,
-  playbackPreferences,
   settingsState,
-  updatePlaybackPreferences,
   updateProviderSettings,
   validateAndUpdateProvidersSettings,
 } from "../lib/settings/config.js";
+import { createDatabase } from "../lib/database/sqlite.js";
+import { playbackPreferences, updatePlaybackPreferences } from "../lib/settings/playback-preferences.js";
 
 async function fixture(source = "") {
   const directory = await mkdtemp(path.join(os.tmpdir(), "torplay-settings-"));
@@ -33,25 +33,27 @@ test("parses supported environment assignments without exposing comments", () =>
   });
 });
 
-test("shared playback switches default off and persist independently", async () => {
-  const { directory, filename } = await fixture("# Preserve me\n");
-  const environment = { TORPLAY_CONFIG_PATH: filename };
-  try {
-    assert.deepEqual(playbackPreferences(environment), {
-      autoSkipIntrosRecaps: false, autoPlayNextEpisode: false,
-    });
-    await updatePlaybackPreferences({ autoSkipIntrosRecaps: true, autoPlayNextEpisode: false },
-      { environment, configPath: filename });
-    assert.deepEqual(playbackPreferences(environment), {
-      autoSkipIntrosRecaps: true, autoPlayNextEpisode: false,
-    });
-    assert.match(await readFile(filename, "utf8"), /TORPLAY_AUTO_SKIP_INTRO_RECAP=true/);
-    assert.match(await readFile(filename, "utf8"), /# Preserve me/);
-    await assert.rejects(updatePlaybackPreferences({ autoSkipIntrosRecaps: "yes", autoPlayNextEpisode: true },
-      { environment, configPath: filename }), SettingsError);
-  } finally {
-    await rm(directory, { recursive: true, force: true });
-  }
+test("shared playback switches persist without rewriting runtime configuration", () => {
+  const database = createDatabase(":memory:");
+  const environment = {
+    TORPLAY_AUTO_SKIP_INTRO_RECAP: "false",
+    TORPLAY_AUTO_PLAY_NEXT_EPISODE: "true",
+  };
+  assert.deepEqual(playbackPreferences(environment, database), {
+    autoSkipIntrosRecaps: false, autoPlayNextEpisode: true,
+  });
+  assert.deepEqual(updatePlaybackPreferences({
+    autoSkipIntrosRecaps: true, autoPlayNextEpisode: false,
+  }, { environment, database }), {
+    autoSkipIntrosRecaps: true, autoPlayNextEpisode: false,
+  });
+  assert.deepEqual(playbackPreferences(environment, database), {
+    autoSkipIntrosRecaps: true, autoPlayNextEpisode: false,
+  });
+  assert.throws(() => updatePlaybackPreferences({
+    autoSkipIntrosRecaps: "yes", autoPlayNextEpisode: true,
+  }, { environment, database }), SettingsError);
+  database.close();
 });
 
 test("updates FlareSolverr settings atomically while preserving legacy configuration", async () => {

@@ -917,37 +917,68 @@ a {
 }
 
 .detailShell {
-  padding-top: 22px;
+  width: 100%;
+  max-width: 1600px;
+  padding-top: 0;
+}
+
+.detailShell > .appHeader,
+.detailShell > .sourceWorkspace,
+.detailShell > .playbackSection,
+.detailShell > .seasonSection,
+.detailShell > .nextEpisodePrompt,
+.detailShell > .notice,
+.detailShell > .detailDisclaimer {
+  width: min(1240px, calc(100% - 48px));
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.detailShell > .appHeader {
+  position: relative;
+  z-index: 10;
+  margin-top: 24px;
 }
 
 .detailsHero {
   position: relative;
-  min-height: 610px;
+  min-height: min(760px, 82vh);
+  margin-top: -92px;
   overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  background: var(--panel);
+  background: #090a0c;
 }
 
 .compactHero {
-  min-height: 540px;
+  min-height: min(700px, 76vh);
+}
+
+.backdropImage {
+  object-fit: cover;
+  object-position: center 22%;
+  filter: saturate(0.9) contrast(1.04);
+  transform: scale(1.012);
 }
 
 .backdropShade {
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, rgba(7, 8, 10, 0.97) 5%, rgba(7, 8, 10, 0.82) 48%, rgba(7, 8, 10, 0.22)), linear-gradient(0deg, #0b0d10 0%, transparent 60%);
+  background:
+    linear-gradient(90deg, rgba(5, 6, 8, 0.98) 0%, rgba(5, 6, 8, 0.82) 30%, rgba(5, 6, 8, 0.3) 63%, rgba(5, 6, 8, 0.12) 100%),
+    linear-gradient(0deg, var(--background) 0%, rgba(11, 13, 16, 0.92) 7%, transparent 48%),
+    linear-gradient(180deg, rgba(5, 6, 8, 0.7) 0%, transparent 24%);
 }
 
 .detailsContent {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: 230px minmax(0, 660px);
+  grid-template-columns: 210px minmax(0, 650px);
   align-items: end;
-  gap: 34px;
+  gap: 38px;
+  width: min(1240px, calc(100% - 48px));
   min-height: inherit;
-  padding: 56px;
+  margin: 0 auto;
+  padding: 170px 0 92px;
 }
 
 .detailPoster {
@@ -955,29 +986,86 @@ a {
   aspect-ratio: 2 / 3;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 12px;
+  border-radius: 8px;
   background: #191d22;
-  box-shadow: 0 22px 50px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.64);
+}
+
+.detailPoster img {
+  object-fit: cover;
+}
+
+.detailType {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #f2f2f2;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.detailType::before {
+  width: 22px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--accent);
+  content: "";
 }
 
 .detailCopy h1 {
-  margin: 10px 0 12px;
-  font-size: clamp(2.5rem, 6vw, 5rem);
-  line-height: 0.98;
-  letter-spacing: -0.05em;
+  max-width: 780px;
+  margin: 14px 0 18px;
+  font-size: clamp(3.1rem, 6.8vw, 6.2rem);
+  line-height: 0.9;
+  letter-spacing: -0.065em;
+  text-wrap: balance;
+  text-shadow: 0 3px 24px rgba(0, 0, 0, 0.7);
 }
 
 .detailMeta {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 16px;
-  color: #d5dbe1;
-  font-size: 0.9rem;
+  align-items: center;
+  gap: 9px;
+  color: #f0f2f4;
+  font-size: 0.88rem;
+  font-weight: 700;
 }
 
-.detailCopy p {
-  max-width: 650px;
-  margin: 18px 0 24px;
+.detailMeta span {
+  padding: 4px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(8px);
+}
+
+.detailGenres {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin-top: 17px;
+  color: #d8dce0;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.detailGenres span:not(:last-child)::after {
+  position: absolute;
+  margin-left: 8px;
+  color: var(--accent);
+  content: "•";
+}
+
+.detailOverview {
+  max-width: 630px;
+  margin: 16px 0 0;
+  color: #d0d4d8;
+  font-size: clamp(0.96rem, 1.4vw, 1.08rem);
+  line-height: 1.6;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.8);
 }
 
 .primaryButton {
@@ -1011,6 +1099,53 @@ a {
   gap: 14px;
   margin-top: 24px;
   padding: 26px;
+}
+
+.detailShell > .sourceWorkspace:not(:has(.sourcePanel)),
+.detailShell > .playbackSection:has(> .episodeLaunch):not(:has(.sourcePanel)) {
+  position: relative;
+  z-index: 3;
+  margin-top: -72px;
+}
+
+.detailShell > .sourceWorkspace:not(:has(.sourcePanel)),
+.detailShell > .playbackSection:has(> .episodeLaunch):not(:has(.sourcePanel)) .episodeLaunch {
+  padding-left: 248px;
+}
+
+.detailShell > .sourceWorkspace:not(:has(.sourcePanel)) .primaryButton,
+.detailShell > .playbackSection:has(> .episodeLaunch):not(:has(.sourcePanel)) .primaryButton {
+  display: inline-flex;
+  align-items: center;
+  min-height: 48px;
+  padding: 12px 22px;
+  color: #111;
+  background: #fff;
+}
+
+.detailShell > .sourceWorkspace:not(:has(.sourcePanel)) .primaryButton::before,
+.detailShell > .playbackSection:has(> .episodeLaunch):not(:has(.sourcePanel)) .primaryButton::before {
+  width: 0;
+  height: 0;
+  margin-right: 10px;
+  border-top: 7px solid transparent;
+  border-bottom: 7px solid transparent;
+  border-left: 11px solid currentColor;
+  content: "";
+}
+
+.detailShell > .sourceWorkspace:not(:has(.sourcePanel)) .primaryButton:hover,
+.detailShell > .playbackSection:has(> .episodeLaunch):not(:has(.sourcePanel)) .primaryButton:hover {
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.detailShell > .playbackSection:has(> .episodeLaunch):not(:has(.sourcePanel)) .episodeLaunch {
+  margin-top: 0;
+  padding: 0 0 0 248px;
+  overflow: visible;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .episodeLaunch h2 {
@@ -1864,6 +1999,10 @@ a {
   margin-top: 24px;
 }
 
+.seasonSection {
+  padding-top: 18px;
+}
+
 .seasonToolbar,
 .sourceHeading {
   display: flex;
@@ -1900,36 +2039,102 @@ a {
 .episodeList,
 .sourceResults {
   display: grid;
-  gap: 10px;
+  gap: 4px;
 }
 
 .episodeCard {
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr);
-  gap: 18px;
+  align-items: center;
+  gap: 22px;
   width: 100%;
-  padding: 12px;
+  min-height: 160px;
+  padding: 14px 16px;
   border: 1px solid transparent;
-  border-radius: 12px;
+  border-radius: 6px;
   color: var(--text);
-  background: #0e1115;
+  background: transparent;
   text-align: left;
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
 }
 
 .episodeCard:hover,
 .episodeCard:focus-visible,
 .episodeCard.active {
-  border-color: var(--accent);
   outline: none;
-  background: #171b20;
+  background: rgba(255, 255, 255, 0.065);
+}
+
+.episodeCard:hover,
+.episodeCard:focus-visible {
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.episodeCard.active {
+  border-color: rgba(229, 9, 20, 0.7);
+  background: linear-gradient(90deg, rgba(229, 9, 20, 0.14), rgba(255, 255, 255, 0.045));
 }
 
 .episodeStill {
   position: relative;
   aspect-ratio: 16 / 9;
   overflow: hidden;
-  border-radius: 8px;
+  border-radius: 5px;
   background: #20262d;
+}
+
+.episodeStill::after {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.18);
+  content: "";
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+
+.episodeStill img {
+  object-fit: cover;
+  transition: transform 260ms ease;
+}
+
+.episodeCard:hover .episodeStill img,
+.episodeCard:focus-visible .episodeStill img {
+  transform: scale(1.035);
+}
+
+.episodeCard:hover .episodeStill::after,
+.episodeCard:focus-visible .episodeStill::after {
+  opacity: 1;
+}
+
+.episodePlayIcon {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 1;
+  display: grid;
+  width: 42px;
+  height: 42px;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.58);
+  opacity: 0;
+  place-items: center;
+  transform: translate(-50%, -50%) scale(0.86);
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.episodePlayIcon svg {
+  width: 22px;
+  height: 22px;
+  fill: white;
+}
+
+.episodeCard:hover .episodePlayIcon,
+.episodeCard:focus-visible .episodePlayIcon,
+.episodeCard.active .episodePlayIcon {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
 }
 
 .episodeTitle {
@@ -1946,16 +2151,16 @@ a {
 
 .episodeTitle h3 {
   margin: 0;
-  font-size: 1rem;
+  font-size: 1.05rem;
 }
 
 .episodeCopy p {
   display: -webkit-box;
   margin: 10px 0;
   overflow: hidden;
-  color: var(--muted);
-  font-size: 0.88rem;
-  line-height: 1.5;
+  color: #aeb6bf;
+  font-size: 0.9rem;
+  line-height: 1.55;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
 }
@@ -2592,6 +2797,59 @@ button.episodeFileChoice {
 .playerSegmentSkip:hover,
 .playerSegmentSkip:focus-visible { border-color: white; background: var(--accent); }
 
+.playerSegmentCountdown {
+  position: absolute;
+  top: max(66px, calc(env(safe-area-inset-top) + 56px));
+  right: max(18px, env(safe-area-inset-right));
+  z-index: 4;
+  display: grid;
+  gap: 9px;
+  width: min(280px, calc(100% - 36px));
+  padding: 13px 14px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 11px;
+  background: rgba(20, 24, 29, 0.94);
+  color: white;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.42);
+  pointer-events: none;
+  backdrop-filter: blur(14px);
+}
+
+.playerSegmentCountdown > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.playerSegmentCountdown strong { font-size: 0.86rem; }
+.playerSegmentCountdown small { color: var(--muted); font-size: 0.72rem; white-space: nowrap; }
+
+.playerAutomaticProgress {
+  display: block;
+  width: 100%;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.playerAutomaticProgress > span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #ff3038, #ff6b70);
+  box-shadow: 0 0 12px rgba(229, 9, 20, 0.55);
+  transform: translateX(-100%);
+  animation: playerAutomaticProgress 5s linear forwards;
+}
+
+@keyframes playerAutomaticProgress {
+  to { transform: translateX(0); }
+}
+
 .playerEpisodePrompt {
   position: absolute;
   top: max(66px, calc(env(safe-area-inset-top) + 56px));
@@ -2612,6 +2870,7 @@ button.episodeFileChoice {
 
 .playerEpisodePrompt > span { color: var(--muted); }
 .playerEpisodePrompt > small { color: #e1e4e9; }
+.playerEpisodePrompt > .playerAutomaticProgress { margin-top: 2px; }
 
 .playerEpisodePromptActions {
   display: flex;
@@ -3256,6 +3515,8 @@ button.episodeFileChoice {
 
 .speedMenu {
   grid-template-columns: 1fr 1fr;
+  width: min(380px, calc(100vw - 36px));
+  min-width: 0;
 }
 
 .speedMenu > span {
@@ -3265,21 +3526,106 @@ button.episodeFileChoice {
 .playerPlaybackPreferences {
   grid-column: 1 / -1;
   display: grid;
-  gap: 3px;
-  padding-top: 8px;
+  gap: 8px;
+  margin-top: 3px;
+  padding-top: 10px;
   border-top: 1px solid var(--border);
 }
 
-.playerPlaybackPreferences > span {
-  padding: 5px 10px;
+.playerPlaybackPreferencesHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 4px;
+}
+
+.playerPlaybackPreferencesHeader > span {
   color: var(--muted);
   font-size: 0.7rem;
   font-weight: 800;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
-.playerPlaybackPreferences button { white-space: normal; }
-.playerPlaybackPreferences small { padding: 5px 10px; color: var(--danger); }
+.playerPlaybackPreferencesHeader small {
+  color: rgba(232, 236, 240, 0.58);
+  font-size: 0.66rem;
+  white-space: nowrap;
+}
+
+.playerMenu .playerPreferenceOption {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  min-height: 60px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.035);
+  white-space: normal;
+}
+
+.playerMenu .playerPreferenceOption:hover,
+.playerMenu .playerPreferenceOption:focus-visible {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.playerPreferenceText {
+  display: grid;
+  gap: 3px;
+}
+
+.playerPreferenceText strong {
+  color: #f3f5f7;
+  font-size: 0.82rem;
+  line-height: 1.25;
+}
+
+.playerPreferenceText small {
+  color: var(--muted);
+  font-size: 0.68rem;
+  line-height: 1.35;
+}
+
+.playerPreferenceSwitch {
+  position: relative;
+  width: 34px;
+  height: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  transition: border-color 150ms ease, background 150ms ease;
+}
+
+.playerPreferenceSwitch > span {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #f7f7f7;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+  transition: transform 150ms ease;
+}
+
+.playerPreferenceSwitch.active {
+  border-color: rgba(255, 88, 96, 0.9);
+  background: var(--accent);
+}
+
+.playerPreferenceSwitch.active > span { transform: translateX(14px); }
+
+.playerMenu .playerPreferenceOption:disabled { opacity: 0.62; }
+
+.playerPlaybackPreferences .playerPreferenceError {
+  padding: 2px 4px;
+  color: #ff9b9f;
+  font-size: 0.68rem;
+}
 
 .subtitleOverlay {
   position: absolute;
@@ -3430,6 +3776,25 @@ footer {
   .shell {
     width: min(100% - 20px, 1100px);
     padding: 12px 0 24px;
+  }
+
+  .detailShell {
+    width: 100%;
+    padding-top: 0;
+  }
+
+  .detailShell > .appHeader,
+  .detailShell > .sourceWorkspace,
+  .detailShell > .playbackSection,
+  .detailShell > .seasonSection,
+  .detailShell > .nextEpisodePrompt,
+  .detailShell > .notice,
+  .detailShell > .detailDisclaimer {
+    width: calc(100% - 20px);
+  }
+
+  .detailShell > .appHeader {
+    margin-top: 12px;
   }
 
   .searchPanel,
@@ -3663,20 +4028,66 @@ footer {
 
   .detailsHero,
   .compactHero {
-    min-height: 0;
+    min-height: 680px;
+    margin-top: -70px;
   }
 
   .detailsContent {
+    width: calc(100% - 40px);
     align-items: start;
-    padding: 180px 22px 28px;
+    align-content: end;
+    gap: 20px;
+    padding: 170px 0 96px;
   }
 
   .detailPoster {
-    width: 150px;
+    width: 112px;
   }
 
   .detailCopy h1 {
-    font-size: 2.7rem;
+    margin: 10px 0 14px;
+    font-size: clamp(2.65rem, 14vw, 4.3rem);
+  }
+
+  .detailOverview {
+    display: -webkit-box;
+    overflow: hidden;
+    font-size: 0.94rem;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 4;
+  }
+
+  .detailShell > .sourceWorkspace:not(:has(.sourcePanel)),
+  .detailShell > .playbackSection:has(> .episodeLaunch):not(:has(.sourcePanel)) {
+    margin-top: -72px;
+  }
+
+  .detailShell > .sourceWorkspace:not(:has(.sourcePanel)),
+  .detailShell > .playbackSection:has(> .episodeLaunch):not(:has(.sourcePanel)) .episodeLaunch {
+    padding-left: 0;
+  }
+
+  .detailShell > .sourceWorkspace:not(:has(.sourcePanel)) .resumeActions,
+  .detailShell > .playbackSection:has(> .episodeLaunch):not(:has(.sourcePanel)) .resumeActions {
+    gap: 8px;
+  }
+
+  .detailShell > .sourceWorkspace:not(:has(.sourcePanel)) .primaryButton,
+  .detailShell > .sourceWorkspace:not(:has(.sourcePanel)) .secondaryButton,
+  .detailShell > .playbackSection:has(> .episodeLaunch):not(:has(.sourcePanel)) .primaryButton,
+  .detailShell > .playbackSection:has(> .episodeLaunch):not(:has(.sourcePanel)) .secondaryButton {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+
+  .episodeCard {
+    gap: 12px;
+    min-height: 0;
+    padding: 10px;
+  }
+
+  .episodeCopy p {
+    -webkit-line-clamp: 2;
   }
 
   .seasonToolbar,

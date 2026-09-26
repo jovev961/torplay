@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { getEpisodeSegments, normalizeIntroDbSegments, normalizeSegments } from "../lib/playback/segments.js";
-import { activeSkipSegment, automaticSegment, segmentPlaybackRange, showManualSkip } from "../lib/playback/segment-controls.js";
+import {
+  activeSkipSegment,
+  AUTOMATIC_SEGMENT_DELAY_SECONDS,
+  automaticSegment,
+  segmentPlaybackRange,
+  showManualSkip,
+} from "../lib/playback/segment-controls.js";
 import { shouldOfferNextEpisode, shouldShowUpNext, upNextTrigger } from "../lib/playback/autoplay.js";
 
 const EPISODE = { tmdbId: 42, season: 2, episode: 3, duration: 2700 };
@@ -153,14 +159,17 @@ test("confirmed empty results use the shorter cache lifetime and missing IMDb sk
   assert.equal(missing.segments.outro, null);
 });
 
-test("IntroDB skips stay manual and its outro offers Up Next without an early auto transition", () => {
+test("validated SkipDB and IntroDB ranges support automatic skipping and outro transitions", () => {
   const intro = { startMs: 20000, endMs: 40000, source: "introdb" };
   const outro = { startMs: 1100000, endMs: 1200000, source: "introdb" };
   const skipDbIntro = { ...intro, source: "skipdb" };
-  assert.equal(automaticSegment(intro), false);
-  assert.equal(automaticSegment(outro), false);
+  assert.equal(automaticSegment(intro), true);
+  assert.equal(automaticSegment(outro), true);
   assert.equal(automaticSegment(skipDbIntro), true);
-  assert.equal(showManualSkip(intro, true), true);
+  assert.equal(automaticSegment({ ...intro, source: "unknown" }), false);
+  assert.equal(AUTOMATIC_SEGMENT_DELAY_SECONDS, 5);
+  assert.equal(showManualSkip(intro, true), false);
+  assert.equal(showManualSkip(intro, false), true);
   assert.equal(showManualSkip(skipDbIntro, true), false);
   assert.equal(showManualSkip(skipDbIntro, false), true);
   assert.equal(activeSkipSegment(25, { intro }).source, "introdb");

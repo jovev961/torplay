@@ -10,3 +10,10 @@ test("HLS demuxing stays off the UI thread", async () => {
   assert.notEqual(start, -1);
   assert.match(source.slice(start, end), /enableWorker:\s*true/);
 });
+
+test("automatic segment actions wait for the visible countdown", async () => {
+  const source = await readFile(new URL("../components/VideoPlayer.js", import.meta.url), "utf8");
+  assert.match(source, /setTimeout\(\(\) => \{[\s\S]*autoSkipSegment\(segment\);[\s\S]*AUTOMATIC_SEGMENT_DELAY_SECONDS \* 1000/);
+  assert.match(source, /let remaining = AUTOMATIC_SEGMENT_DELAY_SECONDS/);
+  assert.match(source, /playerAutomaticProgress/);
+});

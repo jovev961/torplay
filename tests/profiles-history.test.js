@@ -242,7 +242,7 @@ test("database migration restores started media that only has a progress writer"
     assert.equal(restored.position, 0);
     assert.equal(restored.duration, 0);
     assert.equal(restored.episodeTitle, "Chapter Three: Body Double");
-    assert.equal(database.pragma("user_version", { simple: true }), 13);
+    assert.equal(database.pragma("user_version", { simple: true }), 14);
   } finally {
     database?.close();
     await rm(directory, { recursive: true, force: true });
@@ -279,7 +279,7 @@ test("database migration assigns built-in avatars without replacing profile data
     assert.equal(profiles[0].avatarId, defaultProfileAvatarId("legacy-one", 0));
     assert.equal(profiles[1].avatarId, defaultProfileAvatarId("legacy-two", 1));
     assert.equal(profiles.every((profile) => isProfileAvatarId(profile.avatarId)), true);
-    assert.equal(database.pragma("user_version", { simple: true }), 13);
+    assert.equal(database.pragma("user_version", { simple: true }), 14);
   } finally {
     database?.close();
     await rm(directory, { recursive: true, force: true });

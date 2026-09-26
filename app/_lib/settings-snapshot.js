@@ -1,5 +1,6 @@
 import packageJson from "../../package.json" with { type: "json" };
-import { configurationWritable, playbackPreferences, settingsState } from "../../lib/settings/config.js";
+import { configurationWritable, settingsState } from "../../lib/settings/config.js";
+import { playbackPreferences } from "../../lib/settings/playback-preferences.js";
 import { setupStatusFromProviders } from "../../lib/settings/readiness.js";
 import { publicCustomProviders } from "../../lib/settings/torrent-providers.js";
 import { publicNativeSources } from "../../lib/settings/native-sources.js";
