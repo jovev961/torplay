@@ -108,6 +108,7 @@ export function validateLinuxStage(directory = stage) {
     "AppRun", "torplay.desktop", "torplay.png", ".DirIcon",
     "usr/bin/node", "usr/lib/torplay/app/server.js",
     "usr/lib/torplay/runtime/linux-launcher.mjs",
+    "usr/lib/torplay/runtime/linux-port-helper.mjs",
     "usr/lib/torplay/runtime/runtime-watchdog.mjs",
   ]) {
     if (!existsSync(path.join(directory, required))) throw new Error(`Linux stage is missing ${required}.`);
@@ -136,6 +137,7 @@ async function stageAppDir() {
   cpSync(path.join(root, ".next/static"), path.join(app, ".next/static"), { recursive: true });
   cpSync(path.join(root, "public"), path.join(app, "public"), { recursive: true });
   bundle("linux-launcher.js", path.join(runtime, "linux-launcher.mjs"));
+  bundle("linux-port-helper.js", path.join(runtime, "linux-port-helper.mjs"));
   bundle("runtime-watchdog.js", path.join(runtime, "runtime-watchdog.mjs"));
   cpSync(path.join(root, "installer/linux/AppRun"), path.join(stage, "AppRun"));
   cpSync(path.join(root, "installer/linux/torplay.desktop"), path.join(stage, "torplay.desktop"));
