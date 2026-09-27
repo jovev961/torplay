@@ -106,12 +106,16 @@ export function rpmPackageMetadata(version) {
 
 export function validateLinuxInstallerPayload(directory) {
   for (const required of [
-    "usr/bin/torplay", "usr/bin/torplay-autostart", "usr/lib/torplay/node",
+    "usr/bin/torplay", "usr/bin/torplay-autostart", "usr/bin/torplay-uninstaller",
+    "usr/lib/torplay/node",
     "usr/lib/torplay/app/server.js", "usr/lib/torplay/app/node_modules/next/package.json",
     "usr/lib/torplay/app/node_modules/better-sqlite3/package.json",
     "usr/lib/torplay/runtime/linux-launcher.mjs",
+    "usr/lib/torplay/runtime/linux-uninstaller.mjs",
     "usr/share/applications/torplay.desktop",
+    "usr/share/applications/torplay-uninstaller.desktop",
     "usr/share/icons/hicolor/256x256/apps/torplay.png",
+    "usr/share/metainfo/io.github.jovev961.TorPlay.metainfo.xml",
     "usr/share/doc/torplay/LICENSE",
   ]) {
     if (!existsSync(path.join(directory, required))) {
@@ -129,6 +133,7 @@ export function stageLinuxInstallerPayload(sourceStage, destination) {
   mkdirSync(path.join(destination, "usr/lib/torplay"), { recursive: true });
   mkdirSync(path.join(destination, "usr/share/applications"), { recursive: true });
   mkdirSync(path.join(destination, "usr/share/icons/hicolor/256x256/apps"), { recursive: true });
+  mkdirSync(path.join(destination, "usr/share/metainfo"), { recursive: true });
   mkdirSync(path.join(destination, "usr/share/doc/torplay"), { recursive: true });
   cpSync(path.join(sourceStage, "usr/lib/torplay"), path.join(destination, "usr/lib/torplay"), {
     recursive: true, verbatimSymlinks: true,
@@ -137,12 +142,23 @@ export function stageLinuxInstallerPayload(sourceStage, destination) {
   cpSync(path.join(root, "installer/linux/torplay"), path.join(destination, "usr/bin/torplay"));
   cpSync(path.join(root, "installer/linux/torplay-autostart"),
     path.join(destination, "usr/bin/torplay-autostart"));
+  cpSync(path.join(root, "installer/linux/torplay-uninstaller"),
+    path.join(destination, "usr/bin/torplay-uninstaller"));
+  bundleLinuxRuntime("linux-uninstaller.js",
+    path.join(destination, "usr/lib/torplay/runtime/linux-uninstaller.mjs"));
   cpSync(path.join(root, "installer/linux/torplay-installed.desktop"),
     path.join(destination, "usr/share/applications/torplay.desktop"));
+  cpSync(path.join(root, "installer/linux/torplay-uninstaller.desktop"),
+    path.join(destination, "usr/share/applications/torplay-uninstaller.desktop"));
+  cpSync(path.join(root, "installer/linux/io.github.jovev961.TorPlay.metainfo.xml"),
+    path.join(destination, "usr/share/metainfo/io.github.jovev961.TorPlay.metainfo.xml"));
   cpSync(path.join(sourceStage, "torplay.png"),
     path.join(destination, "usr/share/icons/hicolor/256x256/apps/torplay.png"));
   cpSync(path.join(root, "LICENSE"), path.join(destination, "usr/share/doc/torplay/LICENSE"));
-  for (const executable of ["usr/bin/torplay", "usr/bin/torplay-autostart", "usr/lib/torplay/node"]) {
+  for (const executable of [
+    "usr/bin/torplay", "usr/bin/torplay-autostart", "usr/bin/torplay-uninstaller",
+    "usr/lib/torplay/node",
+  ]) {
     chmodSync(path.join(destination, executable), 0o755);
   }
   validateLinuxInstallerPayload(destination);
@@ -158,8 +174,8 @@ export function stageDebPackage(sourceStage, destination, version) {
     "Priority: optional",
     "Architecture: amd64",
     "Maintainer: TorPlay <noreply@torplay.local>",
-    "Depends: libc6 (>= 2.28), libgcc-s1, libstdc++6",
-    "Recommends: policykit-1, xdg-utils",
+    "Depends: libc6 (>= 2.28), libgcc-s1, libstdc++6, policykit-1, zenity",
+    "Recommends: xdg-utils",
     "Description: self-contained TorPlay home video application",
     " Discover and stream authorized torrent video with a bundled Node.js runtime",
     " and media tools. User data remains in the current user's XDG directories.",
@@ -179,8 +195,8 @@ export function rpmSpec(version) {
     "URL: https://github.com/jovev961/torplay",
     "BuildArch: x86_64",
     "AutoReqProv: no",
-    "Requires: glibc, libgcc, libstdc++",
-    "Recommends: polkit, xdg-utils",
+    "Requires: glibc, libgcc, libstdc++, polkit, zenity",
+    "Recommends: xdg-utils",
     "",
     "%description",
     "Discover and stream authorized torrent video with a bundled Node.js runtime",
@@ -199,9 +215,12 @@ export function rpmSpec(version) {
     "%license /usr/share/doc/torplay/LICENSE",
     "/usr/bin/torplay",
     "/usr/bin/torplay-autostart",
+    "/usr/bin/torplay-uninstaller",
     "/usr/lib/torplay",
     "/usr/share/applications/torplay.desktop",
+    "/usr/share/applications/torplay-uninstaller.desktop",
     "/usr/share/icons/hicolor/256x256/apps/torplay.png",
+    "/usr/share/metainfo/io.github.jovev961.TorPlay.metainfo.xml",
     "",
   ].join("\n");
 }

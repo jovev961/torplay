@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+prefix=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+exec "$prefix/lib/torplay/node" "$prefix/lib/torplay/runtime/linux-uninstaller.mjs" "$@"

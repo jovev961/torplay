@@ -20,6 +20,12 @@ import {
 } from "../scripts/linux-launcher.js";
 import { enableUnprivilegedPort } from "../scripts/linux-port-helper.js";
 import { sendControlCommand } from "../scripts/runtime-control.js";
+import {
+  confirmUninstall, detectInstalledPackage, isAllowedRemovalCommand, isAllowedTorPlayDataPath,
+  nativeRemovalCommand,
+  removeTorPlayUserData, requestNativeRemoval, shutdownTorPlay, torPlayUserDataTargets,
+  uninstallTorPlay,
+} from "../scripts/linux-uninstaller.js";
 
 function temporaryDirectory(callback) {
   const directory = mkdtempSync(path.join(os.tmpdir(), "torplay-linux-test-"));
@@ -147,6 +153,19 @@ test("Linux native installer payload is self-contained and uses distro package v
     assert.equal(launch.status, 0);
     assert.equal(launch.stdout.trim(),
       `${path.join(destination, "usr/lib/torplay/runtime/linux-launcher.mjs")}\n--status`);
+    const uninstall = spawnSync(path.join(destination, "usr/bin/torplay-uninstaller"), [], {
+      encoding: "utf8",
+    });
+    assert.equal(uninstall.status, 0);
+    assert.equal(uninstall.stdout.trim(),
+      path.join(destination, "usr/lib/torplay/runtime/linux-uninstaller.mjs"));
+    assert.match(readFileSync(
+      path.join(destination, "usr/share/applications/torplay-uninstaller.desktop"), "utf8",
+    ), /Name=TorPlay Uninstaller[\s\S]*Terminal=false/);
+    assert.match(readFileSync(path.join(
+      destination, "usr/share/metainfo/io.github.jovev961.TorPlay.metainfo.xml",
+    ), "utf8"),
+      /<launchable type="desktop-id">torplay\.desktop<\/launchable>/);
     assert.match(readFileSync(path.join(destination, "DEBIAN/control"), "utf8"),
       /Version: 0\.1\.0~beta\.2/);
     assert.equal(debianPackageVersion("1.2.3"), "1.2.3");
@@ -155,8 +174,174 @@ test("Linux native installer payload is self-contained and uses distro package v
     });
     assert.match(rpmSpec("0.1.0-beta.2"), /BuildArch: x86_64/);
     assert.match(rpmSpec("0.1.0-beta.2"), /__os_install_post %\{nil\}/);
-    assert.match(rpmSpec("0.1.0-beta.2"), /Recommends: polkit, xdg-utils/);
+    assert.match(rpmSpec("0.1.0-beta.2"), /Requires: .*polkit, zenity/);
+    assert.match(rpmSpec("0.1.0-beta.2"), /torplay-uninstaller\.desktop/);
   });
+});
+
+test("Linux uninstaller constructs only fixed native package removal actions", () => {
+  assert.deepEqual(nativeRemovalCommand("deb", (file) => file === "/usr/bin/apt-get"), {
+    command: "/usr/bin/apt-get", args: ["remove", "-y", "torplay"],
+  });
+  assert.deepEqual(nativeRemovalCommand("rpm", (file) => file === "/usr/bin/dnf5"), {
+    command: "/usr/bin/dnf5", args: ["remove", "-y", "torplay"],
+  });
+  assert.throws(() => nativeRemovalCommand("other", () => true), /No supported other/);
+  assert.equal(isAllowedRemovalCommand({
+    command: "/usr/bin/apt-get", args: ["remove", "-y", "torplay"],
+  }), true);
+  assert.equal(isAllowedRemovalCommand({
+    command: "/usr/bin/apt-get", args: ["remove", "-y", "another-package"],
+  }), false);
+
+  const deb = detectInstalledPackage({
+    executableExists: (file) => file === "/usr/bin/dpkg-query",
+    runSync: (command, args) => ({
+      status: command === "/usr/bin/dpkg-query" && args.at(-1) === "torplay" ? 0 : 1,
+      stdout: "installed\n",
+    }),
+  });
+  assert.equal(deb, "deb");
+  const rpm = detectInstalledPackage({
+    executableExists: (file) => file === "/usr/bin/rpm",
+    runSync: (command, args) => ({
+      status: command === "/usr/bin/rpm" && args.join(" ") === "-q torplay" ? 0 : 1,
+    }),
+  });
+  assert.equal(rpm, "rpm");
+});
+
+test("Linux uninstaller confirmation defaults to keeping data and handles cancellation", async () => {
+  const findExecutable = async () => "/usr/bin/zenity";
+  assert.deepEqual(await confirmUninstall({
+    findExecutable,
+    execute: async () => ({ code: 1, stdout: "", stderr: "" }),
+  }), { confirmed: false, deleteData: false });
+  assert.deepEqual(await confirmUninstall({
+    findExecutable,
+    execute: async () => ({ code: 0, stdout: "FALSE\n", stderr: "" }),
+  }), { confirmed: true, deleteData: false });
+  assert.deepEqual(await confirmUninstall({
+    findExecutable,
+    execute: async () => ({ code: 0, stdout: "TRUE\n", stderr: "" }),
+  }), { confirmed: true, deleteData: true });
+});
+
+test("Linux uninstaller reports PolicyKit cancellation without claiming removal", async () => {
+  await assert.rejects(requestNativeRemoval({ command: "/usr/bin/apt-get", args: ["remove", "-y", "torplay"] }, {
+    findExecutable: async () => "/usr/bin/pkexec",
+    execute: async () => ({ code: 126, error: null }),
+  }), /Authentication was cancelled/);
+  await assert.rejects(requestNativeRemoval({
+    command: "/usr/bin/apt-get", args: ["remove", "-y", "another-package"],
+  }), /non-TorPlay package/);
+});
+
+test("Linux uninstaller deletes only exact TorPlay XDG paths without following target symlinks", async () => {
+  const directory = mkdtempSync(path.join(os.tmpdir(), "torplay-uninstaller-data-"));
+  const environment = {
+    HOME: path.join(directory, "home"),
+    XDG_CONFIG_HOME: path.join(directory, "config"),
+    XDG_DATA_HOME: path.join(directory, "data"),
+    XDG_CACHE_HOME: path.join(directory, "cache"),
+    XDG_STATE_HOME: path.join(directory, "state"),
+    XDG_RUNTIME_DIR: path.join(directory, "run"),
+  };
+  const paths = linuxPaths(environment);
+  const outside = path.join(directory, "outside");
+  try {
+    mkdirSync(outside, { recursive: true });
+    writeFileSync(path.join(outside, "keep.txt"), "keep");
+    for (const target of torPlayUserDataTargets(paths)) {
+      if (target === paths.cache) continue;
+      mkdirSync(target, { recursive: true });
+      writeFileSync(path.join(target, "fixture"), "fixture");
+    }
+    mkdirSync(path.dirname(paths.cache), { recursive: true });
+    symlinkSync(outside, paths.cache);
+    assert.equal(isAllowedTorPlayDataPath(paths.data, paths), true);
+    assert.equal(isAllowedTorPlayDataPath(path.join(directory, "data"), paths), false);
+    await assert.rejects(removeTorPlayUserData({ paths, targets: [path.join(directory, "data")] }),
+      /Refusing to delete/);
+    await removeTorPlayUserData({ paths });
+    assert.equal(existsSync(path.join(outside, "keep.txt")), true);
+    for (const target of torPlayUserDataTargets(paths)) assert.equal(existsSync(target), false);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("Linux uninstaller gracefully stops TorPlay and only force-signals its verified supervisor", async () => {
+  const paths = { lockPath: "/run/torplay/runtime.lock", controlPath: "/run/torplay/control.sock" };
+  const removed = [];
+  const graceful = await shutdownTorPlay({
+    paths,
+    read: async () => JSON.stringify({ pid: 42 }),
+    sendStop: async () => "OK stopping",
+    waitForExit: async () => true,
+    removeSocket: async (file) => { removed.push(file); },
+    signal: () => { throw new Error("must not signal"); },
+  });
+  assert.deepEqual(graceful, { forced: false });
+  assert.deepEqual(removed.sort(), [paths.controlPath, paths.lockPath].sort());
+
+  const signals = [];
+  const waits = [false, true];
+  const terminated = await shutdownTorPlay({
+    paths,
+    read: async () => JSON.stringify({ pid: 84 }),
+    sendStop: async () => { throw Object.assign(new Error("stale"), { code: "ENOENT" }); },
+    waitForExit: async () => waits.shift(),
+    ownsProcess: async () => true,
+    removeSocket: async () => {},
+    signal: (pid, name) => { signals.push([pid, name]); },
+  });
+  assert.deepEqual(terminated, { forced: false });
+  assert.deepEqual(signals, [[84, "SIGTERM"]]);
+
+  const staleRemoved = [];
+  const stale = await shutdownTorPlay({
+    paths,
+    read: async () => JSON.stringify({ pid: 126 }),
+    sendStop: async () => {},
+    waitForExit: async () => false,
+    ownsProcess: async () => false,
+    removeSocket: async (file) => { staleRemoved.push(file); },
+  });
+  assert.deepEqual(stale, { forced: false, stale: true });
+  assert.deepEqual(staleRemoved.sort(), [paths.controlPath, paths.lockPath].sort());
+});
+
+test("Linux uninstaller cancellation performs no shutdown or package action", async () => {
+  let actions = 0;
+  const result = await uninstallTorPlay({
+    confirm: async () => ({ confirmed: false, deleteData: false }),
+    detectPackage: () => { actions += 1; },
+    shutdown: async () => { actions += 1; },
+    removePackage: async () => { actions += 1; },
+  });
+  assert.deepEqual(result, { cancelled: true });
+  assert.equal(actions, 0);
+});
+
+test("Linux uninstaller keeps data by default and deletes it only after explicit selection", async () => {
+  const run = async (deleteData) => {
+    const actions = [];
+    const result = await uninstallTorPlay({
+      environment: { HOME: "/home/tester" },
+      paths: { config: "/config/torplay" },
+      confirm: async () => ({ confirmed: true, deleteData }),
+      detectPackage: () => "deb",
+      removalCommand: () => ({ command: "/usr/bin/apt-get", args: ["remove", "-y", "torplay"] }),
+      shutdown: async () => { actions.push("shutdown"); },
+      removePackage: async () => { actions.push("package"); },
+      removeAutostart: async () => { actions.push("autostart"); },
+      removeData: async () => { actions.push("data"); },
+    });
+    return { actions, result };
+  };
+  assert.deepEqual((await run(false)).actions, ["shutdown", "package", "autostart"]);
+  assert.deepEqual((await run(true)).actions, ["shutdown", "package", "autostart", "data"]);
 });
 
 test("Linux launcher ESM bundle supports CommonJS dependencies with dynamic requires", async () => {
