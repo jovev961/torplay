@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.jovev961.TorPlay</id>
+  <name>TorPlay</name>
+  <summary>Discover and stream authorized torrent video</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>AGPL-3.0-only</project_license>
+  <launchable type="desktop-id">torplay.desktop</launchable>
+  <description>
+    <p>TorPlay is a self-contained home video application for discovering and streaming public-domain, Creative Commons, or otherwise authorized torrent video.</p>
+  </description>
+  <url type="homepage">https://github.com/jovev961/torplay</url>
+  <provides>
+    <binary>torplay</binary>
+  </provides>
+  <content_rating type="oars-1.1" />
+</component>

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=TorPlay Uninstaller
+Comment=Remove TorPlay and optionally its application data
+Exec=/usr/bin/torplay-uninstaller
+TryExec=/usr/bin/torplay-uninstaller
+Icon=torplay
+Terminal=false
+Categories=System;Utility;
+Keywords=TorPlay;Uninstall;Remove;

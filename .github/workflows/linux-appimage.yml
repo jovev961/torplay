@@ -31,7 +31,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cpio rpm
+          sudo apt-get install -y appstream cpio policykit-1 rpm zenity
           npm ci
 
       - name: Test, lint, build, and package
@@ -47,6 +47,7 @@ jobs:
           sha256sum --check TorPlay-*.rpm.sha256
           dpkg-deb --info TorPlay-*.deb
           rpm -qip TorPlay-*.rpm
+          test -z "$(rpm -qp --scripts TorPlay-*.rpm)"
 
       - name: Smoke-test bundled runtime without FUSE
         shell: bash
@@ -61,7 +62,28 @@ jobs:
           rpm_root=$(mktemp -d)
           trap 'rm -rf "$rpm_root"' EXIT
           (cd "$rpm_root" && rpm2cpio "$GITHUB_WORKSPACE"/dist/linux/TorPlay-*.rpm | cpio -idm)
+          test -x "$rpm_root/usr/bin/torplay-uninstaller"
+          test -f "$rpm_root/usr/share/applications/torplay-uninstaller.desktop"
+          appstreamcli validate --no-net "$rpm_root/usr/share/metainfo/io.github.jovev961.TorPlay.metainfo.xml"
           node scripts/smoke-linux-appimage.js --installed "$rpm_root/usr/bin/torplay"
+
+      - name: Verify Fedora RPM install, remove, and exact reinstall
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm --volume "$GITHUB_WORKSPACE/dist/linux:/packages:ro" fedora:44 bash -lc '
+            set -euo pipefail
+            dnf --setopt=install_weak_deps=False install -y /packages/TorPlay-*.rpm
+            rpm -q torplay
+            test -x /usr/bin/torplay-uninstaller
+            test -f /usr/share/applications/torplay-uninstaller.desktop
+            dnf remove -y torplay
+            ! rpm -q torplay
+            dnf --setopt=install_weak_deps=False install -y /packages/TorPlay-*.rpm
+            rpm -q torplay
+            dnf remove -y torplay
+            ! rpm -q torplay
+          '
 
       - name: Install and smoke-test Debian package
         shell: bash
@@ -70,10 +92,18 @@ jobs:
           sudo dpkg -i dist/linux/TorPlay-*.deb
           autostart_root=$(mktemp -d)
           trap 'sudo dpkg -r torplay >/dev/null 2>&1 || true; rm -rf "$autostart_root"' EXIT
+          test -x /usr/bin/torplay-uninstaller
+          test -f /usr/share/applications/torplay-uninstaller.desktop
+          appstreamcli validate --no-net /usr/share/metainfo/io.github.jovev961.TorPlay.metainfo.xml
           XDG_CONFIG_HOME="$autostart_root" torplay-autostart enable
           test -f "$autostart_root/autostart/torplay.desktop"
           XDG_CONFIG_HOME="$autostart_root" torplay-autostart disable
           test ! -e "$autostart_root/autostart/torplay.desktop"
+          node scripts/smoke-linux-appimage.js --installed /usr/bin/torplay
+          sudo dpkg -r torplay
+          test ! -e /usr/bin/torplay
+          sudo dpkg -i dist/linux/TorPlay-*.deb
+          dpkg-query --show --showformat='${db:Status-Status}\n' torplay | grep -qx installed
           node scripts/smoke-linux-appimage.js --installed /usr/bin/torplay
           sudo dpkg -r torplay
           test ! -e /usr/bin/torplay
