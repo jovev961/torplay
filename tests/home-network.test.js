@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import http from "node:http";
 import test from "node:test";
-import { ServiceEvent } from "@homebridge/ciao";
 import {
   isPrivateClientAddress,
   startMdnsAdvertisement,
@@ -105,6 +104,7 @@ test("mDNS waits for advertisement and sends one clean shutdown", async () => {
   assert.equal(responderOptions.interface, "Wi-Fi");
   assert.equal(serviceOptions.hostname, "torplay");
   assert.equal(serviceOptions.port, 80);
+  assert.equal(mdns.hostname, "torplay.local");
   assert.equal(mdns.isHealthy(), true);
   await mdns.stop();
   assert.equal(mdns.isHealthy(), false);
@@ -112,11 +112,10 @@ test("mDNS waits for advertisement and sends one clean shutdown", async () => {
   assert.equal(shutdowns, 1);
 });
 
-test("mDNS rejects a hostname collision and shuts the responder down", async () => {
+test("mDNS accepts its resolved hostname when stale ownership causes a collision", async () => {
   const service = new EventEmitter();
-  service.advertise = async () => {
-    service.emit(ServiceEvent.HOSTNAME_CHANGED);
-  };
+  service.serviceState = "announced";
+  service.advertise = async () => {};
   service.getHostname = () => "torplay-2.local.";
   let shutdowns = 0;
   const responderFactory = () => ({
@@ -126,9 +125,8 @@ test("mDNS rejects a hostname collision and shuts the responder down", async () 
     },
   });
 
-  await assert.rejects(
-    () => startMdnsAdvertisement({ hostname: "torplay.local", port: 80, responderFactory }),
-    /already in use/,
-  );
+  const mdns = await startMdnsAdvertisement({ hostname: "torplay.local", port: 80, responderFactory });
+  assert.equal(mdns.hostname, "torplay-2.local");
+  await mdns.stop();
   assert.equal(shutdowns, 1);
 });

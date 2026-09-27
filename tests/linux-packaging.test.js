@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import {
   existsSync, lstatSync, mkdtempSync, mkdirSync, readFileSync, readlinkSync, rmSync,
   symlinkSync, writeFileSync,
@@ -9,7 +10,8 @@ import test from "node:test";
 import { pathToFileURL } from "node:url";
 import { linuxPaths, linuxRuntimeEnvironment } from "../scripts/linux-paths.js";
 import {
-  bundleLinuxRuntime, copyStandaloneBuild, isLinuxX64Elf, validateLinuxStage,
+  bundleLinuxRuntime, copyStandaloneBuild, debianPackageVersion, isLinuxX64Elf,
+  rpmPackageMetadata, rpmSpec, stageDebPackage, validateLinuxInstallerPayload, validateLinuxStage,
 } from "../scripts/release-linux.js";
 import { networkAccessDetails } from "../lib/network/access.js";
 import {
@@ -120,6 +122,43 @@ test("Linux AppImage packaging runs only when manually requested", () => {
   assert.match(workflow, /sudo sysctl -w net\.ipv4\.ip_unprivileged_port_start=80/);
 });
 
+test("Linux native installer payload is self-contained and uses distro package versions", () => {
+  temporaryDirectory((directory) => {
+    const source = path.join(directory, "AppDir");
+    const destination = path.join(directory, "deb-root");
+    for (const item of [
+      "usr/bin/node", "usr/lib/torplay/app/server.js",
+      "usr/lib/torplay/app/node_modules/next/package.json",
+      "usr/lib/torplay/app/node_modules/better-sqlite3/package.json",
+      "usr/lib/torplay/runtime/linux-launcher.mjs", "torplay.png",
+    ]) {
+      const filename = path.join(source, item);
+      mkdirSync(path.dirname(filename), { recursive: true });
+      writeFileSync(filename, item === "usr/bin/node"
+        ? "#!/bin/sh\nprintf '%s\\n' \"$@\"\n" : "fixture");
+    }
+    stageDebPackage(source, destination, "0.1.0-beta.2");
+    validateLinuxInstallerPayload(destination);
+    assert.equal(existsSync(path.join(destination, "usr/bin/node")), false);
+    assert.equal((lstatSync(path.join(destination, "usr/bin/torplay")).mode & 0o111) !== 0, true);
+    const launch = spawnSync(path.join(destination, "usr/bin/torplay"), ["--status"], {
+      encoding: "utf8",
+    });
+    assert.equal(launch.status, 0);
+    assert.equal(launch.stdout.trim(),
+      `${path.join(destination, "usr/lib/torplay/runtime/linux-launcher.mjs")}\n--status`);
+    assert.match(readFileSync(path.join(destination, "DEBIAN/control"), "utf8"),
+      /Version: 0\.1\.0~beta\.2/);
+    assert.equal(debianPackageVersion("1.2.3"), "1.2.3");
+    assert.deepEqual(rpmPackageMetadata("0.1.0-beta.2"), {
+      version: "0.1.0", release: "0.beta.2",
+    });
+    assert.match(rpmSpec("0.1.0-beta.2"), /BuildArch: x86_64/);
+    assert.match(rpmSpec("0.1.0-beta.2"), /__os_install_post %\{nil\}/);
+    assert.match(rpmSpec("0.1.0-beta.2"), /Recommends: polkit, xdg-utils/);
+  });
+});
+
 test("Linux launcher ESM bundle supports CommonJS dependencies with dynamic requires", async () => {
   const directory = mkdtempSync(path.join(os.tmpdir(), "torplay-linux-bundle-"));
   const bundle = path.join(directory, "linux-launcher.mjs");
@@ -137,7 +176,8 @@ test("Linux stage rejects absent files, wrong native architecture, and secrets",
     "AppRun", "torplay.desktop", "torplay.png", ".DirIcon", "usr/bin/node",
     `${app}/server.js`, "usr/lib/torplay/runtime/linux-launcher.mjs",
     "usr/lib/torplay/runtime/linux-port-helper.mjs",
-    "usr/lib/torplay/runtime/runtime-watchdog.mjs", `${app}/node_modules/better-sqlite3/package.json`,
+    "usr/lib/torplay/runtime/runtime-watchdog.mjs", `${app}/node_modules/next/package.json`,
+    `${app}/node_modules/better-sqlite3/package.json`,
     `${app}/node_modules/better-sqlite3/build/Release/better_sqlite3.node`,
     `${app}/node_modules/bindings/bindings.js`, `${app}/node_modules/file-uri-to-path/index.js`,
     `${app}/ffmpeg`, `${app}/ffprobe`,
@@ -180,15 +220,21 @@ test("Linux runtime mirrors .next into XDG cache and resolves packaged externals
   const packageDirectory = path.join(packaged, "node_modules/better-sqlite3");
   mkdirSync(path.join(packaged, ".next/node_modules"), { recursive: true });
   mkdirSync(packageDirectory, { recursive: true });
+  mkdirSync(path.join(packaged, "node_modules/next"), { recursive: true });
   writeFileSync(path.join(packaged, "server.js"), "// fixture");
   writeFileSync(path.join(packaged, ".next/BUILD_ID"), "fixture-build\n");
   writeFileSync(path.join(packageDirectory, "package.json"), "{}");
+  writeFileSync(path.join(packaged, "node_modules/next/package.json"), "{}");
   symlinkSync("../../node_modules/better-sqlite3",
     path.join(packaged, ".next/node_modules/better-sqlite3-fixture"));
   const paths = linuxPaths({
     XDG_CACHE_HOME: path.join(directory, "cache"),
   });
   try {
+    const staleRuntime = path.join(paths.nextRuntimePath, "fixture-build");
+    mkdirSync(staleRuntime, { recursive: true });
+    writeFileSync(path.join(staleRuntime, "server.js"), "// incomplete old layout");
+    writeFileSync(path.join(staleRuntime, ".torplay-runtime-ready"), "fixture-build\n");
     const server = await prepareLinuxNextRuntime(paths, path.join(packaged, "server.js"));
     const runtimeRoot = path.dirname(server);
     const external = path.join(runtimeRoot, ".next/node_modules/better-sqlite3-fixture");
@@ -196,7 +242,10 @@ test("Linux runtime mirrors .next into XDG cache and resolves packaged externals
     assert.equal(existsSync(path.join(runtimeRoot, ".next/cache")), true);
     assert.equal(readlinkSync(external), "../../node_modules/better-sqlite3");
     assert.equal(readFileSync(path.join(external, "package.json"), "utf8"), "{}");
-    assert.equal(lstatSync(path.join(runtimeRoot, "node_modules")).isSymbolicLink(), true);
+    assert.equal(lstatSync(path.join(runtimeRoot, "node_modules")).isDirectory(), true);
+    assert.equal(readFileSync(path.join(runtimeRoot, "node_modules/next/package.json"), "utf8"), "{}");
+    assert.equal(readFileSync(path.join(runtimeRoot, ".torplay-runtime-ready"), "utf8"),
+      "fixture-build:2\n");
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -250,12 +299,12 @@ test("Linux supervisor starts a LAN proxy and mDNS, then Quit cleans up", async 
       openBrowser: async (url) => { browserUrl = url; return true; },
       startMdns: async (options) => {
         mdnsOptions = options;
-        return { stop: async () => { mdnsStopped = true; } };
+        return { hostname: "torplay-2.local", stop: async () => { mdnsStopped = true; } };
       },
     });
     assert.equal(browserUrl, runtime.url);
     assert.equal(runtime.url, `http://127.0.0.1:${publicPort}`);
-    assert.equal(runtime.networkUrl, `http://torplay.local:${publicPort}`);
+    assert.equal(runtime.networkUrl, `http://torplay-2.local:${publicPort}`);
     assert.deepEqual(mdnsOptions, {
       hostname: "torplay.local", port: publicPort, mdnsInterface: null,
     });
@@ -263,6 +312,7 @@ test("Linux supervisor starts a LAN proxy and mDNS, then Quit cleans up", async 
     assert.deepEqual(runtime.reporter.get().components, {
       TorPlay: "OK", "LAN proxy": "OK", mDNS: "OK",
     });
+    assert.equal(runtime.reporter.get().networkUrl, runtime.networkUrl);
     assert.equal(existsSync(paths.controlPath), true);
     await sendControlCommand({ endpoint: paths.controlPath });
     await new Promise((resolve) => runtime.child.once("exit", resolve));

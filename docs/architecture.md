@@ -83,6 +83,7 @@ lib/video/            Range handling, episode matching, probing, conversion
 platform/runtime/     Host runtime status persistence adapter
 scripts/              Development and platform process entry points, Windows control, release tooling
 installer/windows/    Inno Setup definition and installed-runtime assets
+installer/linux/      AppImage and native-package launch and desktop assets
 tests/                Unit and integration tests
 docs/                 Current guides and historical task specifications
 ```

@@ -36,7 +36,7 @@ Setup requires only TMDB. Torrent sources are optional and none are added automa
 | `npm run start:home` | Run the manual Windows LAN supervisor after a build |
 | `npm run firewall:home` | Add manual-runtime Windows firewall rules |
 | `npm run release:windows` | Create the complete Windows installer on Windows x64 |
-| `npm run release:linux` | Create the standalone AppImage on Linux x86_64 |
+| `npm run release:linux` | Create the AppImage, Debian package, and RPM on Linux x86_64 |
 | `npm test` | Run Node.js unit and integration tests |
 | `npm run lint` | Run ESLint |
 
@@ -62,11 +62,19 @@ dist\windows\TorPlay-Setup-<version>.exe.sha256
 
 The command rejects non-Windows and non-x64 hosts rather than producing an incompatible installer. Release maintainers upload the verified files to [TorPlay Releases](https://github.com/jovev961/torplay/releases) for end users.
 
-## Build the Linux AppImage
+## Build the Linux packages
 
-Run `npm ci` and `npm run release:linux` on Ubuntu 24.04 x86_64. The command runs tests, lint, and a standalone production build; downloads checksum-pinned Node 24.21.0, appimagetool 1.9.1, and the static AppImage runtime; validates Linux native files and secret exclusion; then writes `dist/linux/TorPlay-<version>-x86_64.AppImage` and its `.sha256` file. It rejects other build architectures.
+Run `npm ci` and `npm run release:linux` on Ubuntu 24.04 x86_64 with `dpkg-deb` and `rpmbuild` installed. The command runs tests, lint, and a standalone production build; downloads checksum-pinned Node 24.21.0, appimagetool 1.9.1, and the static AppImage runtime; validates Linux native files and secret exclusion; then writes:
 
-The **Linux AppImage** workflow runs only when started manually from GitHub Actions, like the Windows installer workflow. It uses an Ubuntu 24.04 runner and uploads these files as a CI artifact for 14 days. It does not publish a GitHub Release or bump the application version. Before a public release, smoke-test the AppImage on a clean Ubuntu 24.04 x86_64 desktop, including browser launch and Quit without installing runtime packages. See [Linux deployment](linux-deployment.md).
+```text
+dist/linux/TorPlay-<version>-x86_64.AppImage
+dist/linux/TorPlay-<version>-amd64.deb
+dist/linux/TorPlay-<version>-x86_64.rpm
+```
+
+Each artifact has a neighboring `.sha256` file. The native packages install the same self-contained runtime under `/usr/lib/torplay`; they do not use or replace the system `node` command.
+
+The **Linux packages** workflow runs only when started manually from GitHub Actions, like the Windows installer workflow. It uses an Ubuntu 24.04 runner, launches the actual AppImage, extracts and launches the RPM payload, installs and launches the Debian package, and uploads all verified files as one CI artifact for 14 days. It does not publish a GitHub Release or bump the application version. Before a public release, also test the installers on clean Ubuntu and Fedora x86_64 desktops. See [Linux deployment](linux-deployment.md).
 
 ## Data during development
 

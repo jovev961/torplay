@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=TorPlay
+Comment=Discover and stream authorized torrent video
+Exec=/usr/bin/torplay
+TryExec=/usr/bin/torplay
+Icon=torplay
+Terminal=false
+Categories=AudioVideo;Video;Network;

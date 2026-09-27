@@ -2,8 +2,7 @@ import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { appendFileSync, closeSync, constants, openSync } from "node:fs";
 import {
-  access, chmod, copyFile, cp, mkdir, open, readFile, readdir, rename, rm, symlink, unlink,
-  writeFile,
+  access, chmod, cp, mkdir, open, readFile, rename, rm, unlink, writeFile,
 } from "node:fs/promises";
 import net from "node:net";
 import path from "node:path";
@@ -15,6 +14,7 @@ import { sendControlCommand, startControlServer } from "./runtime-control.js";
 import { createStatusReporter } from "../platform/runtime/status.js";
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const NEXT_RUNTIME_LAYOUT_VERSION = 2;
 
 export async function availableLoopbackPort() {
   return new Promise((resolve, reject) => {
@@ -195,8 +195,9 @@ export async function prepareLinuxNextRuntime(paths, serverEntry) {
   if (!/^[a-zA-Z0-9_-]+$/.test(buildId)) throw new Error("The packaged Next.js build ID is invalid.");
   const runtimeRoot = path.join(paths.nextRuntimePath, buildId);
   const readyPath = path.join(runtimeRoot, ".torplay-runtime-ready");
+  const readyValue = `${buildId}:${NEXT_RUNTIME_LAYOUT_VERSION}`;
   try {
-    if ((await readFile(readyPath, "utf8")).trim() === buildId) {
+    if ((await readFile(readyPath, "utf8")).trim() === readyValue) {
       return path.join(runtimeRoot, "server.js");
     }
   } catch { /* Create or repair the writable runtime below. */ }
@@ -205,20 +206,15 @@ export async function prepareLinuxNextRuntime(paths, serverEntry) {
   await mkdir(paths.nextRuntimePath, { recursive: true, mode: 0o700 });
   await rm(runtimeRoot, { recursive: true, force: true });
   await rm(temporaryRoot, { recursive: true, force: true });
-  await mkdir(temporaryRoot, { recursive: true, mode: 0o700 });
   try {
-    await copyFile(serverEntry, path.join(temporaryRoot, "server.js"));
-    await cp(packagedNext, path.join(temporaryRoot, ".next"), {
+    await cp(packagedRoot, temporaryRoot, {
       recursive: true,
       verbatimSymlinks: true,
     });
-    await mkdir(path.join(temporaryRoot, ".next/cache"), { recursive: true, mode: 0o700 });
-    for (const entry of await readdir(packagedRoot, { withFileTypes: true })) {
-      if (entry.name === ".next" || entry.name === "server.js" || entry.name.startsWith(".env")) continue;
-      await symlink(path.join(packagedRoot, entry.name), path.join(temporaryRoot, entry.name),
-        entry.isDirectory() ? "dir" : "file");
-    }
-    await writeFile(path.join(temporaryRoot, ".torplay-runtime-ready"), `${buildId}\n`, { mode: 0o600 });
+    const nextCache = path.join(temporaryRoot, ".next/cache");
+    await mkdir(nextCache, { recursive: true, mode: 0o700 });
+    await chmod(nextCache, 0o700);
+    await writeFile(path.join(temporaryRoot, ".torplay-runtime-ready"), `${readyValue}\n`, { mode: 0o600 });
     await rename(temporaryRoot, runtimeRoot);
   } catch (error) {
     await rm(temporaryRoot, { recursive: true, force: true });
@@ -347,7 +343,7 @@ export async function startLinuxApp({
   const port = await availableLoopbackPort();
   const lock = await acquireLinuxLock(paths, lan.publicPort);
   const url = formatHttpUrl("127.0.0.1", lock.port);
-  const networkUrl = formatHttpUrl(lan.publicHostname, lock.port);
+  let networkUrl = formatHttpUrl(lan.publicHostname, lock.port);
   if (!lock.owner) {
     await waitForHealth(url, null, 30_000);
     if (!await openBrowser(url)) throw new Error(`Could not open a browser. Open ${url} manually.`);
@@ -401,13 +397,21 @@ export async function startLinuxApp({
   };
 
   try {
+    mdns = await startMdns({
+      hostname: lan.publicHostname,
+      port: lan.publicPort,
+      mdnsInterface: lan.mdnsInterface,
+    });
+    const publicHostname = mdns.hostname || lan.publicHostname;
+    networkUrl = formatHttpUrl(publicHostname, lan.publicPort);
+    reporter.write({ networkUrl, components: { mDNS: "OK" } });
     const runtimeServerEntry = writableNextRuntime
       ? await prepareLinuxNextRuntime(paths, serverEntry) : serverEntry;
     const childEnvironment = {
       ...loaded,
       HOSTNAME: "127.0.0.1",
       PORT: String(port),
-      TORPLAY_PUBLIC_HOSTNAME: lan.publicHostname,
+      TORPLAY_PUBLIC_HOSTNAME: publicHostname,
       TORPLAY_PUBLIC_PORT: String(lan.publicPort),
       TORPLAY_SUPERVISOR_PID: String(process.pid),
       NODE_OPTIONS: [loaded.NODE_OPTIONS, `--import=${pathToFileURL(watchdogEntry).href}`].filter(Boolean).join(" "),
@@ -441,12 +445,6 @@ export async function startLinuxApp({
     });
     await waitForHealth(url, child);
     reporter.write({ components: { "LAN proxy": "OK" } });
-    mdns = await startMdns({
-      hostname: lan.publicHostname,
-      port: lan.publicPort,
-      mdnsInterface: lan.mdnsInterface,
-    });
-    reporter.write({ components: { mDNS: "OK" } });
     control = await startControlServer({
       endpoint: paths.controlPath,
       onStop: () => setTimeout(() => {

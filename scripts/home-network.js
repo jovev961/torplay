@@ -1,5 +1,5 @@
 import http from "node:http";
-import { getResponder, ServiceEvent, ServiceType } from "@homebridge/ciao";
+import { getResponder, ServiceType } from "@homebridge/ciao";
 import { createProxyServer as createDefaultProxyServer } from "http-proxy-3";
 import { isPrivateNetworkAddress } from "../lib/network/private-address.js";
 
@@ -116,17 +116,8 @@ export async function startMdnsAdvertisement({
     disabledIpv6: true,
     txt: { path: "/" },
   });
-  let hostnameChanged = false;
-  service.once(ServiceEvent.HOSTNAME_CHANGED, () => {
-    hostnameChanged = true;
-  });
-
   try {
     await service.advertise();
-    const advertised = normalizedHostname(service.getHostname());
-    if (hostnameChanged || advertised !== normalizedHostname(hostname)) {
-      throw new Error(`${hostname} is already in use on this network.`);
-    }
   } catch (error) {
     await responder.shutdown().catch(() => {});
     throw error;
@@ -135,6 +126,7 @@ export async function startMdnsAdvertisement({
   let stopped = false;
   return {
     service,
+    hostname: normalizedHostname(service.getHostname()),
     isHealthy() {
       return !stopped && (!service.serviceState || service.serviceState === "announced");
     },
