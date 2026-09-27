@@ -35,7 +35,7 @@ async function jsonResponse(url, options, expectedStatus) {
   return response.json();
 }
 
-export async function smokeLinuxAppImage(image) {
+export async function smokeLinuxExecutable(executable, launchArgs = []) {
   if (process.platform !== "linux" || process.arch !== "x64") throw new Error("Linux x86_64 required.");
   const root = await mkdtemp(path.join(os.tmpdir(), "torplay-appimage-smoke-"));
   const bin = path.join(root, "bin");
@@ -55,7 +55,7 @@ export async function smokeLinuxAppImage(image) {
     TMDB_API_TOKEN: "",
     PATH: `${bin}:${process.env.PATH}`,
   };
-  const child = spawn(image, ["--appimage-extract-and-run"], { env: environment, stdio: "inherit" });
+  const child = spawn(executable, launchArgs, { env: environment, stdio: "inherit" });
   let launchError;
   child.once("error", (error) => { launchError = error; });
   try {
@@ -68,7 +68,7 @@ export async function smokeLinuxAppImage(image) {
       return current?.state === "running" ? current : null;
     });
     assert.equal(status.url, "http://127.0.0.1");
-    assert.equal(status.networkUrl, "http://torplay.local");
+    assert.match(status.networkUrl, /^http:\/\/torplay[^/:]*\.local$/);
     assert.deepEqual(status.components, { TorPlay: "OK", "LAN proxy": "OK", mDNS: "OK" });
     assert.equal((await fetch(`${status.url}/api/health`)).status, 200);
     assert.equal((await fetch(`${status.url}/`)).status, 200);
@@ -90,8 +90,12 @@ export async function smokeLinuxAppImage(image) {
     const nextRuntimeRoot = path.join(root, "cache/torplay/next-runtime");
     const runtimeBuilds = await readdir(nextRuntimeRoot);
     assert.equal(runtimeBuilds.length, 1);
-    const writableNextCache = path.join(nextRuntimeRoot, runtimeBuilds[0], ".next/cache");
+    const extractedRuntime = path.join(nextRuntimeRoot, runtimeBuilds[0]);
+    const writableNextCache = path.join(extractedRuntime, ".next/cache");
     assert.equal((await stat(writableNextCache)).isDirectory(), true);
+    assert.equal((await stat(path.join(extractedRuntime, "node_modules/next/package.json"))).isFile(), true);
+    assert.equal((await stat(path.join(extractedRuntime,
+      "node_modules/better-sqlite3/package.json"))).isFile(), true);
     assert.equal((await stat(path.join(root, "data/torplay/torplay.db"))).isFile(), true);
     const access = await (await fetch(`${status.url}/api/network-access`)).json();
     assert.equal(access.hostnameUrl, status.networkUrl);
@@ -99,7 +103,7 @@ export async function smokeLinuxAppImage(image) {
     const remote = await jsonResponse(`${status.url}/api/playback/remote`, undefined, 200);
     assert.equal(remote.origin, status.networkUrl);
     await waitUntil(async () => (await readFile(environment.TORPLAY_SMOKE_BROWSER_LOG, "utf8").catch(() => "")).includes(status.url));
-    const second = spawn(image, ["--appimage-extract-and-run"], { env: environment, stdio: "inherit" });
+    const second = spawn(executable, launchArgs, { env: environment, stdio: "inherit" });
     assert.equal(await waitForExit(second, 90_000), 0);
     const opened = await readFile(environment.TORPLAY_SMOKE_BROWSER_LOG, "utf8");
     assert.equal(opened.trim().split("\n").filter((line) => line === status.url).length, 2);
@@ -112,15 +116,23 @@ export async function smokeLinuxAppImage(image) {
     });
     assert.equal(quit.status, 202);
     assert.equal(await waitForExit(child), 0);
-    console.log("AppImage pages, settings, profiles, TMDB route, browser open, Quit, and cleanup passed.");
+    console.log("Linux packaged runtime, pages, settings, profiles, browser open, Quit, and cleanup passed.");
   } finally {
     if (child.exitCode === null) child.kill("SIGTERM");
     await rm(root, { recursive: true, force: true });
   }
 }
 
+export function smokeLinuxAppImage(image) {
+  return smokeLinuxExecutable(image, ["--appimage-extract-and-run"]);
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  smokeLinuxAppImage(path.resolve(process.argv[2] || "")).catch((error) => {
+  const installed = process.argv[2] === "--installed";
+  const executable = installed ? path.resolve(process.argv[3] || "/usr/bin/torplay")
+    : path.resolve(process.argv[2] || "");
+  const smoke = installed ? smokeLinuxExecutable(executable) : smokeLinuxAppImage(executable);
+  smoke.catch((error) => {
     console.error(error);
     process.exitCode = 1;
   });

@@ -1,4 +1,4 @@
-name: Linux AppImage
+name: Linux packages
 
 on:
   workflow_dispatch:
@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   build:
-    name: Build Ubuntu 24.04 x86_64 AppImage
+    name: Build and smoke-test Linux x86_64 packages
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -29,7 +29,10 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cpio rpm
+          npm ci
 
       - name: Test, lint, build, and package
         run: npm run release:linux
@@ -40,6 +43,10 @@ jobs:
           set -euo pipefail
           cd dist/linux
           sha256sum --check TorPlay-*.AppImage.sha256
+          sha256sum --check TorPlay-*.deb.sha256
+          sha256sum --check TorPlay-*.rpm.sha256
+          dpkg-deb --info TorPlay-*.deb
+          rpm -qip TorPlay-*.rpm
 
       - name: Smoke-test bundled runtime without FUSE
         shell: bash
@@ -47,13 +54,43 @@ jobs:
           sudo sysctl -w net.ipv4.ip_unprivileged_port_start=80
           node scripts/smoke-linux-appimage.js dist/linux/TorPlay-*.AppImage
 
-      - name: Upload AppImage artifact
+      - name: Smoke-test RPM payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          rpm_root=$(mktemp -d)
+          trap 'rm -rf "$rpm_root"' EXIT
+          (cd "$rpm_root" && rpm2cpio "$GITHUB_WORKSPACE"/dist/linux/TorPlay-*.rpm | cpio -idm)
+          node scripts/smoke-linux-appimage.js --installed "$rpm_root/usr/bin/torplay"
+
+      - name: Install and smoke-test Debian package
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo dpkg -i dist/linux/TorPlay-*.deb
+          autostart_root=$(mktemp -d)
+          trap 'sudo dpkg -r torplay >/dev/null 2>&1 || true; rm -rf "$autostart_root"' EXIT
+          XDG_CONFIG_HOME="$autostart_root" torplay-autostart enable
+          test -f "$autostart_root/autostart/torplay.desktop"
+          XDG_CONFIG_HOME="$autostart_root" torplay-autostart disable
+          test ! -e "$autostart_root/autostart/torplay.desktop"
+          node scripts/smoke-linux-appimage.js --installed /usr/bin/torplay
+          sudo dpkg -r torplay
+          test ! -e /usr/bin/torplay
+          trap - EXIT
+          rm -rf "$autostart_root"
+
+      - name: Upload Linux package artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: TorPlay-Linux-${{ github.run_number }}-${{ github.run_attempt }}
           path: |
             dist/linux/*.AppImage
             dist/linux/*.AppImage.sha256
+            dist/linux/*.deb
+            dist/linux/*.deb.sha256
+            dist/linux/*.rpm
+            dist/linux/*.rpm.sha256
           if-no-files-found: error
           retention-days: 14
           compression-level: 0

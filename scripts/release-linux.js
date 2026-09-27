@@ -72,6 +72,16 @@ function findFiles(directory, basename, matches = []) {
   return matches;
 }
 
+function findFilesWithExtension(directory, extension, matches = []) {
+  if (!existsSync(directory)) return matches;
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const file = path.join(directory, entry.name);
+    if (entry.isDirectory()) findFilesWithExtension(file, extension, matches);
+    else if (entry.name.endsWith(extension)) matches.push(file);
+  }
+  return matches;
+}
+
 export function isLinuxX64Elf(file) {
   const bytes = readFileSync(file).subarray(0, 20);
   return bytes.length === 20 && bytes.subarray(0, 4).equals(Buffer.from([0x7f, 0x45, 0x4c, 0x46]))
@@ -80,6 +90,120 @@ export function isLinuxX64Elf(file) {
 
 export function copyStandaloneBuild(source, destination) {
   cpSync(source, destination, { recursive: true, verbatimSymlinks: true });
+}
+
+export function debianPackageVersion(version) {
+  return String(version).replace("-", "~");
+}
+
+export function rpmPackageMetadata(version) {
+  const [upstream, ...prerelease] = String(version).split("-");
+  return {
+    version: upstream,
+    release: prerelease.length ? `0.${prerelease.join("-").replace(/[^a-zA-Z0-9.]+/g, ".")}` : "1",
+  };
+}
+
+export function validateLinuxInstallerPayload(directory) {
+  for (const required of [
+    "usr/bin/torplay", "usr/bin/torplay-autostart", "usr/lib/torplay/node",
+    "usr/lib/torplay/app/server.js", "usr/lib/torplay/app/node_modules/next/package.json",
+    "usr/lib/torplay/app/node_modules/better-sqlite3/package.json",
+    "usr/lib/torplay/runtime/linux-launcher.mjs",
+    "usr/share/applications/torplay.desktop",
+    "usr/share/icons/hicolor/256x256/apps/torplay.png",
+    "usr/share/doc/torplay/LICENSE",
+  ]) {
+    if (!existsSync(path.join(directory, required))) {
+      throw new Error(`Linux installer payload is missing ${required}.`);
+    }
+  }
+  if (existsSync(path.join(directory, "usr/bin/node"))) {
+    throw new Error("Linux installer must not replace the system Node.js command.");
+  }
+}
+
+export function stageLinuxInstallerPayload(sourceStage, destination) {
+  rmSync(destination, { recursive: true, force: true });
+  mkdirSync(path.join(destination, "usr/bin"), { recursive: true });
+  mkdirSync(path.join(destination, "usr/lib/torplay"), { recursive: true });
+  mkdirSync(path.join(destination, "usr/share/applications"), { recursive: true });
+  mkdirSync(path.join(destination, "usr/share/icons/hicolor/256x256/apps"), { recursive: true });
+  mkdirSync(path.join(destination, "usr/share/doc/torplay"), { recursive: true });
+  cpSync(path.join(sourceStage, "usr/lib/torplay"), path.join(destination, "usr/lib/torplay"), {
+    recursive: true, verbatimSymlinks: true,
+  });
+  cpSync(path.join(sourceStage, "usr/bin/node"), path.join(destination, "usr/lib/torplay/node"));
+  cpSync(path.join(root, "installer/linux/torplay"), path.join(destination, "usr/bin/torplay"));
+  cpSync(path.join(root, "installer/linux/torplay-autostart"),
+    path.join(destination, "usr/bin/torplay-autostart"));
+  cpSync(path.join(root, "installer/linux/torplay-installed.desktop"),
+    path.join(destination, "usr/share/applications/torplay.desktop"));
+  cpSync(path.join(sourceStage, "torplay.png"),
+    path.join(destination, "usr/share/icons/hicolor/256x256/apps/torplay.png"));
+  cpSync(path.join(root, "LICENSE"), path.join(destination, "usr/share/doc/torplay/LICENSE"));
+  for (const executable of ["usr/bin/torplay", "usr/bin/torplay-autostart", "usr/lib/torplay/node"]) {
+    chmodSync(path.join(destination, executable), 0o755);
+  }
+  validateLinuxInstallerPayload(destination);
+}
+
+export function stageDebPackage(sourceStage, destination, version) {
+  stageLinuxInstallerPayload(sourceStage, destination);
+  mkdirSync(path.join(destination, "DEBIAN"), { recursive: true });
+  writeFileSync(path.join(destination, "DEBIAN/control"), [
+    "Package: torplay",
+    `Version: ${debianPackageVersion(version)}`,
+    "Section: video",
+    "Priority: optional",
+    "Architecture: amd64",
+    "Maintainer: TorPlay <noreply@torplay.local>",
+    "Depends: libc6 (>= 2.28), libgcc-s1, libstdc++6",
+    "Recommends: policykit-1, xdg-utils",
+    "Description: self-contained TorPlay home video application",
+    " Discover and stream authorized torrent video with a bundled Node.js runtime",
+    " and media tools. User data remains in the current user's XDG directories.",
+    "",
+  ].join("\n"));
+}
+
+export function rpmSpec(version) {
+  const metadata = rpmPackageMetadata(version);
+  return [
+    "%global __os_install_post %{nil}",
+    "Name: torplay",
+    `Version: ${metadata.version}`,
+    `Release: ${metadata.release}`,
+    "Summary: Self-contained TorPlay home video application",
+    "License: AGPL-3.0-only",
+    "URL: https://github.com/jovev961/torplay",
+    "BuildArch: x86_64",
+    "AutoReqProv: no",
+    "Requires: glibc, libgcc, libstdc++",
+    "Recommends: polkit, xdg-utils",
+    "",
+    "%description",
+    "Discover and stream authorized torrent video with a bundled Node.js runtime",
+    "and media tools. User data remains in the current user's XDG directories.",
+    "",
+    "%prep",
+    "",
+    "%build",
+    "",
+    "%install",
+    "rm -rf %{buildroot}",
+    "mkdir -p %{buildroot}",
+    "cp -a %{_sourcedir}/payload/. %{buildroot}/",
+    "",
+    "%files",
+    "%license /usr/share/doc/torplay/LICENSE",
+    "/usr/bin/torplay",
+    "/usr/bin/torplay-autostart",
+    "/usr/lib/torplay",
+    "/usr/share/applications/torplay.desktop",
+    "/usr/share/icons/hicolor/256x256/apps/torplay.png",
+    "",
+  ].join("\n");
 }
 
 function validateBetterSqliteExternal(app) {
@@ -122,6 +246,9 @@ export function validateLinuxStage(directory = stage) {
   const node = path.join(directory, "usr/bin/node");
   if (!isLinuxX64Elf(node)) throw new Error("Bundled Node is not a Linux x86_64 ELF binary.");
   const app = path.join(directory, "usr/lib/torplay/app");
+  if (!existsSync(path.join(app, "node_modules/next/package.json"))) {
+    throw new Error("Standalone build lacks the Next.js runtime package.");
+  }
   validateBetterSqliteExternal(app);
   for (const basename of ["ffmpeg", "ffprobe"]) {
     const matches = findFiles(app, basename);
@@ -166,6 +293,35 @@ async function stageAppDir() {
   validateLinuxStage();
 }
 
+function buildDebPackage(version) {
+  const packageRoot = path.join(releaseRoot, "deb-root");
+  stageDebPackage(stage, packageRoot, version);
+  const destination = path.join(output, `TorPlay-${version}-amd64.deb`);
+  run("dpkg-deb", ["--build", "--root-owner-group", packageRoot, destination]);
+  writeFileSync(`${destination}.sha256`, `${sha256(destination)}  ${path.basename(destination)}\n`);
+  return destination;
+}
+
+function buildRpmPackage(version) {
+  const packageRoot = path.join(releaseRoot, "rpm-root");
+  const sources = path.join(packageRoot, "SOURCES");
+  const specs = path.join(packageRoot, "SPECS");
+  const payload = path.join(sources, "payload");
+  for (const directory of ["BUILD", "BUILDROOT", "RPMS", "SOURCES", "SPECS", "SRPMS"]) {
+    mkdirSync(path.join(packageRoot, directory), { recursive: true });
+  }
+  stageLinuxInstallerPayload(stage, payload);
+  const spec = path.join(specs, "torplay.spec");
+  writeFileSync(spec, rpmSpec(version));
+  run("rpmbuild", ["-bb", "--define", `_topdir ${packageRoot}`, spec]);
+  const packages = findFilesWithExtension(path.join(packageRoot, "RPMS"), ".rpm");
+  if (packages.length !== 1) throw new Error(`Expected one RPM package, found ${packages.length}.`);
+  const destination = path.join(output, `TorPlay-${version}-x86_64.rpm`);
+  cpSync(packages[0], destination);
+  writeFileSync(`${destination}.sha256`, `${sha256(destination)}  ${path.basename(destination)}\n`);
+  return destination;
+}
+
 async function main() {
   if (process.platform !== "linux" || process.arch !== "x64") {
     throw new Error("npm run release:linux requires Linux x86_64 for native dependencies.");
@@ -174,6 +330,10 @@ async function main() {
   run("npm", ["run", "lint"]);
   run("npm", ["run", "build"], { env: { ...process.env, TORPLAY_STANDALONE_BUILD: "1" } });
   await stageAppDir();
+  mkdirSync(output, { recursive: true });
+  const { version } = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8"));
+  const deb = buildDebPackage(version);
+  const rpm = buildRpmPackage(version);
   const tool = await verifiedDownload(
     "https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage",
     "appimagetool-1.9.1-x86_64.AppImage", TOOL_SHA256,
@@ -183,8 +343,6 @@ async function main() {
     "appimage-runtime-20251108-x86_64", RUNTIME_SHA256,
   );
   chmodSync(tool, 0o755);
-  mkdirSync(output, { recursive: true });
-  const { version } = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8"));
   const appImage = path.join(output, `TorPlay-${version}-x86_64.AppImage`);
   run(tool, ["--appimage-extract-and-run", "--runtime-file", imageRuntime, stage, appImage], {
     env: { ...process.env, ARCH: "x86_64", VERSION: version },
@@ -192,6 +350,8 @@ async function main() {
   chmodSync(appImage, 0o755);
   writeFileSync(`${appImage}.sha256`, `${sha256(appImage)}  ${path.basename(appImage)}\n`);
   console.log(`Created ${appImage}`);
+  console.log(`Created ${deb}`);
+  console.log(`Created ${rpm}`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

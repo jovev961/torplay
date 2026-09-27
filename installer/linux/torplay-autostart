@@ -1,0 +1,30 @@
+#!/bin/sh
+set -eu
+
+config_home=${XDG_CONFIG_HOME:-"${HOME:?HOME is required}"/.config}
+autostart_dir="$config_home/autostart"
+autostart_file="$autostart_dir/torplay.desktop"
+installed_entry=/usr/share/applications/torplay.desktop
+
+case "${1:-status}" in
+  enable)
+    mkdir -p "$autostart_dir"
+    install -m 0644 "$installed_entry" "$autostart_file"
+    printf 'TorPlay login startup enabled.\n'
+    ;;
+  disable)
+    rm -f "$autostart_file"
+    printf 'TorPlay login startup disabled.\n'
+    ;;
+  status)
+    if [ -f "$autostart_file" ]; then
+      printf 'enabled\n'
+    else
+      printf 'disabled\n'
+    fi
+    ;;
+  *)
+    printf 'Usage: torplay-autostart enable|disable|status\n' >&2
+    exit 2
+    ;;
+esac

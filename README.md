@@ -22,9 +22,9 @@ TorPlay then opens at [http://localhost](http://localhost). Other devices on the
 
 Profiles, history, configuration, and logs are kept under `%LOCALAPPDATA%\TorPlay` and are preserved during upgrades and normal uninstall. See the [complete Windows installation and first-run guide](docs/windows-deployment.md) for checksum verification, API setup, tray controls, troubleshooting, updates, and uninstalling.
 
-## Run on Ubuntu 24.04 x86_64
+## Install on Linux x86_64
 
-The Linux AppImage bundles TorPlay's runtime and media tools. Download the AppImage and checksum from a successful **Linux AppImage** workflow artifact, verify the checksum, make the AppImage executable, and launch it. TorPlay opens locally and requests one-time administrator authorization for the household address `http://torplay.local`; declining or failed authorization safely uses `http://torplay.local:3000`. See the [Linux AppImage guide](docs/linux-deployment.md) for exact commands, first-run setup, LAN access, Quit, updates, and troubleshooting.
+Linux releases include a `.deb` installer for Ubuntu/Debian-family systems, an `.rpm` installer for Fedora/RHEL-family systems, and a portable AppImage. Every format bundles TorPlay's runtime and media tools without relying on a source checkout or system Node.js. See the [Linux installation guide](docs/linux-deployment.md) for verification, installation, login startup, updates, uninstalling, and portable use.
 
 ## Developer/source setup
 
@@ -34,7 +34,7 @@ Source development is separate from normal installation and requires Node.js and
 
 - [Documentation index](docs/README.md)
 - [Windows deployment](docs/windows-deployment.md)
-- [Linux AppImage](docs/linux-deployment.md)
+- [Linux installation](docs/linux-deployment.md)
 - [Configuration](docs/configuration.md)
 - [Development](docs/development.md)
 - [Architecture](docs/architecture.md)
