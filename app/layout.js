@@ -4,6 +4,7 @@ import { I18nProvider } from "../components/I18nProvider.js";
 import { getServerI18n } from "./_lib/i18n.js";
 import { WatchTogetherProvider } from "../components/WatchTogetherProvider.js";
 import WatchTogetherDock from "../components/WatchTogetherDock.js";
+import TvNavigation from "../components/TvNavigation.js";
 
 export async function generateMetadata() {
   const { t } = await getServerI18n();
@@ -35,7 +36,7 @@ export default async function RootLayout({ children }) {
   return (
     <html lang={locale}>
       <body><I18nProvider initialLocale={locale}><ProfileProvider><WatchTogetherProvider>
-        {children}<WatchTogetherDock />
+        <TvNavigation />{children}<WatchTogetherDock />
       </WatchTogetherProvider></ProfileProvider></I18nProvider></body>
     </html>
   );

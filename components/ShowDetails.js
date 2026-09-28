@@ -14,6 +14,7 @@ import { autoplayReducer } from "../lib/playback/autoplay.js";
 import { useI18n } from "./I18nProvider.js";
 import { useWatchTogether } from "./WatchTogetherProvider.js";
 import { mediaIdentityHref, sameMediaIdentity } from "../lib/watch-together/protocol.js";
+import RemoteSelect from "./RemoteSelect.js";
 
 async function readJson(response) {
   const data = await response.json();
@@ -262,9 +263,9 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
     setEpisodeNavigationError("");
   }
 
-  async function changeSeason(event) {
+  async function changeSeason(value) {
     if (guestMediaLocked) return;
-    const number = Number(event.target.value);
+    const number = Number(value);
     setSelectedSeasonNumber(number);
     setLoadingSeason(true);
     setSeasonError("");
@@ -660,12 +661,9 @@ export default function ShowDetails({ show, initialSeason, initialEpisodeNumber 
           </div>
           <label>
             <span className="srOnly">{t("Choose a season")}</span>
-            <select value={selectedSeasonNumber} onChange={changeSeason}
-              disabled={loadingSeason || guestMediaLocked}>
-              {show.seasons.map((item) => (
-                <option value={item.number} key={item.number}>{item.name}</option>
-              ))}
-            </select>
+            <RemoteSelect value={selectedSeasonNumber} onChange={changeSeason}
+              ariaLabel={t("Choose a season")} disabled={loadingSeason || guestMediaLocked}
+              options={show.seasons.map((item) => ({ value: item.number, label: item.name }))} />
           </label>
         </div>
 

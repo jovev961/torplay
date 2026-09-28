@@ -8,6 +8,7 @@ import { useProfile } from "./ProfileProvider.js";
 import { releaseTorrentSession } from "./useSourceLookup.js";
 import { formatFileSize } from "../lib/video/episode-display.js";
 import { inferMediaBadges } from "../lib/video/media-capabilities.js";
+import RemoteSelect from "./RemoteSelect.js";
 
 async function json(response) {
   const data = await response.json().catch(() => ({}));
@@ -343,10 +344,9 @@ export default function DebridLibraryClient() {
           : "Associate this provider item with a TMDB title to make its ready files available from Play."}</p>
         {selected.associationSource === "manual" ? <button type="button" onClick={() => void removeAssociation()}>Remove association</button> : null}
         <div className="debridFileReviewRow debridAssociationFields">
-          <label>Type <select value={associationType} onChange={(event) => {
-            setAssociationType(event.target.value);
-            setAssociationResults([]);
-          }}><option value="show">TV show</option><option value="movie">Movie</option></select></label>
+          <label>Type <RemoteSelect value={associationType} ariaLabel="Association type"
+            options={[{ value: "show", label: "TV show" }, { value: "movie", label: "Movie" }]}
+            onChange={(value) => { setAssociationType(value); setAssociationResults([]); }} /></label>
           {associationType === "show" ? <label>Season <input type="number" min="0" max="99"
             value={associationSeason} onChange={(event) => setAssociationSeason(Number(event.target.value))} /></label> : null}
           <label className="debridAssociationSearch">Search TMDB <input value={associationQuery} maxLength={200}
