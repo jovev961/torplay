@@ -211,20 +211,70 @@ test("Linux uninstaller constructs only fixed native package removal actions", (
   assert.equal(rpm, "rpm");
 });
 
-test("Linux uninstaller confirmation defaults to keeping data and handles cancellation", async () => {
+test("Linux uninstaller uses portable two-step Zenity dialogs", async () => {
+  const findExecutable = async () => "/usr/bin/zenity";
+  const calls = [];
+  assert.deepEqual(await confirmUninstall({
+    findExecutable,
+    execute: async (command, args, options) => {
+      calls.push({ command, args, options });
+      return { code: calls.length === 1 ? 0 : 1, stdout: "", stderr: "" };
+    },
+  }), { confirmed: true, deleteData: false });
+  assert.equal(calls.length, 2);
+  assert.equal(calls.every(({ args }) => args.includes("--question")), true);
+  assert.equal(calls.some(({ args }) => args.some((arg) => /--forms|--add-check/.test(arg))), false);
+  assert.equal(calls[0].args.includes("--ok-label=Uninstall"), true);
+  assert.equal(calls[1].args.includes("--cancel-label=Keep data"), true);
+});
+
+test("Linux uninstaller treats dialog cancellation separately from execution errors", async () => {
   const findExecutable = async () => "/usr/bin/zenity";
   assert.deepEqual(await confirmUninstall({
     findExecutable,
-    execute: async () => ({ code: 1, stdout: "", stderr: "" }),
+    execute: async () => ({ code: 1, error: null, stdout: "", stderr: "" }),
   }), { confirmed: false, deleteData: false });
+
+  await assert.rejects(confirmUninstall({
+    findExecutable,
+    execute: async () => ({
+      code: 255, error: null, stdout: "", stderr: "This option is not available.",
+    }),
+  }), /Zenity uninstall confirmation failed with exit code 255.*option is not available/);
+
+  await assert.rejects(confirmUninstall({
+    findExecutable,
+    execute: async () => ({
+      code: null, error: new Error("spawn ENOENT"), stdout: "", stderr: "",
+    }),
+  }), /Zenity uninstall confirmation could not start: spawn ENOENT/);
+});
+
+test("Linux uninstaller preserves the two-step KDialog fallback", async () => {
+  const findExecutable = async (candidates) => candidates.includes("/usr/bin/kdialog")
+    ? "/usr/bin/kdialog" : null;
+  const calls = [];
   assert.deepEqual(await confirmUninstall({
     findExecutable,
-    execute: async () => ({ code: 0, stdout: "FALSE\n", stderr: "" }),
-  }), { confirmed: true, deleteData: false });
-  assert.deepEqual(await confirmUninstall({
-    findExecutable,
-    execute: async () => ({ code: 0, stdout: "TRUE\n", stderr: "" }),
+    execute: async (command, args) => {
+      calls.push({ command, args });
+      return { code: 0, error: null, stdout: "", stderr: "" };
+    },
   }), { confirmed: true, deleteData: true });
+  assert.equal(calls.length, 2);
+  assert.equal(calls.every(({ command, args }) => command === "/usr/bin/kdialog"
+    && args.includes("--yesno")), true);
+
+  let invocation = 0;
+  await assert.rejects(confirmUninstall({
+    findExecutable,
+    execute: async () => {
+      invocation += 1;
+      return invocation === 1
+        ? { code: 0, error: null, stdout: "", stderr: "" }
+        : { code: 255, error: null, stdout: "", stderr: "D-Bus unavailable" };
+    },
+  }), /KDialog application-data choice failed with exit code 255.*D-Bus unavailable/);
 });
 
 test("Linux uninstaller reports PolicyKit cancellation without claiming removal", async () => {
@@ -344,12 +394,14 @@ test("Linux uninstaller keeps data by default and deletes it only after explicit
   assert.deepEqual((await run(true)).actions, ["shutdown", "package", "autostart", "data"]);
 });
 
-test("Linux launcher ESM bundle supports CommonJS dependencies with dynamic requires", async () => {
+test("Linux launcher and uninstaller ESM bundles load from packaged runtime files", async () => {
   const directory = mkdtempSync(path.join(os.tmpdir(), "torplay-linux-bundle-"));
-  const bundle = path.join(directory, "linux-launcher.mjs");
   try {
-    bundleLinuxRuntime("linux-launcher.js", bundle);
-    await import(`${pathToFileURL(bundle).href}?test=${Date.now()}`);
+    for (const entry of ["linux-launcher.js", "linux-uninstaller.js"]) {
+      const bundle = path.join(directory, entry.replace(/\.js$/, ".mjs"));
+      bundleLinuxRuntime(entry, bundle);
+      await import(`${pathToFileURL(bundle).href}?test=${entry}-${Date.now()}`);
+    }
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

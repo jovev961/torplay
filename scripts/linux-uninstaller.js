@@ -37,6 +37,17 @@ function runCommand(command, args, { capture = false } = {}) {
   });
 }
 
+function dialogAccepted(result, dialogName) {
+  if (result?.error) {
+    throw new Error(`${dialogName} could not start: ${result.error.message}`);
+  }
+  if (result?.code === 0) return true;
+  if (result?.code === 1) return false;
+  const detail = String(result?.stderr || "").trim().replace(/\s+/g, " ").slice(0, 240);
+  const exit = Number.isInteger(result?.code) ? `exit code ${result.code}` : "an unknown error";
+  throw new Error(`${dialogName} failed with ${exit}${detail ? `: ${detail}` : "."}`);
+}
+
 export function nativeRemovalCommand(family, executableExists = existsSync) {
   const candidates = family === "deb"
     ? [
@@ -97,14 +108,22 @@ export async function confirmUninstall({
   ].join("\n");
   const zenity = await findExecutable(["/usr/bin/zenity", "/bin/zenity"]);
   if (zenity) {
-    const result = await execute(zenity, [
-      "--forms", "--title=TorPlay Uninstaller", `--text=${text}`,
-      "--add-check=Also delete my TorPlay application data",
+    const confirmation = await execute(zenity, [
+      "--question", "--title=TorPlay Uninstaller", `--text=${text}`,
       "--ok-label=Uninstall", "--cancel-label=Cancel", "--width=520",
     ], { capture: true });
-    return result.code === 0
-      ? { confirmed: true, deleteData: result.stdout.trim().toUpperCase().startsWith("TRUE") }
-      : { confirmed: false, deleteData: false };
+    if (!dialogAccepted(confirmation, "Zenity uninstall confirmation")) {
+      return { confirmed: false, deleteData: false };
+    }
+    const deletion = await execute(zenity, [
+      "--question", "--title=TorPlay Uninstaller",
+      "--text=Also delete your TorPlay profiles, settings, history, cache, and logs?",
+      "--ok-label=Delete data", "--cancel-label=Keep data", "--width=520",
+    ], { capture: true });
+    return {
+      confirmed: true,
+      deleteData: dialogAccepted(deletion, "Zenity application-data choice"),
+    };
   }
 
   const kdialog = await findExecutable(["/usr/bin/kdialog", "/bin/kdialog"]);
@@ -112,14 +131,19 @@ export async function confirmUninstall({
     const confirmation = await execute(kdialog, [
       "--title", "TorPlay Uninstaller", "--yesno", text,
       "--yes-label", "Uninstall", "--no-label", "Cancel",
-    ]);
-    if (confirmation.code !== 0) return { confirmed: false, deleteData: false };
+    ], { capture: true });
+    if (!dialogAccepted(confirmation, "KDialog uninstall confirmation")) {
+      return { confirmed: false, deleteData: false };
+    }
     const deletion = await execute(kdialog, [
       "--title", "TorPlay Uninstaller", "--yesno",
       "Also delete your TorPlay profiles, settings, history, cache, and logs?",
       "--yes-label", "Delete data", "--no-label", "Keep data",
-    ]);
-    return { confirmed: true, deleteData: deletion.code === 0 };
+    ], { capture: true });
+    return {
+      confirmed: true,
+      deleteData: dialogAccepted(deletion, "KDialog application-data choice"),
+    };
   }
   throw new Error("TorPlay Uninstaller requires Zenity or KDialog.");
 }
