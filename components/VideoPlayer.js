@@ -1514,11 +1514,22 @@ export default function VideoPlayer({
   const showEpisodePrompt = !suspended && !watchTogether?.isGuest && Boolean(nextEpisodePrompt)
     && (nextEpisodePrompt.immediate
       || shouldShowUpNext(timelineTime, effectiveDuration, segmentPlaybackRange(currentSegments.outro)));
-  const activateEpisodePrompt = useEffectEvent(() => nextEpisodePrompt?.onAction?.());
+  const automaticOutroPrompt = showEpisodePrompt && nextEpisodePrompt?.kind === "ready";
   const autoSkipSegment = useEffectEvent((segment) => {
     if (autoSkippedRef.current.has(segment.type)) return;
     autoSkippedRef.current.add(segment.type);
     requestSeek(segment.endMs / 1000, true);
+  });
+  const completeEpisodeAtOutro = useEffectEvent(() => {
+    if (endedRef.current) return;
+    endedRef.current = true;
+    const timeline = timelineRef.current;
+    void saveProgress({ position: timeline.duration, duration: timeline.duration });
+    if (nextEpisodePrompt?.kind === "ready" && nextEpisodePrompt.onAction) {
+      nextEpisodePrompt.onAction();
+    } else if (!watchTogether?.isGuest) {
+      onEnded?.();
+    }
   });
 
   const watchTogetherController = useEffectEvent(() => ({
@@ -1660,8 +1671,8 @@ export default function VideoPlayer({
     nextEpisodePrompt?.secondaryAction, sourceIdentity]);
 
   useEffect(() => {
-    if (!showEpisodePrompt || nextEpisodePrompt?.kind !== "ready"
-      || !playbackPreferences.autoPlayNextEpisode || !automaticSegment(currentSegments.outro) || !effectivePlaying) {
+    if (!automaticOutroPrompt
+      || !playbackPreferences.autoPlayNextEpisode || !effectivePlaying) {
       queueMicrotask(() => setCountdownRemaining(null));
       return undefined;
     }
@@ -1672,11 +1683,11 @@ export default function VideoPlayer({
       setCountdownRemaining(remaining);
       if (remaining <= 0) {
         clearInterval(timer);
-        activateEpisodePrompt();
+        completeEpisodeAtOutro();
       }
     }, 1000);
     return () => clearInterval(timer);
-  }, [showEpisodePrompt, nextEpisodePrompt?.kind, playbackPreferences.autoPlayNextEpisode,
+  }, [automaticOutroPrompt, playbackPreferences.autoPlayNextEpisode,
     currentSegments.outro, effectivePlaying, sourceIdentity]);
 
   async function updatePlaybackSetting(key) {
@@ -1919,14 +1930,11 @@ export default function VideoPlayer({
           onKeyDown={handleEpisodePromptKeyDown}>
           {nextEpisodePrompt.title ? <strong>{nextEpisodePrompt.title}</strong> : null}
           <span>{nextEpisodePrompt.text}</span>
-          {countdownRemaining !== null && nextEpisodePrompt.kind === "ready" && automaticSegment(currentSegments.outro)
+          {countdownRemaining !== null && nextEpisodePrompt.kind === "ready"
             ? <>
                 <small>Playing in {countdownRemaining} seconds</small>
                 <span className="playerAutomaticProgress" aria-hidden="true"><span /></span>
               </> : null}
-          {nextEpisodePrompt.kind === "ready" && playbackPreferences.autoPlayNextEpisode
-            && !automaticSegment(currentSegments.outro)
-            ? <small>Will play when this episode ends</small> : null}
           {nextEpisodePrompt.action || nextEpisodePrompt.secondaryAction ? <div className="playerEpisodePromptActions">
             {nextEpisodePrompt.action ? <button type="button" onClick={nextEpisodePrompt.onAction}>
               {nextEpisodePrompt.action}</button> : null}

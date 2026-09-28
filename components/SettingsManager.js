@@ -485,7 +485,7 @@ export default function SettingsManager() {
               <label className={styles.playbackOption}>
                 <span className={styles.playbackOptionText}>
                   <strong>Play the next episode</strong>
-                  <small>Start the next episode automatically when the current one ends.</small>
+                  <small>Start the next episode after a five-second countdown when Up Next appears.</small>
                 </span>
                 <input type="checkbox"
                   checked={snapshot.playback.autoPlayNextEpisode}
