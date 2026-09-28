@@ -41,9 +41,17 @@ test("debrid policy defaults to local and redacts credentials", async () => {
     }, { path: filename });
     const config = await readDebridConfig({ path: filename });
     assert.deepEqual(config.priority, ["torbox", "real-debrid"]);
-    assert.equal(publicDebridConfig({
-      ...config, credentials: { torbox: { apiKey: "secret-token" } },
-    }).providers.torbox.configured, true);
+    const publicConfig = publicDebridConfig({
+      ...config,
+      credentials: {
+        torbox: { apiKey: "secret-token" },
+        "real-debrid": { accessToken: "oauth-token" },
+      },
+    });
+    assert.equal(publicConfig.providers.torbox.configured, true);
+    assert.equal(publicConfig.providers.torbox.apiKeyConfigured, true);
+    assert.equal(publicConfig.providers["real-debrid"].configured, true);
+    assert.equal(publicConfig.providers["real-debrid"].apiKeyConfigured, false);
     assert.equal(JSON.stringify(publicDebridConfig(config)).includes("secret-token"), false);
     assert.equal((await stat(filename)).mode & 0o777, 0o600);
     assert.equal(JSON.parse(await readFile(filename, "utf8")).localFallback, false);
