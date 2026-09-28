@@ -141,6 +141,17 @@ select option {
   text-align: left;
 }
 
+.remoteSelectMenu button > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.remoteSelectMenu button > span:last-child:not(:first-child) {
+  flex: none;
+}
+
 .remoteSelectMenu button:hover,
 .remoteSelectMenu button[aria-selected="true"] {
   background: rgba(255, 255, 255, 0.08);
@@ -671,7 +682,7 @@ a {
 
 @media (min-width: 721px) and (max-width: 1080px) {
   .appHeader {
-    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    grid-template-columns: auto minmax(0, 1fr) auto auto auto;
     gap: 8px;
   }
 
@@ -738,8 +749,13 @@ a {
     grid-column: 3;
   }
 
-  .profileControl {
+  .headerLanguageSwitcher {
     grid-column: 4;
+    justify-self: end;
+  }
+
+  .profileControl {
+    grid-column: 5;
   }
 }
 
@@ -3916,7 +3932,7 @@ footer {
   }
 
   .appHeader {
-    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    grid-template-columns: auto minmax(0, 1fr) auto auto auto;
     gap: 8px;
     padding: 7px 8px 7px 12px;
   }
@@ -3989,8 +4005,13 @@ footer {
     grid-column: 3;
   }
 
-  .profileControl {
+  .headerLanguageSwitcher {
     grid-column: 4;
+    justify-self: end;
+  }
+
+  .profileControl {
+    grid-column: 5;
   }
 
   .profileTriggerName {

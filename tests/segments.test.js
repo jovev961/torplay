@@ -178,5 +178,6 @@ test("validated SkipDB and IntroDB ranges support automatic skipping and outro t
   assert.equal(shouldShowUpNext(1100, 1200, segmentPlaybackRange(outro)), true);
   assert.equal(upNextTrigger(1200), 1170);
   assert.equal(shouldShowUpNext(1169, 1200), false);
+  assert.equal(shouldShowUpNext(1170, 1200), true);
   assert.equal(shouldOfferNextEpisode(1080, 1200, segmentPlaybackRange(outro)), true);
 });
