@@ -175,13 +175,19 @@ test("configured native sources provide movie and TV results without Jackett", a
 });
 
 test("source chooser preserves existing source paths beside optional tested sources", async () => {
-  const [dialog, community] = await Promise.all([
+  const [dialog, community, onboarding, manager] = await Promise.all([
     readFile(new URL("../components/AddSourceDialog.js", import.meta.url), "utf8"),
     readFile(new URL("../components/CommunitySources.js", import.meta.url), "utf8"),
+    readFile(new URL("../components/SourceOnboarding.js", import.meta.url), "utf8"),
+    readFile(new URL("../components/TorrentIndexerManager.js", import.meta.url), "utf8"),
   ]);
   assert.match(dialog, /TorPlay Tested Sources/);
   assert.match(dialog, /None are added or enabled automatically/);
   assert.match(dialog, /<CommunitySources/);
   assert.match(community, /Browse community sources/);
   assert.match(community, /Advanced setup/);
+  assert.match(dialog, /keepOpen = action === "add-native"/);
+  assert.match(dialog, /You can add another tested source/);
+  assert.match(onboarding, /if \(!keepOpen\) setSaved\(true\)/);
+  assert.match(manager, /if \(!keepOpen\) \{\s*closeDialog\(\)/);
 });

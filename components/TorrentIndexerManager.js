@@ -256,9 +256,12 @@ export default function TorrentIndexerManager({
         testedSources={nativeSources}
         configuredProviders={customProviders}
         onClose={closeDialog}
-        onSaved={async (data) => {
+        onSaved={async (data, { keepOpen = false } = {}) => {
           if (Array.isArray(data.providers)) setCustomProviders(data.providers);
-          closeDialog(); setMessage("Source saved.");
+          if (!keepOpen) {
+            closeDialog();
+            setMessage("Source saved.");
+          }
           setHealth({});
           const snapshot = await onCustomChanged();
           if (Array.isArray(snapshot?.customProviders)) setCustomProviders(snapshot.customProviders);

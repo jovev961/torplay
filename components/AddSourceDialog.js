@@ -70,7 +70,11 @@ export default function AddSourceDialog({ initial = {}, testedSources = [], conf
     try {
       const data = await request(action, provider);
       if (action === "test") setMessage("Connected · " + data.capabilities.mediaTypes.join(" · "));
-      else await onSaved(data);
+      else {
+        const keepOpen = action === "add-native";
+        if (keepOpen) setMessage("Source added. You can add another tested source.");
+        await onSaved(data, { keepOpen });
+      }
     } catch (error) {
       if (action === "create-cardigann" && error.canAddUnverified) {
         setImportDraft((current) => ({ ...current, verificationFailure: error.verificationFailure, confirmationToken: error.confirmationToken }));
