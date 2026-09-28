@@ -1,8 +1,10 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { sourceRequest as request } from "./source-request.js";
 import CommunitySources from "./CommunitySources.js";
 import styles from "./SettingsManager.module.css";
+import RemoteSelect from "./RemoteSelect.js";
+import useModalFocus from "./useModalFocus.js";
 const PROWLARR_DEFINITIONS_URL = "https://github.com/Prowlarr/Indexers/tree/master/definitions/v11";
 
 function accessLabel(value) {
@@ -26,6 +28,7 @@ function settingValues(settings) {
 
 
 export default function AddSourceDialog({ initial = {}, testedSources = [], configuredProviders = [], onClose, onSaved, embedded = false }) {
+  const dialogRef = useRef(null);
   const [draft, setDraft] = useState(initial.draft || null);
   const [jackettDraft, setJackettDraft] = useState(initial.jackettDraft || null);
   const [jackettIndexers, setJackettIndexers] = useState(null);
@@ -61,6 +64,7 @@ export default function AddSourceDialog({ initial = {}, testedSources = [], conf
     return () => { cancelled = true; };
   }, [initial.jackettDraft]);
   function closeDialog() { if (!busy) onClose(); }
+  useModalFocus(dialogRef, !embedded, closeDialog, busy);
   async function act(action, provider) {
     setBusy(true); setError(""); setMessage("");
     try {
@@ -124,7 +128,9 @@ export default function AddSourceDialog({ initial = {}, testedSources = [], conf
   return (
 
         <div className={embedded ? undefined : styles.dialogBackdrop} onMouseDown={(event) => { if (!embedded && event.target === event.currentTarget) closeDialog(); }}>
-          <div className={embedded ? styles.sourceOnboarding : styles.indexerDialog} role={embedded ? "region" : "dialog"} aria-modal={embedded ? undefined : true} aria-labelledby="indexer-dialog-title">
+          <div className={embedded ? styles.sourceOnboarding : styles.indexerDialog}
+            ref={dialogRef} role={embedded ? "region" : "dialog"}
+            aria-modal={embedded ? undefined : true} aria-labelledby="indexer-dialog-title">
             <div className={styles.dialogHeading}>
               <div>
                 <span className="eyebrow">Torrent Sources</span>
@@ -182,10 +188,12 @@ export default function AddSourceDialog({ initial = {}, testedSources = [], conf
                       {field.type === "checkbox" ? (
                         <label className={styles.checkboxLabel}><input id={`cardigann-${field.name}`} type="checkbox" checked={Boolean(importDraft.values[field.name])} disabled={busy} onChange={(event) => updateImportedSetting(field.name, event.target.checked)} /> Enabled</label>
                       ) : field.type === "select" ? (
-                        <select id={`cardigann-${field.name}`} required={field.required} disabled={busy} value={importDraft.values[field.name] || ""} onChange={(event) => updateImportedSetting(field.name, event.target.value)}>
-                          {!field.required ? <option value="">Default</option> : null}
-                          {Object.entries(field.options || {}).map(([value, label]) => <option value={value} key={value}>{label}</option>)}
-                        </select>
+                        <RemoteSelect id={`cardigann-${field.name}`} disabled={busy}
+                          value={importDraft.values[field.name] || ""} ariaLabel={field.label}
+                          onChange={(value) => updateImportedSetting(field.name, value)} options={[
+                            ...(!field.required ? [{ value: "", label: "Default" }] : []),
+                            ...Object.entries(field.options || {}).map(([value, label]) => ({ value, label })),
+                          ]} />
                       ) : (
                         <div className={styles.inputRow}><input id={`cardigann-${field.name}`} type={field.secret ? "password" : "text"} required={field.required && !field.configured} disabled={busy} value={importDraft.values[field.name] || ""} placeholder={field.configured ? "Leave blank to keep existing value" : ""} autoComplete={field.secret ? "new-password" : "off"} onChange={(event) => updateImportedSetting(field.name, event.target.value)} /></div>
                       )}

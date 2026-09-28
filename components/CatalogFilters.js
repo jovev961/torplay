@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { catalogHref } from "../lib/metadata/catalog.js";
 import { useI18n } from "./I18nProvider.js";
+import RemoteSelect from "./RemoteSelect.js";
 
 function supportLabel(genre, t) {
   if (genre.supportedMediaTypes.length === 2) return genre.name;
@@ -37,20 +38,17 @@ export default function CatalogFilters({ pathname, initialQuery = "", initialTyp
       ) : null}
       <label>
         <span>{t("Media type")}</span>
-        <select value={type} onChange={(event) => setType(event.target.value)}>
-          <option value="all">{t("All")}</option>
-          <option value="movie">{t("Movies")}</option>
-          <option value="tv">{t("TV Shows")}</option>
-        </select>
+        <RemoteSelect value={type} onChange={setType} ariaLabel={t("Media type")} options={[
+          { value: "all", label: t("All") }, { value: "movie", label: t("Movies") },
+          { value: "tv", label: t("TV Shows") },
+        ]} />
       </label>
       <label>
         <span>{t("Genre")}</span>
-        <select value={genre} onChange={(event) => setGenre(event.target.value)}>
-          <option value="">{t("All Genres")}</option>
-          {genres.map((item) => (
-            <option value={item.slug} key={item.slug}>{supportLabel(item, t)}</option>
-          ))}
-        </select>
+        <RemoteSelect value={genre} onChange={setGenre} ariaLabel={t("Genre")} options={[
+          { value: "", label: t("All Genres") },
+          ...genres.map((item) => ({ value: item.slug, label: supportLabel(item, t) })),
+        ]} />
       </label>
       <button type="submit">{t(pathname === "/search" ? "Search" : "Apply filters")}</button>
     </form>

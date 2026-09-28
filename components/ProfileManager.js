@@ -6,6 +6,7 @@ import ProfileAvatar from "./ProfileAvatar.js";
 import { useProfile } from "./ProfileProvider.js";
 import { DEFAULT_PROFILE_AVATAR_ID } from "../lib/profiles/avatars.js";
 import { useI18n } from "./I18nProvider.js";
+import RemoteSelect from "./RemoteSelect.js";
 
 async function readJson(response) {
   const data = await response.json().catch(() => ({}));
@@ -326,19 +327,15 @@ export default function ProfileManager({ startAdding = false }) {
                 </div>
                 <label className="primaryLanguage">
                   <span>{t("Audio language")}</span>
-                  <select
-                    value={editor.preferredAudioLanguage}
-                    disabled={catalogLoading}
-                    onChange={(event) => {
+                  <RemoteSelect value={editor.preferredAudioLanguage} disabled={catalogLoading}
+                    ariaLabel={t("Audio language")} options={[
+                      { value: "original", label: t("Original/default") },
+                      ...languageOptions.map(({ code, label }) => ({ value: code, label })),
+                    ]} onChange={(value) => {
                       setSaved("");
-                      setEditor((current) => ({ ...current, preferredAudioLanguage: event.target.value }));
+                      setEditor((current) => ({ ...current, preferredAudioLanguage: value }));
                     }}
-                  >
-                    <option value="original">{t("Original/default")}</option>
-                    {languageOptions.map(({ code, label }) => (
-                      <option key={code} value={code}>{label}</option>
-                    ))}
-                  </select>
+                  />
                 </label>
                 <div className="subtitlePreferenceActions">
                   <button className="primaryButton compact" type="submit"
@@ -367,17 +364,14 @@ export default function ProfileManager({ startAdding = false }) {
 
                 <label className="primaryLanguage">
                   <span>{t("Primary language")}</span>
-                  <select
-                    value={editor.defaultLanguage}
-                    onChange={(event) => {
+                  <RemoteSelect value={editor.defaultLanguage} ariaLabel={t("Primary language")}
+                    options={editor.enabledLanguages.map((code) => ({
+                      value: code, label: labels.get(code) || displayLanguage(code),
+                    }))} onChange={(value) => {
                       setSaved("");
-                      setEditor((current) => ({ ...current, defaultLanguage: event.target.value }));
+                      setEditor((current) => ({ ...current, defaultLanguage: value }));
                     }}
-                  >
-                    {editor.enabledLanguages.map((code) => (
-                      <option key={code} value={code}>{labels.get(code) || displayLanguage(code)}</option>
-                    ))}
-                  </select>
+                  />
                 </label>
 
                 <label className="languageSearch">

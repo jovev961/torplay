@@ -24,6 +24,7 @@ import {
   showManualSkip,
 } from "../lib/playback/segment-controls.js";
 import { isRemotePlaybackSessionActive } from "../lib/remote-playback/client-state.js";
+import RemoteSelect from "./RemoteSelect.js";
 import { remotePlaybackSource } from "../lib/remote-playback/source.js";
 import {
   isFullscreenActive,
@@ -1728,6 +1729,23 @@ export default function VideoPlayer({
     focusCaptionMenuItem(active || items[0]);
   }, [activeSubtitleId, menu, subtitles.length]);
 
+  const keepMenuControlsVisible = useEffectEvent(() => revealControls(playing));
+
+  useEffect(() => {
+    if (!menu || menu === "captions") return undefined;
+    const player = playerRef.current;
+    requestAnimationFrame(() => player?.querySelector(".playerMenu button:not(:disabled)")?.focus({ preventScroll: true }));
+    function closeMenu(event) {
+      if (!closesPlayerMenu(event.key)) return;
+      event.preventDefault();
+      setMenu(null);
+      (menu === "audio" ? audioButtonRef.current : player)?.focus({ preventScroll: true });
+      keepMenuControlsVisible();
+    }
+    document.addEventListener("keydown", closeMenu);
+    return () => document.removeEventListener("keydown", closeMenu);
+  }, [menu]);
+
   const output = playbackDetails?.playbackPlan?.output;
   const hdrLabel = output?.hdrFormat === "dolby-vision" ? "Dolby Vision"
     : output?.hdrFormat === "hdr10-plus" ? "HDR10+"
@@ -2084,48 +2102,35 @@ export default function VideoPlayer({
               </div>
               <label className="subtitleSetting">
                 <span>Size</span>
-                <select
-                  value={subtitleAppearance.size}
-                  onChange={(event) => updateSubtitleAppearance({ size: event.target.value })}
-                >
-                  <option value="small">Small</option>
-                  <option value="medium">Medium</option>
-                  <option value="large">Large</option>
-                  <option value="extra-large">Extra Large</option>
-                </select>
+                <RemoteSelect value={subtitleAppearance.size} ariaLabel="Subtitle size"
+                  onChange={(size) => updateSubtitleAppearance({ size })} options={[
+                    { value: "small", label: "Small" }, { value: "medium", label: "Medium" },
+                    { value: "large", label: "Large" }, { value: "extra-large", label: "Extra Large" },
+                  ]} />
               </label>
               <label className="subtitleSetting">
                 <span>Font</span>
-                <select
-                  value={subtitleAppearance.font}
-                  onChange={(event) => updateSubtitleAppearance({ font: event.target.value })}
-                >
-                  <option value="sans">Sans Serif</option>
-                  <option value="serif">Serif</option>
-                  <option value="monospace">Monospace</option>
-                </select>
+                <RemoteSelect value={subtitleAppearance.font} ariaLabel="Subtitle font"
+                  onChange={(font) => updateSubtitleAppearance({ font })} options={[
+                    { value: "sans", label: "Sans Serif" }, { value: "serif", label: "Serif" },
+                    { value: "monospace", label: "Monospace" },
+                  ]} />
               </label>
               <label className="subtitleSetting">
                 <span>Text color</span>
-                <select
-                  value={subtitleAppearance.textColor}
-                  onChange={(event) => updateSubtitleAppearance({ textColor: event.target.value })}
-                >
-                  <option value="white">White</option>
-                  <option value="yellow">Yellow</option>
-                  <option value="cyan">Cyan</option>
-                </select>
+                <RemoteSelect value={subtitleAppearance.textColor} ariaLabel="Subtitle text color"
+                  onChange={(textColor) => updateSubtitleAppearance({ textColor })} options={[
+                    { value: "white", label: "White" }, { value: "yellow", label: "Yellow" },
+                    { value: "cyan", label: "Cyan" },
+                  ]} />
               </label>
               <label className="subtitleSetting">
                 <span>Edge style</span>
-                <select
-                  value={subtitleAppearance.edgeStyle}
-                  onChange={(event) => updateSubtitleAppearance({ edgeStyle: event.target.value })}
-                >
-                  <option value="none">None</option>
-                  <option value="shadow">Shadow</option>
-                  <option value="outline">Outline</option>
-                </select>
+                <RemoteSelect value={subtitleAppearance.edgeStyle} ariaLabel="Subtitle edge style"
+                  onChange={(edgeStyle) => updateSubtitleAppearance({ edgeStyle })} options={[
+                    { value: "none", label: "None" }, { value: "shadow", label: "Shadow" },
+                    { value: "outline", label: "Outline" },
+                  ]} />
               </label>
               <label className="subtitleSetting rangeSetting">
                 <span>Background opacity <output>{subtitleAppearance.backgroundOpacity}%</output></span>

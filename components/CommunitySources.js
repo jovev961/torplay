@@ -4,6 +4,7 @@ import { useState } from "react";
 import { sourceRequest } from "./source-request.js";
 import { filterCommunityEntries, unexploredCommunityEntries } from "./community-source-filters.js";
 import styles from "./SettingsManager.module.css";
+import RemoteSelect from "./RemoteSelect.js";
 
 export default function CommunitySources({ busy, onSelect, onAdvanced, configuredProviders = [] }) {
   const [directory, setDirectory] = useState(null);
@@ -51,12 +52,10 @@ export default function CommunitySources({ busy, onSelect, onAdvanced, configure
             {filters.map((filter) => <button key={filter.id} type="button" className={`${styles.communityFilter} ${media === filter.id ? styles.communityFilterActive : ""}`} aria-pressed={media === filter.id} onClick={() => setMedia(filter.id)}>{filter.label} <span>{filter.count}</span></button>)}
           </div>
           <label className={styles.communityAccess}>Access
-            <select value={access} onChange={(event) => setAccess(event.target.value)}>
-              <option value="all">All</option>
-              <option value="public">Public</option>
-              <option value="semi-private">Semi-public</option>
-              <option value="private">Private</option>
-            </select>
+            <RemoteSelect value={access} onChange={setAccess} ariaLabel="Access" options={[
+              { value: "all", label: "All" }, { value: "public", label: "Public" },
+              { value: "semi-private", label: "Semi-public" }, { value: "private", label: "Private" },
+            ]} />
           </label>
         </div>
         <p className={styles.communityCount} role="status">Showing {entries.length} of {available.length} indexers you have not added. Sources supporting multiple categories appear in each.</p>

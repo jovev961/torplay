@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import styles from "./DebridSettings.module.css";
+import RemoteSelect from "./RemoteSelect.js";
 
 const names = { "real-debrid": "Real-Debrid", torbox: "TorBox" };
 async function request(url, body, method = "POST") {
@@ -135,12 +136,11 @@ export default function DebridSettings({ canEdit, section = "playback" }) {
         <h3>How should TorPlay play videos?</h3>
         <p>Choose whether to stream from torrent peers or check your connected provider accounts first.</p>
         <label>Preferred playback method
-          <select disabled={!canEdit || Boolean(busy)} value={draft.mode}
-            onChange={(event) => setDraft({ ...draft, mode: event.target.value })}>
-            <option value="local">Local BitTorrent Only</option>
-            <option value="prefer-debrid">Prefer Debrid</option>
-            <option value="debrid-only">Debrid Only</option>
-          </select>
+          <RemoteSelect disabled={!canEdit || Boolean(busy)} value={draft.mode}
+            ariaLabel="Preferred playback method" onChange={(mode) => setDraft({ ...draft, mode })}
+            options={[{ value: "local", label: "Local BitTorrent Only" },
+              { value: "prefer-debrid", label: "Prefer Debrid" },
+              { value: "debrid-only", label: "Debrid Only" }]} />
         </label>
         {draft.mode === "prefer-debrid" ? (
           <label className={styles.check}>
@@ -151,12 +151,13 @@ export default function DebridSettings({ canEdit, section = "playback" }) {
           </label>
         ) : null}
         {draft.mode !== "local" ? <label>When the video is not ready on a provider
-          <select disabled={!canEdit || Boolean(busy)} value={draft.unavailableAction}
-            onChange={(event) => setDraft({ ...draft, unavailableAction: event.target.value })}>
-            <option value="ask">Ask me</option>
-            <option value="local" disabled={draft.mode === "debrid-only" || !draft.localFallback}>Watch immediately with local BitTorrent</option>
-            <option value="remote">Download using my preferred debrid provider</option>
-          </select>
+          <RemoteSelect disabled={!canEdit || Boolean(busy)} value={draft.unavailableAction}
+            ariaLabel="Unavailable video action"
+            onChange={(unavailableAction) => setDraft({ ...draft, unavailableAction })}
+            options={[{ value: "ask", label: "Ask me" },
+              { value: "local", label: "Watch immediately with local BitTorrent",
+                disabled: draft.mode === "debrid-only" || !draft.localFallback },
+              { value: "remote", label: "Download using my preferred debrid provider" }]} />
         </label> : null}
         <button type="button" disabled={!canEdit || Boolean(busy)
           || (draft.mode === config.mode && draft.localFallback === config.localFallback
@@ -172,12 +173,11 @@ export default function DebridSettings({ canEdit, section = "playback" }) {
         <h3>Which provider should TorPlay check first?</h3>
         <p>If both accounts are connected, TorPlay checks your preferred provider first.</p>
         <label>Preferred provider
-          <select disabled={!canEdit || Boolean(busy)} value={draft.priority[0]}
-            onChange={(event) => setDraft({ ...draft, priority: [event.target.value,
-              event.target.value === "real-debrid" ? "torbox" : "real-debrid"] })}>
-            <option value="real-debrid">Real-Debrid</option>
-            <option value="torbox">TorBox</option>
-          </select>
+          <RemoteSelect disabled={!canEdit || Boolean(busy)} value={draft.priority[0]}
+            ariaLabel="Preferred provider" onChange={(provider) => setDraft({ ...draft,
+              priority: [provider, provider === "real-debrid" ? "torbox" : "real-debrid"] })}
+            options={[{ value: "real-debrid", label: "Real-Debrid" },
+              { value: "torbox", label: "TorBox" }]} />
         </label>
         <p>Next provider: {names[second]}</p>
         <button type="button" disabled={!canEdit || Boolean(busy)
