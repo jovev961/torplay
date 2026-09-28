@@ -433,6 +433,9 @@ test("Linux stage rejects absent files, wrong native architecture, and secrets",
   writeFileSync(path.join(directory, "usr/lib/torplay/app/.env.local"), "SECRET=fixture");
   assert.throws(() => validateLinuxStage(directory), /must not contain/);
   rmSync(path.join(directory, "usr/lib/torplay/app/.env.local"));
+  mkdirSync(path.join(directory, "usr/lib/torplay/app/tests"));
+  assert.throws(() => validateLinuxStage(directory), /source-only entry tests/);
+  rmSync(path.join(directory, "usr/lib/torplay/app/tests"), { recursive: true });
   writeFileSync(path.join(directory, "usr/lib/torplay/app/ffmpeg"), "wrong architecture");
   assert.throws(() => validateLinuxStage(directory), /ffmpeg/);
   assert.equal(readFileSync(path.join(directory, "AppRun"), "utf8"), "fixture");
@@ -443,12 +446,14 @@ test("Linux staging preserves self-contained Next external symlinks", () => temp
   const destination = path.join(directory, "staged-app");
   mkdirSync(path.join(source, ".next/node_modules"), { recursive: true });
   mkdirSync(path.join(source, "node_modules/better-sqlite3"), { recursive: true });
+  writeFileSync(path.join(source, ".env.local"), "SECRET=fixture");
   symlinkSync("../../node_modules/better-sqlite3",
     path.join(source, ".next/node_modules/better-sqlite3-fixture"));
   copyStandaloneBuild(source, destination);
   const copied = path.join(destination, ".next/node_modules/better-sqlite3-fixture");
   assert.equal(lstatSync(copied).isSymbolicLink(), true);
   assert.equal(readlinkSync(copied), "../../node_modules/better-sqlite3");
+  assert.equal(existsSync(path.join(destination, ".env.local")), false);
 }));
 
 test("Linux runtime mirrors .next into XDG cache and resolves packaged externals", async () => {

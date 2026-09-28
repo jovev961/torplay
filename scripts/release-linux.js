@@ -90,6 +90,40 @@ export function isLinuxX64Elf(file) {
 
 export function copyStandaloneBuild(source, destination) {
   cpSync(source, destination, { recursive: true, verbatimSymlinks: true });
+  removePrivateEnvironmentFiles(destination);
+}
+
+function removePrivateEnvironmentFiles(directory) {
+  if (!existsSync(directory)) return;
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const file = path.join(directory, entry.name);
+    if (entry.name === ".env" || entry.name.startsWith(".env.")) {
+      rmSync(file, { recursive: true, force: true });
+    } else if (entry.isDirectory()) {
+      removePrivateEnvironmentFiles(file);
+    }
+  }
+}
+
+function findPrivateEnvironmentFiles(directory, matches = []) {
+  if (!existsSync(directory)) return matches;
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const file = path.join(directory, entry.name);
+    if (entry.name === ".env" || entry.name.startsWith(".env.")) matches.push(file);
+    else if (entry.isDirectory()) findPrivateEnvironmentFiles(file, matches);
+  }
+  return matches;
+}
+
+function validateStandaloneInventory(app) {
+  for (const entry of ["app", "components", "docs", "dist", "scripts", "tests", "AGENTS.md"]) {
+    if (existsSync(path.join(app, entry))) {
+      throw new Error(`Standalone runtime must not contain source-only entry ${entry}.`);
+    }
+  }
+  if (findPrivateEnvironmentFiles(app).length) {
+    throw new Error("Linux stage must not contain private environment files.");
+  }
 }
 
 export function debianPackageVersion(version) {
@@ -265,6 +299,7 @@ export function validateLinuxStage(directory = stage) {
   const node = path.join(directory, "usr/bin/node");
   if (!isLinuxX64Elf(node)) throw new Error("Bundled Node is not a Linux x86_64 ELF binary.");
   const app = path.join(directory, "usr/lib/torplay/app");
+  validateStandaloneInventory(app);
   if (!existsSync(path.join(app, "node_modules/next/package.json"))) {
     throw new Error("Standalone build lacks the Next.js runtime package.");
   }
@@ -275,7 +310,6 @@ export function validateLinuxStage(directory = stage) {
       throw new Error(`Standalone build lacks a Linux x86_64 ${basename}.`);
     }
   }
-  if (findFiles(directory, ".env.local").length) throw new Error("Linux stage must not contain .env.local.");
 }
 
 async function stageAppDir() {

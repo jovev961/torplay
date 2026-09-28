@@ -127,6 +127,28 @@ function findFiles(root, basename, found = []) {
   return found;
 }
 
+function removePrivateEnvironmentFiles(root) {
+  if (!existsSync(root)) return;
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    const entryPath = path.join(root, entry.name);
+    if (entry.name === ".env" || entry.name.startsWith(".env.")) {
+      rmSync(entryPath, { recursive: true, force: true });
+    } else if (entry.isDirectory()) {
+      removePrivateEnvironmentFiles(entryPath);
+    }
+  }
+}
+
+function findPrivateEnvironmentFiles(root, found = []) {
+  if (!existsSync(root)) return found;
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    const entryPath = path.join(root, entry.name);
+    if (entry.name === ".env" || entry.name.startsWith(".env.")) found.push(entryPath);
+    else if (entry.isDirectory()) findPrivateEnvironmentFiles(entryPath, found);
+  }
+  return found;
+}
+
 export function validateStage(root = stageDir) {
   const required = [
     path.join(root, "runtime", "node.exe"),
@@ -166,10 +188,15 @@ export function validateStage(root = stageDir) {
     }
   }
 
-  if (findFiles(root, ".env.local").length > 0) {
+  if (findPrivateEnvironmentFiles(root).length > 0) {
     throw new Error(
-      "Release staging must not contain .env.local.",
+      "Release staging must not contain private environment files.",
     );
+  }
+  for (const entry of ["app", "components", "docs", "dist", "scripts", "tests", "AGENTS.md"]) {
+    if (existsSync(path.join(root, "app", entry))) {
+      throw new Error(`Standalone runtime must not contain source-only entry ${entry}.`);
+    }
   }
 }
 
@@ -361,6 +388,7 @@ async function stageRuntime() {
     path.join(stageDir, "app"),
     { recursive: true },
   );
+  removePrivateEnvironmentFiles(path.join(stageDir, "app"));
 
   cpSync(
     path.join(projectRoot, ".next", "static"),

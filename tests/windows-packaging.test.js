@@ -542,6 +542,12 @@ test("release validation requires the packaged runtime and Windows native tools"
       await writeFile(filePath, "test");
     }
     assert.doesNotThrow(() => validateStage(directory));
+    await writeFile(path.join(directory, "app", ".env.production.local"), "SECRET=fixture");
+    assert.throws(() => validateStage(directory), /must not contain/);
+    await rm(path.join(directory, "app", ".env.production.local"));
+    await mkdir(path.join(directory, "app", "tests"));
+    assert.throws(() => validateStage(directory), /source-only entry tests/);
+    await rm(path.join(directory, "app", "tests"), { recursive: true });
     await rm(path.join(directory, "app", "node_modules", "ffmpeg-static", "ffmpeg.exe"));
     assert.throws(() => validateStage(directory), /ffmpeg\.exe/);
   } finally {
