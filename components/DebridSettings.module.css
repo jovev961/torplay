@@ -15,9 +15,11 @@
 .actions button:first-child, .card > button { justify-self: start; border-color: #a0413d; background: #48191e; }
 .actions button:hover:not(:disabled), .card > button:hover:not(:disabled), .key button:hover:not(:disabled) { border-color: #a05150; background: #342329; }
 .actions button:disabled, .card > button:disabled, .key button:disabled { cursor: not-allowed; opacity: .5; }
-.connected, .disconnected { justify-self: start; padding: 5px 9px; border-radius: 999px; font-size: .72rem; font-weight: 800; }
+.statuses { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.connected, .disconnected, .credentialConfigured { justify-self: start; padding: 5px 9px; border-radius: 999px; font-size: .72rem; font-weight: 800; }
 .connected { color: #b5f0cb; background: #16492c; }
 .disconnected { color: #d1d7de; background: #343b43; }
+.credentialConfigured { color: #cdd9ff; background: #26375b; }
 .key { display: grid; gap: 12px; padding-top: 14px; border-top: 1px solid var(--border); }
 .key summary { color: #dce2e8; cursor: pointer; font-size: .82rem; font-weight: 700; }
 .key[open] summary { margin-bottom: 12px; }

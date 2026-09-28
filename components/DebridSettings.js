@@ -188,9 +188,16 @@ export default function DebridSettings({ canEdit, section = "playback" }) {
         {Object.keys(names).map((provider) => (
           <div className={styles.card} key={provider}>
             <h3>{names[provider]}</h3>
-            <span className={config.providers[provider]?.configured ? styles.connected : styles.disconnected}>
-              {status[provider] || (config.providers[provider]?.configured ? "Configured" : "Not connected")}
-            </span>
+            <div className={styles.statuses}>
+              <span className={config.providers[provider]?.configured ? styles.connected : styles.disconnected}>
+                {status[provider] || (config.providers[provider]?.configured ? "Configured" : "Not connected")}
+              </span>
+              {config.providers[provider]?.apiKeyConfigured ? (
+                <span className={styles.credentialConfigured}>
+                  {provider === "real-debrid" ? "API token configured" : "API key configured"}
+                </span>
+              ) : null}
+            </div>
             {provider === "real-debrid"
               ? <p>Plays completed account torrents immediately, or downloads a selected torrent when you choose it.</p>
               : <p>Plays ready cached files immediately, or downloads a selected torrent when you choose it.</p>}
@@ -214,7 +221,9 @@ export default function DebridSettings({ canEdit, section = "playback" }) {
             ) : null}
             {canEdit ? (
               <details className={styles.key}>
-                <summary>Use an API key instead</summary>
+                <summary>{config.providers[provider]?.apiKeyConfigured
+                  ? `Update ${provider === "real-debrid" ? "API token" : "API key"}`
+                  : "Use an API key instead"}</summary>
                 <label>{provider === "real-debrid" ? "Private API token" : "API key"}
                   <input type="password" autoComplete="new-password" value={keys[provider]}
                     disabled={Boolean(busy) || Boolean(flow)}
