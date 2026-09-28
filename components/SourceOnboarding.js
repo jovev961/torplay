@@ -30,8 +30,8 @@ export default function SourceOnboarding() {
     {saved ? <div className="notice" role="status">
       <p>Source saved. Availability and verification status are shown in Settings.</p>
       <button className={styles.testButton} type="button" onClick={() => setSaved(false)}>Add another source</button>
-    </div> : snapshot?.canEdit ? <AddSourceDialog embedded testedSources={snapshot.nativeSources} configuredProviders={snapshot.customProviders} onSaved={async () => {
-      setSaved(true);
+    </div> : snapshot?.canEdit ? <AddSourceDialog embedded testedSources={snapshot.nativeSources} configuredProviders={snapshot.customProviders} onSaved={async (data, { keepOpen = false } = {}) => {
+      if (!keepOpen) setSaved(true);
       try { setSnapshot(await load()); } catch (error) { setError(error.message); }
     }} /> : null}
     <div className={styles.sourceActions}>
