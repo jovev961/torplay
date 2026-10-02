@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createDatabase } from "../lib/database/sqlite.js";
 import { inspectTorrentAvailability } from "../lib/debrid/availability.js";
-import { saveSearchResult } from "../lib/search/result-store.js";
+import { rememberTorrent } from "../lib/sources/results.js";
+import { normalize } from "../lib/sources/contract.js";
 
 const firstHash = "a".repeat(40);
 const secondHash = "b".repeat(40);
@@ -13,8 +14,8 @@ const config = { mode: "prefer-debrid", localFallback: true,
 
 test("torrent list checks both providers and the requested episode without starting playback", async () => {
   const database = createDatabase(":memory:");
-  const first = saveSearchResult({ infoHash: firstHash, mediaContext: context });
-  const second = saveSearchResult({ infoHash: secondHash, mediaContext: context });
+  const first = rememberTorrent(normalize({ title: "Show S01E02", infoHash: firstHash }, { id: "fixture", name: "Fixture" }), context);
+  const second = rememberTorrent(normalize({ title: "Show S01E03", infoHash: secondHash }, { id: "fixture", name: "Fixture" }), context);
   const calls = { rd: 0, tb: 0 };
   try {
     const result = await inspectTorrentAvailability([first, second], {}, {
@@ -47,7 +48,7 @@ test("torrent list checks both providers and the requested episode without start
 
 test("selecting a torrent re-resolves its hash before showing provider readiness", async () => {
   const database = createDatabase(":memory:");
-  const resultId = saveSearchResult({ infoHash: firstHash, mediaContext: context });
+  const resultId = rememberTorrent(normalize({ title: "Show S01E02", infoHash: firstHash }, { id: "fixture", name: "Fixture" }), context);
   try {
     const result = await inspectTorrentAvailability([resultId], { resolveUnknown: true }, {
       config: { ...config, credentials: { torbox: config.credentials.torbox } }, database,

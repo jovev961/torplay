@@ -237,6 +237,13 @@ export default function SourcePanel({
         && !lookup.usenetResults?.length && !lookup.readySources?.length && !lookup.error ? (
         <div className="notice">No usable authorized sources were found.</div>
       ) : null}
+      {!lookup.session && lookup.sourceDiagnostics?.some((item) => item.status !== "ready") ? (
+        <div className="notice" role="status">
+          {lookup.sourceDiagnostics.filter((item) => item.status !== "ready").map((item) => (
+            <p key={item.sourceId}>{item.sourceName || "Configured source"}: {item.message}</p>
+          ))}
+        </div>
+      ) : null}
 
       {lookup.results.length > 0 && !lookup.session ? (
         <div className="sourceResults" aria-live="polite">
@@ -264,15 +271,12 @@ export default function SourcePanel({
               <div>
                 <h3>{result.title}</h3>
                 <div className="metadata">
-                  <span>{result.indexer}</span>
-                  <span>{formatFileSize(result.size)}</span>
-                  <span>{result.seeders.toLocaleString()} seeders</span>
+                  <span>{result.sourceName}{result.origin ? ` · ${result.origin}` : ""}</span>
+                  <span>{result.size == null ? "Size unknown" : formatFileSize(result.size)}</span>
+                  <span>{result.seeders == null ? "Seeders unknown" : `${result.seeders.toLocaleString()} seeders`}</span>
                   <span className={result.verification === "verified" ? "available" : "muted"}>
                     {result.verification === "verified" ? "Streamable"
                       : result.verification === "checking" ? "Checking torrent…" : "Magnet · verify on start"}
-                  </span>
-                  <span className={result.hasMagnet ? "available" : "muted"}>
-                    Magnet: {result.hasMagnet ? "Yes" : "No"}
                   </span>
                 </div>
                 {result.mediaBadges?.length ? <div className="mediaCapabilityBadges" aria-label="Inferred media formats">

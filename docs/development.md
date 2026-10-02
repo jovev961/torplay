@@ -37,7 +37,9 @@ Setup requires only TMDB. Torrent sources are optional and none are added automa
 | `npm run firewall:home` | Add manual-runtime Windows firewall rules |
 | `npm run release:windows` | Create the complete Windows installer on Windows x64 |
 | `npm run release:linux` | Create the AppImage, Debian package, and RPM on Linux x86_64 |
-| `npm test` | Run Node.js unit and integration tests |
+| `npm test` | Run all Node.js unit and integration tests |
+| `npm run test:unit` | Run socket-free unit tests |
+| `npm run test:integration` | Run tests using real servers, processes, filesystems, WebTorrent, FFmpeg, or packaging runtimes |
 | `npm run lint` | Run ESLint |
 
 ## Build the Windows installer

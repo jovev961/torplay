@@ -1,4 +1,4 @@
-import { getSearchResult } from "../../../lib/search/result-store.js";
+import { resolve } from "../../../lib/sources/results.js";
 import { startPlaybackSource } from "../../../lib/debrid/session.js";
 import { assertSettingsMutationRequest } from "../../../lib/settings/security.js";
 
@@ -15,7 +15,7 @@ export async function POST(request) {
     return Response.json({ error: "Request body must be valid JSON." }, { status: 400 });
   }
 
-  const source = getSearchResult(body?.resultId);
+  const source = resolve(body?.resultId, "torrent");
   if (!source) {
     return Response.json(
       { error: "That search result expired or is invalid. Search again." },

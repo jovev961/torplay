@@ -1,5 +1,5 @@
 import { createUsenetJob, listUsenetJobs } from "../../../../lib/usenet/jobs.js";
-import { getSearchResult } from "../../../../lib/search/result-store.js";
+import { resolve } from "../../../../lib/sources/results.js";
 import { validateNzb } from "../../../../lib/usenet/newznab.js";
 import { assertSameOriginSettingsRequest } from "../../../../lib/settings/security.js";
 
@@ -26,7 +26,7 @@ export async function POST(request) {
         mediaContext: context ? JSON.parse(context) : null };
     } else {
       const body = await request.json();
-      const source = getSearchResult(body?.resultId);
+      const source = resolve(body?.resultId, "nzb");
       if (source?.kind !== "nzb") return Response.json({ error: "NZB result expired. Search again." }, { status: 404 });
       input = source;
     }

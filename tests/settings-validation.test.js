@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { mockNetwork } from "./helpers/sources-fixtures.js";
 import {
   clearSettingsValidation,
   validateSettingsProviders,
@@ -20,7 +21,11 @@ test("returns safe missing and unconfigured states without making requests", asy
   assert.equal(requests, 0);
 });
 
-test("validates configured providers without including credentials in results", async () => {
+test("validates configured providers without including credentials in results", async (t) => {
+  // Sources now uses the guarded HTTP foundation; keep the same Settings
+  // expectation while supplying its response at the actual transport boundary.
+  mockNetwork(t, () => ({ body: '<indexers><indexer id="movies" title="Movies"/></indexers>' }),
+    [{ address: "127.0.0.1", family: 4 }]);
   const secrets = ["tmdb-secret", "omdb-secret", "open-secret", "subdl-secret"];
   const results = await validateSettingsProviders(undefined, {
     environment: {

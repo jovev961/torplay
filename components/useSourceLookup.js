@@ -55,6 +55,7 @@ export function torrentSessionPollDelay(session) {
 
 export function useSourceLookup() {
   const [results, setResults] = useState([]);
+  const [sourceDiagnostics, setSourceDiagnostics] = useState([]);
   const [usenetResults, setUsenetResults] = useState([]);
   const [usenetJobs, setUsenetJobs] = useState([]);
   const [usenetJob, setUsenetJob] = useState(null);
@@ -289,6 +290,7 @@ export function useSourceLookup() {
       setResults([]);
       setUsenetResults([]);
       setCacheInfo(null);
+      setSourceDiagnostics([]);
     }
     setMediaContext(criteria);
     if (!cacheOnly) {
@@ -321,7 +323,7 @@ export function useSourceLookup() {
     }
 
     const params = new URLSearchParams({ type: criteria.type, q: criteria.query });
-    if (criteria.type === "movie" && criteria.originalTitle) {
+    if (criteria.originalTitle) {
       params.set("originalTitle", criteria.originalTitle);
     }
     if (criteria.season !== undefined) params.set("season", String(criteria.season));
@@ -347,6 +349,7 @@ export function useSourceLookup() {
           if (cacheOnly && results.length) setHasSearched(true);
         }
         if (event.type === "usenet" && !cacheOnly) setUsenetResults(event.results || []);
+        if (event.type === "diagnostics") setSourceDiagnostics(event.diagnostics || []);
         if (event.type === "error") streamError = Object.assign(new Error(event.error || "Search failed."), { code: event.code });
       });
       if (streamError) throw streamError;
@@ -574,6 +577,7 @@ export function useSourceLookup() {
     hasSearched,
     cacheInfo,
     results,
+    sourceDiagnostics,
     usenetResults,
     usenetJobs,
     usenetJob,

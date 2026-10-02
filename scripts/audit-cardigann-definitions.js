@@ -1,6 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
-import { parseDefinition } from "../lib/search/cardigann/definition.js";
+import { parseDefinition } from "../lib/sources/cardigann/definition.js";
 import { analyzeCardigannConversion, summarizeConversionAnalysis } from "./lib/cardigann-conversion-analysis.js";
 
 const argumentsList = process.argv.slice(2);

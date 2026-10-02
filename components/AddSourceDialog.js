@@ -49,7 +49,8 @@ export default function AddSourceDialog({ initial = {}, testedSources = [], conf
     setBusy(true); setError("");
     try {
       const data = await request("jackett-capabilities", { indexerId });
-      setJackettDraft({ id: previous?.id, indexerId, enabled: previous?.enabled ?? true,
+      setJackettDraft({ id: previous?.id, indexerId, enabled: previous?.enabled ?? false,
+        capabilities: data.capabilities,
         supported: data.capabilities.mediaTypes,
         mediaTypes: previous?.mediaTypes || data.capabilities.mediaTypes });
     } catch (failure) { setError(failure.message); }
@@ -59,7 +60,7 @@ export default function AddSourceDialog({ initial = {}, testedSources = [], conf
     if (!initial.jackettDraft) return;
     let cancelled = false;
     request("jackett-capabilities", { indexerId: initial.jackettDraft.indexerId }).then((data) => {
-      if (!cancelled) setJackettDraft({ ...initial.jackettDraft, supported: data.capabilities.mediaTypes });
+      if (!cancelled) setJackettDraft({ ...initial.jackettDraft, supported: data.capabilities.mediaTypes, capabilities: data.capabilities });
     }).catch(() => {});
     return () => { cancelled = true; };
   }, [initial.jackettDraft]);
@@ -69,16 +70,17 @@ export default function AddSourceDialog({ initial = {}, testedSources = [], conf
     setBusy(true); setError(""); setMessage("");
     try {
       const data = await request(action, provider);
-      if (action === "test") setMessage("Connected · " + data.capabilities.mediaTypes.join(" · "));
+      if (action === "test") {
+        setMessage("Connected · " + data.capabilities.mediaTypes.join(" · "));
+        setDraft((current) => ({ ...current, capabilities: data.capabilities }));
+      }
       else {
         const keepOpen = action === "add-native";
         if (keepOpen) setMessage("Source added. You can add another tested source.");
         await onSaved(data, { keepOpen });
       }
     } catch (error) {
-      if (action === "create-cardigann" && error.canAddUnverified) {
-        setImportDraft((current) => ({ ...current, verificationFailure: error.verificationFailure, confirmationToken: error.confirmationToken }));
-      } else setError(error.message);
+      setError(error.message);
     } finally { setBusy(false); }
   }
   async function importDefinition(id, revision) {
@@ -91,7 +93,7 @@ export default function AddSourceDialog({ initial = {}, testedSources = [], conf
         : await request("import-definition", undefined, false, { definitionUrl });
       setImportDraft({
         ...data,
-        enabled: true,
+        enabled: false,
         values: settingValues(data.definition.settings),
       });
     } catch (importError) {
@@ -101,12 +103,11 @@ export default function AddSourceDialog({ initial = {}, testedSources = [], conf
     }
   }
 
-  async function saveImported(addUnverified = false) {
+  async function saveImported() {
     await act("create-cardigann", {
       importId: importDraft.importId,
       settings: importDraft.values,
       enabled: importDraft.enabled,
-      ...(addUnverified ? { addUnverified: true, confirmationToken: importDraft.confirmationToken } : {}),
     });
   }
 
@@ -114,8 +115,6 @@ export default function AddSourceDialog({ initial = {}, testedSources = [], conf
     setImportDraft((current) => ({
       ...current,
       [field]: value,
-      verificationFailure: null,
-      confirmationToken: null,
     }));
   }
 
@@ -123,8 +122,6 @@ export default function AddSourceDialog({ initial = {}, testedSources = [], conf
     setImportDraft((current) => ({
       ...current,
       values: { ...current.values, [name]: value },
-      verificationFailure: null,
-      confirmationToken: null,
     }));
   }
 
@@ -157,13 +154,13 @@ export default function AddSourceDialog({ initial = {}, testedSources = [], conf
                   </label>)}
                   <label className={styles.checkboxLabel}><input type="checkbox" disabled={busy} checked={jackettDraft.enabled} onChange={(event) => setJackettDraft({ ...jackettDraft, enabled: event.target.checked })} /> Enabled</label>
                   <div className={styles.sourceActions}>
-                    <button className={styles.saveButton} type="submit" disabled={busy || !jackettDraft.mediaTypes.length}>{busy ? "Verifying…" : "Verify and save"}</button>
+                    <button className={styles.saveButton} type="submit" disabled={busy || !jackettDraft.mediaTypes.length}>{busy ? "Saving…" : "Save source"}</button>
                     <button className={styles.testButton} type="button" disabled={busy} onClick={() => jackettDraft.id ? closeDialog() : setJackettDraft(null)}>Back</button>
                   </div>
                 </div>
               </form>
             ) : importDraft ? (
-              <form onSubmit={(event) => { event.preventDefault(); if (importDraft.verificationFailure) return; void (importDraft.editId
+              <form onSubmit={(event) => { event.preventDefault(); void (importDraft.editId
                 ? act("update-cardigann", { id: importDraft.editId, settings: importDraft.values, enabled: importDraft.enabled })
                 : saveImported()); }}>
                 <div className={styles.definitionPreview}>
@@ -177,7 +174,7 @@ export default function AddSourceDialog({ initial = {}, testedSources = [], conf
                     {importDraft.definition.sourceUrl ? <div><dt>Definition</dt><dd className={styles.definitionUrl}>{importDraft.definition.sourceUrl}</dd></div> : null}
                   </dl>
                   {importDraft.definition.settings.some((field) => !field.informational) ? (
-                    <p className={styles.definitionRequirement}>Text and password fields are optional, though some indexers may need them to connect. Choices without defaults still require a selection.</p>
+                    <p className={styles.definitionRequirement}>Save the source now, then complete the required options before searching. Verify its connection separately in Settings.</p>
                   ) : (
                     <p className={`${styles.definitionRequirement} ${styles.definitionReady}`}>✓ No account configuration required</p>
                   )}
@@ -199,27 +196,15 @@ export default function AddSourceDialog({ initial = {}, testedSources = [], conf
                             ...Object.entries(field.options || {}).map(([value, label]) => ({ value, label })),
                           ]} />
                       ) : (
-                        <div className={styles.inputRow}><input id={`cardigann-${field.name}`} type={field.secret ? "password" : "text"} required={field.required && !field.configured} disabled={busy} value={importDraft.values[field.name] || ""} placeholder={field.configured ? "Leave blank to keep existing value" : ""} autoComplete={field.secret ? "new-password" : "off"} onChange={(event) => updateImportedSetting(field.name, event.target.value)} /></div>
+                        <div className={styles.inputRow}><input id={`cardigann-${field.name}`} type={field.secret ? "password" : "text"} disabled={busy} value={importDraft.values[field.name] || ""} placeholder={field.configured ? "Leave blank to keep existing value" : ""} autoComplete={field.secret ? "new-password" : "off"} onChange={(event) => updateImportedSetting(field.name, event.target.value)} /></div>
                       )}
                     </div>
                   ))}
                   <label className={styles.checkboxLabel}><input type="checkbox" checked={importDraft.enabled} disabled={busy} onChange={(event) => updateImported("enabled", event.target.checked)} /> Enabled</label>
-                  {importDraft.verificationFailure ? (
-                    <div className={styles.verificationPrompt} role="alert">
-                      <strong>Could not verify the indexer connection.</strong>
-                      <p>The definition is valid and compatible with TorPlay, but the source could not currently be verified.</p>
-                      <p>{importDraft.verificationFailure.message}</p>
-                      <div className={styles.sourceActions}>
-                        <button className={styles.testButton} type="button" disabled={busy} onClick={() => updateImported("verificationFailure", null)}>Cancel</button>
-                        <button className={styles.saveButton} type="button" disabled={busy} onClick={() => void saveImported(true)}>{busy ? "Adding…" : "Add Anyway"}</button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className={styles.sourceActions}>
-                      <button className={styles.saveButton} type="submit" disabled={busy}>{busy ? "Verifying…" : importDraft.editId ? "Verify and save" : "Add source"}</button>
-                      <button className={styles.testButton} type="button" disabled={busy} onClick={() => importDraft.editId ? closeDialog() : setImportDraft(null)}>Cancel</button>
-                    </div>
-                  )}
+                  <div className={styles.sourceActions}>
+                    <button className={styles.saveButton} type="submit" disabled={busy}>{busy ? "Saving…" : "Save source"}</button>
+                    <button className={styles.testButton} type="button" disabled={busy} onClick={() => importDraft.editId ? closeDialog() : setImportDraft(null)}>Cancel</button>
+                  </div>
                 </div>
               </form>
             ) : draft ? (
@@ -236,10 +221,10 @@ export default function AddSourceDialog({ initial = {}, testedSources = [], conf
                   ))}
                   {draft.apiKeyConfigured ? <label className={styles.checkboxLabel}><input type="checkbox" checked={Boolean(draft.clearApiKey)} disabled={busy} onChange={(event) => setDraft({ ...draft, clearApiKey: event.target.checked })} /> Remove stored API key</label> : null}
                   <label className={styles.checkboxLabel}><input type="checkbox" checked={draft.enabled} disabled={busy} onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })} /> Enabled</label>
-                  <p className={styles.sectionNote}>Use the API URL supplied by your indexer, without query parameters. Connection changes must pass verification before saving.</p>
+                  <p className={styles.sectionNote}>Use the API URL supplied by your indexer, without query parameters. Saving configuration and testing the connection are separate actions.</p>
                   <div className={styles.sourceActions}>
                     <button className={styles.testButton} type="button" disabled={busy} onClick={() => void act("test", draft)}>Test connection</button>
-                    <button className={styles.saveButton} type="submit" disabled={busy}>{busy ? "Working…" : "Verify and save"}</button>
+                    <button className={styles.saveButton} type="submit" disabled={busy}>{busy ? "Saving…" : "Save source"}</button>
                     <button className={styles.testButton} type="button" disabled={busy} onClick={() => draft.id ? closeDialog() : setDraft(null)}>Back</button>
                   </div>
                 </div>
@@ -248,12 +233,12 @@ export default function AddSourceDialog({ initial = {}, testedSources = [], conf
               <div className={styles.sourceChoiceSections}>
                 <section className={styles.providerForm}>
                   <h3>TorPlay Tested Sources</h3>
-                  <p>Optional sources that TorPlay can configure directly. None are added or enabled automatically.</p>
+                  <p>Optional native integrations tested for technical compatibility. This does not endorse or verify their content. None are added or enabled automatically.</p>
                   <div className={styles.addSourceGrid}>
                     {testedSources.map((source) => (
                       <article className={styles.addSourceCard} key={source.id}>
                         <span><strong>{source.name}</strong><small>{source.mediaTypes.map((type) => type === "TV" ? "TV Shows" : type).join(" & ")}</small></span>
-                        <button className={styles.testButton} type="button" disabled={busy || source.configured} onClick={() => void act("add-native", { id: source.id })}>{source.configured ? "Added" : "Add"}</button>
+                        <button className={styles.testButton} type="button" disabled={busy || source.configured} onClick={() => void act("add-native", { id: source.id, enabled: true })}>{source.configured ? "Added" : "Add and enable"}</button>
                       </article>
                     ))}
                   </div>
@@ -274,7 +259,7 @@ export default function AddSourceDialog({ initial = {}, testedSources = [], conf
                 <section className={styles.customIndexerOption}>
                   <h3>Custom Indexer</h3>
                   <p>Add a Torznab-compatible source such as your own Prowlarr or Jackett configuration.</p>
-                  <button className={styles.testButton} type="button" onClick={() => setDraft({ name: "", endpoint: "", apiKey: "", enabled: true })}>+ Add Custom Indexer</button>
+                  <button className={styles.testButton} type="button" onClick={() => setDraft({ name: "", endpoint: "", apiKey: "", enabled: false })}>+ Add Custom Indexer</button>
                 </section>
                 <section className={styles.customIndexerOption}>
                   <h3>Import Indexer Definition</h3>

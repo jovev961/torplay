@@ -2,8 +2,7 @@ import packageJson from "../../package.json" with { type: "json" };
 import { configurationWritable, settingsState } from "../../lib/settings/config.js";
 import { playbackPreferences } from "../../lib/settings/playback-preferences.js";
 import { setupStatusFromProviders } from "../../lib/settings/readiness.js";
-import { publicCustomProviders } from "../../lib/settings/torrent-providers.js";
-import { publicNativeSources } from "../../lib/settings/native-sources.js";
+import { sourceSnapshot } from "../../lib/sources/configuration.js";
 import { readRuntimeStatus } from "../../platform/runtime/status.js";
 
 function runtimeComponents(environment) {
@@ -35,8 +34,7 @@ export async function getSettingsSnapshot({
       components: runtimeComponents(environment),
     },
     torrentSources: state.torrentSources,
-    nativeSources: publicNativeSources(environment),
-    customProviders: publicCustomProviders(environment, canEdit),
+    ...sourceSnapshot(environment, canEdit),
     providers: state.providers,
     playback: {
       ...playbackPreferences(environment),

@@ -1,4 +1,4 @@
-import { CARDIGANN_FILTERS } from "../../lib/search/cardigann/filters.js";
+import { CARDIGANN_FILTERS } from "../../lib/sources/cardigann/filters.js";
 
 export const CONVERSION_MODEL_VERSION = 1;
 

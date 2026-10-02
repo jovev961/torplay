@@ -8,7 +8,8 @@ import { POST as libraryPlay } from "../app/api/debrid/library/[provider]/[id]/p
 import { POST as associationPost } from "../app/api/debrid/library/[provider]/[id]/association/route.js";
 import { GET as directSources, POST as directPlay } from "../app/api/playback/debrid/route.js";
 import { POST as torrentStart } from "../app/api/torrents/route.js";
-import { saveSearchResult } from "../lib/search/result-store.js";
+import { rememberTorrent } from "../lib/sources/results.js";
+import { normalize } from "../lib/sources/contract.js";
 
 test("unknown playback sessions cannot proxy remote media", async () => {
   const response = await streamGet(
@@ -93,7 +94,7 @@ test("ready-source discovery stays private and playback requires an explicit cho
     method: "POST", headers, body: JSON.stringify({ type: "movie", tmdbId: 1 }),
   }));
   assert.equal(direct.status, 400);
-  const resultId = saveSearchResult({ magnet: `magnet:?xt=urn:btih:${"a".repeat(40)}` });
+  const resultId = rememberTorrent(normalize({ title: "Fixture", locator: { magnet: `magnet:?xt=urn:btih:${"a".repeat(40)}` } }, { id: "fixture", name: "Fixture" }), {});
   const torrent = await torrentStart(new Request("http://localhost/api/torrents", {
     method: "POST", headers, body: JSON.stringify({ resultId }),
   }));

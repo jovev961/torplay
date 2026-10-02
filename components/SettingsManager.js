@@ -437,6 +437,7 @@ export default function SettingsManager() {
         </section> : null}
 
         {selectedSection === "torrent-sources" ? <section className={styles.settingsSection} id="torrent-sources">
+          {snapshot.sourceConfigurationError ? <div className="notice error" role="alert">{snapshot.sourceConfigurationError}</div> : null}
           <div className={styles.sectionHeading}><div><h2>Video sources</h2><p>Choose where TorPlay searches for videos you are authorized to watch.</p></div></div>
           <div className={styles.sourceNotice}>
             TorPlay does not host or provide media files. Content and torrent metadata are obtained from third-party sources selected by the user. Users are responsible for ensuring that their use of TorPlay and configured sources complies with applicable laws and the rights of content owners.

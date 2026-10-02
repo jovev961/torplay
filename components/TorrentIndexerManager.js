@@ -15,6 +15,13 @@ const statusLabels = {
   connected: "Available",
   disabled: "Disabled",
   checking: "Checking…",
+  ready: "Ready",
+  "configuration-required": "Configuration required",
+  "requires-flaresolverr": "Requires FlareSolverr",
+  "timed-out": "Timed out",
+  unsupported: "Unsupported",
+  "authentication-failed": "Authentication failed",
+  "invalid-response": "Invalid response",
 };
 
 function SourceBadges({ provider }) {
@@ -199,11 +206,13 @@ export default function TorrentIndexerManager({
             const currentHealth = health[provider.id];
             const status = !provider.enabled || !provider.active
               ? "disabled"
-              : currentHealth?.status || provider.verification?.status || "checking";
+              : provider.configuration?.status !== "ready" ? provider.configuration?.status
+                : currentHealth?.status || provider.verification?.status || "checking";
             const statusMessage = !provider.enabled
               ? "Source is disabled."
               : !provider.active
                 ? "Source is excluded by the provider override."
+                : provider.configuration?.status !== "ready" ? provider.configuration?.message
                 : currentHealth?.stale ? `${currentHealth.message} Refreshing…`
                   : currentHealth?.message || (provider.verification?.message
                     ? `Last verification: ${provider.verification.message}` : "Checking source availability.");
@@ -215,9 +224,10 @@ export default function TorrentIndexerManager({
                 </div>
                 <SourceBadges provider={provider} />
                 <p>{provider.kind === "cardigann" ? "Imported Cardigann definition." : provider.kind === "jackett" ? "External Jackett indexer." : "Custom Torznab-compatible indexer."}</p>
+                {provider.compatibility ? <p>Definition: {provider.compatibility.supported ? "Supported" : "Unsupported"} · Configuration: {provider.configuration?.status === "ready" ? "Complete" : provider.configuration?.message}</p> : null}
                 <IndexerStatus status={status} message={statusMessage} />
                 {canEdit ? <div className={styles.sourceCardActions}>
-                      <button className={styles.testButton} type="button" disabled={busy} onClick={() => {
+                      <button className={styles.testButton} type="button" disabled={busy || provider.canConfigure === false} onClick={() => {
                         if (provider.kind === "cardigann") {
                           setImportDraft({ editId: provider.id, definition: { name: provider.name, categories: provider.categories, settings: provider.settings }, enabled: provider.enabled, values: settingValues(provider.settings) });
                         } else if (provider.kind === "jackett") setJackettDraft(provider);
@@ -225,7 +235,7 @@ export default function TorrentIndexerManager({
                         setDialogOpen(true); setMessage(""); setError("");
                       }}>Edit</button>
                       {provider.kind === "cardigann" ? <button className={styles.testButton} type="button" disabled={busy} onClick={() => void act("test-cardigann", { id: provider.id })}>{testingId === provider.id ? "Testing…" : "Test"}</button> : null}
-                      <button className={styles.testButton} type="button" disabled={busy} onClick={() => void act(provider.kind === "cardigann" ? "update-cardigann" : provider.kind === "jackett" ? "update-jackett" : "update", { id: provider.id, enabled: !provider.enabled, mediaTypes: provider.mediaTypes })}>{provider.enabled ? "Disable" : "Enable"}</button>
+                      <button className={styles.testButton} type="button" disabled={busy} onClick={() => void act("set-enabled", { id: provider.id, enabled: !provider.enabled })}>{provider.enabled ? "Disable" : "Enable"}</button>
                       <button className={styles.removeButton} type="button" disabled={busy} onClick={() => setPendingRemoval({ action: provider.kind === "cardigann" ? "remove-cardigann" : "remove", provider })}>Remove</button>
                 </div> : null}
               </article>

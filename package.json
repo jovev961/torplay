@@ -18,6 +18,8 @@
     "release:linux": "node scripts/release-linux.js",
     "lint": "eslint .",
     "test": "node --test",
+    "test:unit": "node scripts/run-test-suite.js unit",
+    "test:integration": "node scripts/run-test-suite.js integration",
     "audit:cardigann": "node scripts/audit-cardigann-definitions.js",
     "audit:rc": "node scripts/audit-rc-performance.js"
   },
